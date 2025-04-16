@@ -1,26 +1,68 @@
-value_types_levels <- function(){
-  c(
-    "Below LLOQ (→ LLOQ x 0.5)", "Extrapolated (~ LLOQ)",
-    "Observed concentration",  "Extrapolated",
-    "Extrapolated (~ ULOQ)", "Above ULOQ (→ ULOQ x 1.1)",
-    "Not available"
-  )
-}
 
 
-value_types_colors <- function(){
-  c(
-    "steelblue1", "steelblue3",
-    "black", "gray",
-    "red3", "red",
-    "transparent"
+impute_OOR <- function(se, LLOQ_factor = 0.5, ULOQ_factor = 1.1){
+  
+  # We first compute the lowest and highest (extrapolated) values from the samples concentrations
+  extremes <- 
+    se |> 
+    as_tibble() |> 
+    filter(
+      is.finite(raw_obs_conc_num),  (raw_obs_conc_num > 0), !is.na(raw_obs_conc_num),
+      !(value_type %in% c("Below LLOQ", "Above ULOQ", "Not available"))
+      ) |> 
+    select(plate_nb, .feature, .sample, sample_id, dilution, raw_obs_conc_num) |>
+    mutate(
+      non_diluted_conc = raw_obs_conc_num/dilution,
+    ) |> 
+    group_by(plate_nb, .feature) |>
+    summarize(
+      min_obs = min(non_diluted_conc),
+      max_obs = max(non_diluted_conc),
+      .groups = "drop"
     )
+  
+  # We check that we have values for all analytes and all plates
+  if (nrow(extremes) != (length(se@NAMES) * length(unique(se$plate_nb)))) 
+    warning("ULOQ and LLOQ could not be computed for all analytes\n")
+  
+  tmp <-
+    se |>
+    as_tibble() |>
+    left_join(extremes, by = join_by(.feature, plate_nb)) |>
+    mutate(
+      obs_conc =
+        case_when(
+          is.na(raw_obs_conc_num) ~ NA_real_,
+          (raw_obs_conc == "OOR <") ~ min_obs * LLOQ_factor * dilution,
+          (raw_obs_conc == "OOR >") ~ max_obs * ULOQ_factor * dilution,
+          TRUE ~ raw_obs_conc_num
+        )
+    )
+  
+  # tmp |> select(.feature, .sample, sample_id, sample_type, value_type, dilution, raw_obs_conc,raw_obs_conc_num, obs_conc, min_obs, max_obs) |> filter(sample_type == "Sample")
+  
+  se <- se |> mutate(conc = tmp$obs_conc)
+  
+  # We now add the extremes to the se.
+  # We do not add it to the rowData since we have one value per plate and analyte
+  # We add it to the metadata instead
+  se@metadata$extremes <- extremes
+
+  cat(
+    str_c(
+      se@metadata$name,"\n\t",
+      "Added 1 assays:\n\t\t",
+      "-`conc` with the imputed concentrations\n\t\t",
+      "and 1 table to @metadata:\n\t\t",
+      "-`extremes` with the minimum and maximum observed values for each analyte and plate\n"
+    )
+  )
+  se
 }
 
+impute_OOR_deprecated <- function(se, max_log2_fc_exp_vs_obs = 1, LLOQ_factor = 0.5, ULOQ_factor = 1.1){
 
-impute_OOR <- function(se, max_log2_fc_exp_vs_obs = 1, LLOQ_factor = 0.5, ULOQ_factor = 1.1){
-
-  # We first compute the lowest values and highest values from the samples or standards concentrations - these values include the extrapolated concentrations.
+  # We first compute the lowest and highest extrapolated values from the samples concentrations
 
   standards <- 
     se |> 

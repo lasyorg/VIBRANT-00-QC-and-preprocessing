@@ -246,6 +246,9 @@ extract_lines_cols_from_range <- function(data_range){
 
 combine_luminex_se <- function(se_list){
   
+ 
+  
+  
   SummarizedExperiment(
     assays =
       list(
@@ -280,16 +283,28 @@ combine_se_coldata <- function(se_list){
 }
 
 combine_se_assay <- function(se_list, assay_name){
+  # check if the feature names are the same
+  feature_names <- 
+    map(
+      seq_along(se_list),
+      ~ tibble(i = .x, feature = se_list[[.x]]@NAMES) 
+    ) |> bind_rows() |> 
+    mutate(tmp = TRUE) |> 
+    pivot_wider(id_cols = feature, names_from = i, values_from = tmp, values_fill = FALSE) |> 
+    as.data.frame() |> 
+    column_to_rownames(var = "feature") 
+    
   map(
     seq_along(se_list),
     ~ se_list[[.x]] |>
       assay(assay_name) |>
       set_colnames(
         str_c(str_pad(.x, width = 3, pad = "0"),"_", colnames(se_list[[.x]]))
-      )
+      ) |> 
+      extract(rownames(feature_names),)
   ) |> bind_cols() |>
     as.data.frame() |>
-    set_rownames(rownames(se_list[[1]]))
+    set_rownames(rownames(feature_names))
 }
 
 

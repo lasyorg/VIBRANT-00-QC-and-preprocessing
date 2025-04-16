@@ -6,3 +6,8 @@ VIBRANT-0-QC-and-preprocessing.Rproj
 
 /ZZ Archives
 .Rhistory
+*.rdx
+*.RData
+*.rdb
+/10b-Luminex-Batch-2_cache
+/10a-Luminex-Batch-1_cache
