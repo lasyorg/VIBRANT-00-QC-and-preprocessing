@@ -30,9 +30,10 @@ library(SummarizedExperiment)
 library(tidySummarizedExperiment)
 library(MultiAssayExperiment)
 
-tmp <- fs::dir_map("R Luminex/", source)
+tmp <- fs::dir_map("R scripts/", source)
 
 theme_set(theme_light())
+
 ```
 
 # Loading the `SummarizedExperiment` objects 

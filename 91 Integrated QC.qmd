@@ -30,7 +30,7 @@ library(SummarizedExperiment)
 library(tidySummarizedExperiment)
 library(MultiAssayExperiment)
 
-tmp <- fs::dir_map("R Luminex/", source)
+# tmp <- fs::dir_map("R Luminex/", source)
 
 theme_set(theme_light())
 ```
@@ -39,9 +39,9 @@ theme_set(theme_light())
 
 ```{r}
 
-data_source <- "real"
-data_dir <- str_c(get_data_dir(data_source), "01 Preprocessed and QCed/")
-se_files <- fs::dir_ls(data_dir, regexp = "se_.*\\.rds$")
+# data_source <- "real"
+# data_dir <- str_c(get_data_dir(data_source), "01 Preprocessed and QCed/")
+# se_files <- fs::dir_ls(data_dir, regexp = "se_.*\\.rds$")
 
 ```
 

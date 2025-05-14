@@ -26,11 +26,11 @@ plot_samples_on_standard_curves <- function(se, feature){
   samples |> 
     ggplot() +
     aes(
-      x = (raw_obs_conc_num/dilution) |> log2(), 
+      x = unadj_conc |> log2(), 
       y = FI |> asinh(),
       col = value_type, shape = value_type
     ) +
-    facet_grid(. ~ fct_inorder(str_c("plate: ",plate_nb))) +
+    facet_wrap(. ~ plate_name, nrow = 2) +
     geom_hline(
       data = blanks,
       aes(yintercept = FI |> asinh()), alpha = 0.5

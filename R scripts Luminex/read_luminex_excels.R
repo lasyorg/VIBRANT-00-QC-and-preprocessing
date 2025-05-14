@@ -24,7 +24,11 @@ read_luminex_excel <- function(file){
   # - "Exp Conc"
   expected_sheets <- c("FI", "FI - Bkgd", "Obs Conc", "Exp Conc")
   if (!all(expected_sheets %in% excel_sheets(path = file)))
-    stop(str_c("The excel file does not contain the expected sheets: ", expected_sheets |> str_c(collapse = ", ")))
+    stop(str_c("The excel file does not contain one of the expected sheets: ", expected_sheets |> str_c(collapse = ", ")))
+  
+  desired_sheets <- c("Bead Count")
+  if (!all(desired_sheets %in% excel_sheets(path = file)))
+    warning(str_c("The excel file does not contain one of the expected sheets: ", desired_sheets |> str_c(collapse = ", "), "\n"))
   
   # 2. we identify the data rows and columns in the excel file
   lc <- identify_data_range(file)
@@ -64,6 +68,22 @@ read_luminex_excel <- function(file){
     as.data.frame() |>
     set_rownames(sample_info$Well)
   
+  
+  if (any(str_detect(readxl::excel_sheets(path = file), "Bead Count"))) {
+    data_range <- get_data_range_in_sheet(file, sheet = "Bead Count", lc$excel_data_range, lc$analytes)
+    bead_count <- 
+      read_excel(file, sheet = "Bead Count", range = lc$excel_data_range, col_names = lc$analytes) |>
+      as.data.frame() |>
+      set_rownames(sample_info$Well)
+  } else {
+    bead_count <- 
+      matrix(NA, nrow = nrow(FI), ncol = ncol(FI)) |> 
+      set_colnames(colnames(FI)) |> 
+      set_rownames(rownames(FI)) |> 
+      as.data.frame()
+  }
+
+  
   # If there is a dilution sheet, we load the values
   if (any(str_detect(readxl::excel_sheets(path = file), "Dil*ution"))) {
     dilution_sheet <- str_subset(readxl::excel_sheets(path = file), "Dil*ution")
@@ -77,7 +97,11 @@ read_luminex_excel <- function(file){
     d <- tibble(dilution = 1)
   }
   
-  se_coldata <- sample_info
+  # 5. we create the coldata 
+  
+  
+  se_coldata <- sample_info |> 
+    select(-any_of("Dilution")) # Temporary solution: delete the dilution column in sample_info
   if (! any(str_detect(colnames(se_coldata), "Description")))
     se_coldata <- se_coldata |> mutate(Description = NA)
   
@@ -121,6 +145,10 @@ read_luminex_excel <- function(file){
     column_to_rownames(var = "well")
   
   # Assays
+  assay_bead_count <- 
+    bead_count[rownames(se_coldata),] |> 
+    mutate(across(everything(), function(x) x |> str_replace(",", "\\.") |> str_replace("\\*\\*\\*","") |> as.double())) |> 
+    t()
   assay_FI <- 
     FI[rownames(se_coldata),] |> 
     mutate(across(everything(), function(x) x |> str_replace(",", "\\.") |> str_replace("\\*\\*\\*","") |> as.double())) |> 
@@ -139,6 +167,7 @@ read_luminex_excel <- function(file){
     SummarizedExperiment(
       assays =
         list(
+          bead_count = assay_bead_count,
           FI = assay_FI,
           FI_wo_background = assay_FI_wo_bkgd,
           raw_obs_conc = assay_raw_obs_conc,
@@ -246,12 +275,10 @@ extract_lines_cols_from_range <- function(data_range){
 
 combine_luminex_se <- function(se_list){
   
- 
-  
-  
   SummarizedExperiment(
     assays =
       list(
+        bead_count = combine_se_assay(se_list, "bead_count"),
         FI = combine_se_assay(se_list, "FI"),
         FI_wo_background = combine_se_assay(se_list, "FI_wo_background"),
         raw_obs_conc = combine_se_assay(se_list, "raw_obs_conc"),

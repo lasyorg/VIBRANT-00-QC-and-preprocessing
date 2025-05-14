@@ -51,7 +51,7 @@ if (data_source == "real") {
   counts <- read_csv(str_c(mg_dir, "MVIBR_kSanityVIRGO2_ReadCounts_20250404.csv"))
   counts_corr <- read_csv(str_c(mg_dir, "MVIBR_kSanityVIRGO2_taxaGLcor_20250404.csv"))
   relabs <- read_csv(str_c(mg_dir, "MVIBR_kSanityVIRGO2_RelAbund_20250404.csv"))
-  technical_metadata <- read_csv(str_c(mg_dir, "VIBRANT_MG_technicalMetaData_20250404.csv"))
+  technical_metadata <- read_csv(str_c(mg_dir, "VIBRANT_MG_technicalMetaData_20250502.csv"))
   LBP_strain_info <- readxl::read_xlsx(str_c(data_dir, "00 Raw/00 Trial Data/IsolateNumbers.xlsx"))
   VIRGO2_taxonomic_table <- read_csv(str_c(mg_dir, "VIRGO2_taxonomy_key_250429.csv"))
 } else {
@@ -96,10 +96,31 @@ sample_sequences_twice |>
 
 ```
 
+```{r}
+rm(sample_sequences_twice)
+```
+
+
 > Note: once we have participants/visits info, we can check whether there are any systematic patterns in these samples.
 
 
+Also, some samples have been flagged by Michael as "selected for re-extraction" (column `Selected4re-extraction`) in the manifest. 
+
+```{r}
+#| eval: false
+technical_metadata |> filter(`Selected4re-extraction` == 1) |> 
+  select(UID, SampleType, `Selected4re-extraction`, Notes) |> 
+  left_join(
+    counts |> select(sampleID, CST) |> 
+      mutate(UID = sampleID)
+  )
+
+```
+
+
+
 We note some negative (although extremely small) values in the `counts`, `counts_corr`, and `rel_abs` assays (all for native crispatus, I assume it being an artifact from kSANITY). We will set these to 0.
+
 
 We also load `LBP_strain_info` from the VIBRANT Dropbox that contains information on the LBP strains
 
@@ -160,16 +181,31 @@ For now, we remove the `MuliGenera` from the `counts` data frame; but in the fut
 
 mg_to_SE <- function(counts, counts_corr, relabs, LBP_strain_info, technical_metadata, VIRGO2_taxonomic_table) {
   
+  # First, we aggregate technical metadata by UID (e.g., if samples were sequenced twice)
   technical_metadata_uid <- 
     technical_metadata |> 
     group_by(UID) |> 
+    arrange(DateSequenced) |> 
     summarise(
+     # n = n(),
       across(everything(), ~ unique(.) |> na.omit() |> str_c(collapse = "; ")),
     ) |> 
     mutate(
       LibrarySequencedTwice = ifelse(LibrarySequencedTwice == 1, TRUE, FALSE),
       Ext_Lib_Plate = Ext_Lib_Plate |> as.integer()
     ) 
+  
+  # We also harmonize the participant ID
+  technical_metadata_uid <- 
+    technical_metadata_uid |> 
+    mutate(
+      participant = 
+        case_when(
+          str_detect(PID, "068-") ~ PID |> str_remove_all("-"),
+          TRUE ~ PID
+        )
+    ) |> 
+    relocate(participant, .after = PID) 
   
   # remove "multiGenera" from counts # TODO: change later
   counts <- 
@@ -287,6 +323,128 @@ SE_mg <- mg_to_SE(counts, counts_corr, relabs, LBP_strain_info, technical_metada
 ```
 
 
+## Checking the participant & visit codes
+
+```{r}
+
+SE_mg <- 
+  SE_mg |> 
+  mutate(
+    location = ifelse(str_detect(participant, "06810"), "US", "SA")
+  )
+
+```
+
+
+```{r}
+#| fig-width: 14
+#| fig-height: 5
+
+SE_mg |> 
+  colData() |> 
+  as_tibble() |> 
+  filter(SampleType == "ClinicalSample") |> 
+  select(location, participant, VisitCode, VisitCodeFlagged) |> 
+  group_by(participant, VisitCode) |> 
+  mutate(n = n()) |> 
+  ggplot() +
+  aes(x = participant, y = VisitCode, fill = VisitCodeFlagged) +
+  geom_tile() +
+  geom_text(aes(label = n)) +
+  scale_fill_manual(values = c("lightblue2", "red2")) +
+  facet_grid(. ~ location, scales = "free", space = "free") +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+    legend.position = "bottom"
+    )
+
+```
+
+As noted by Michael (`VisitCodeFlagged`), some visit codes are unexpected. However, some visits flagged by Michael could be correct (0010 are "re-screening", 1001 and 1104 could be extra daily swabs (or "accidentally" shipped daily swabs)).
+
+One participant (`98120009`) has weird visit codes (1010, 1020, 1030, ... , 1070) AND a weird participant ID (starting by 98 instead of 68)
+
+In addition to the visit codes flagged by Michael, there is also a participant for whom there are two samples with different sample ID at the same visit:
+
+```{r}
+
+SE_mg |> 
+  colData() |> 
+  as_tibble() |> 
+  filter(SampleType == "ClinicalSample") |> 
+  select(sampleID, sample_id, location, participant, VisitCode) |> 
+  group_by(participant, VisitCode) |> 
+  mutate(n = n()) |> 
+  ungroup() |> 
+  filter(n > 1) |> 
+  gt(caption = "Participant with two samples at the same visit") 
+
+```
+
+
+
+```{r}
+#| fig-width: 14
+#| fig-height: 5
+
+tmp <- 
+  SE_mg |> 
+  colData() |> 
+  as_tibble() |> 
+  filter(SampleType == "ClinicalSample") |> 
+  select(sample_id, location, participant, VisitCode, VisitCodeFlagged) |> 
+  group_by(participant, VisitCode) |> 
+  mutate(n = n()) |> 
+  ungroup() |> 
+  mutate(
+    weird =
+      case_when(
+        (n > 1) | (VisitCode %in% seq(1010, 1070, by = 10)) | (VisitCode %in% c("0001", "0011")) ~ "Yes",
+        (VisitCode %in% "0010") ~ "No",
+        (VisitCodeFlagged == 1) ~ "Maybe",
+        TRUE  ~ "No"
+      ) |> 
+    factor(levels = c("No", "Maybe", "Yes"))
+  ) 
+
+tmp |> 
+  ggplot() +
+  aes(x = participant, y = VisitCode, fill = weird) +
+  geom_tile() +
+  geom_text(aes(label = n)) +
+  scale_fill_manual("Weird?", values = c("lightblue2","gold", "red1")) +
+  facet_grid(. ~ location, scales = "free", space = "free") +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+    legend.position = "bottom"
+    )
+
+```
+
+```{r}
+
+tmp |> filter(weird != "No") |> arrange(desc(weird)) |>  
+  gt(caption = "List of suspect PID and VisitCode")
+
+```
+
+
+
+```{r}
+
+tmp2 <- 
+  SE_mg@colData |> 
+  as.data.frame() |> 
+  as_tibble() |> 
+  left_join(tmp |> select(sample_id, weird), by = join_by(sample_id)) 
+
+SE_mg$weird <- tmp2$weird
+
+rm(tmp, tmp2)
+
+```
+
+
 
 ## Exploratory & QC analyses
 
@@ -323,6 +481,28 @@ SE_mg |>
 
 ```
 
+
+```{r}
+
+SE_mg |> 
+  colData() |> 
+  as_tibble() |>
+  ggplot() +
+  aes(x = total_non_human_reads, fill = `Selected4re.extraction`) +
+  geom_vline(xintercept = 500000, linetype = "dashed", color = "black") +
+  geom_histogram(bins = 50) +
+  scale_x_log10() +
+  facet_grid(SampleType ~ ., scale = "free") +
+  labs(
+    x = "Total number of non-human reads per sample", 
+    y = "Number of samples"
+  ) +
+  theme(
+    strip.text.y = element_text(angle = 0)
+  )
+
+```
+
 ```{r}
 
 SE_mg |> 
@@ -330,13 +510,35 @@ SE_mg |>
   as_tibble()  |> 
   arrange(total_non_human_reads) |> 
   mutate(index = row_number()) |>
-  select(index, sampleID, total_non_human_reads, SampleType, LibrarySequencedTwice, subCST) |> 
+  select(index, sampleID, total_non_human_reads, SampleType, LibrarySequencedTwice, Selected4re.extraction, subCST) |> 
   filter(total_non_human_reads < 1e6) |>
   gt()
 
 ```
 
-> TODO: check if correlated with post-MTZ visit
+
+```{r}
+
+SE_mg |> 
+  colData() |> 
+  as_tibble() |>
+  filter(SampleType == "ClinicalSample", VisitCode %in% c(seq(1000, 1900, by = 100), 2120)) |> 
+  ggplot() +
+  aes(x = total_non_human_reads, fill = `Selected4re.extraction`) +
+  geom_vline(xintercept = 500000, linetype = "dashed", color = "black") +
+  geom_histogram(bins = 50) +
+  scale_x_log10() +
+  facet_grid(VisitCode ~ ., scale = "free") +
+  labs(
+    x = "Total number of non-human reads per sample", 
+    y = "Number of samples"
+  ) +
+  theme(
+    strip.text.y = element_text(angle = 0)
+  )
+
+```
+
 
 
 **Total relative abundances per sample**
@@ -436,7 +638,7 @@ SE_mg |>
   filter(as.numeric(taxon_label) <= 20, max_rel_ab > 0.001) |>
   ggplot() +
   aes(x = rel_abs, y = taxon_label |> fct_rev(), color = Category) +
-  geom_point(alpha = 0.7) +
+  geom_point(alpha = 0.3) +
   scale_x_continuous("Relative abundance", labels = scales::percent_format()) +
   ylab("Top non-bacterial organisms") +
   theme(strip.text.y = element_text(angle = 0)) +
@@ -576,8 +778,11 @@ map(
     all_taxa <- tmp$taxon_label |> unique() |> sort()
     
     tmp |> 
+      mutate(
+        sample_label = str_c(.sample, ifelse(`Selected4re-extraction` == 1, " (re-x)", ""))
+      ) |> 
       ggplot() +
-      aes(y = rel_abs, x = .sample, fill = taxon_label) +
+      aes(y = rel_abs, x = sample_label, fill = taxon_label) +
       geom_col(color = "white", linewidth = 0.1) +
       scale_x_discrete("Samples") +
       scale_y_continuous("Rel. ab.") +
@@ -730,8 +935,8 @@ It could be annoying that we are so close to the detection threshold for the pri
 
 vegan::diversity(SE_mg |> assay("rel_abs"), index = "shannon", MARGIN = 2) |> 
   as_tibble() |> 
-  mutate(sampleID = colnames(SE_mg)) |> 
-  left_join(SE_mg |> colData() |> as_tibble(), by = join_by(sampleID)) |> 
+  mutate(sample_id = colnames(SE_mg)) |> 
+  left_join(SE_mg |> colData() |> as_tibble(), by = join_by(sample_id)) |> 
   ggplot() +
   aes(x = SampleType, y = value |> exp(), col = SampleType, fill = SampleType) +
   geom_violin(scale = "width", color = NA, alpha = 0.2) +
@@ -897,6 +1102,7 @@ SE_mg |>
 
 ```{r}
 
+# creating a taxa category "other"
 summarized_rel_abs <- 
   SE_mg |> 
   as_tibble() |> 
@@ -916,7 +1122,7 @@ summarized_rel_abs <-
   mutate(
     taxa = taxa |> fct_inorder()
   ) |> 
-  group_by(.sample, SampleType, taxa, LBP, is_lacto) |>
+  group_by(.sample, SampleType, participant, VisitCode, weird, taxa, LBP, is_lacto) |>
   summarize(rel_abs = sum(rel_abs), .groups = "drop") |>
   arrange(.sample, -rel_abs) |> 
   group_by(.sample) |>
@@ -954,44 +1160,34 @@ summarized_rel_abs |>
 ```
 
 
-
-### Technical metadata
-
 ```{r}
+#| fig-width: 12
+#| fig-height: 8
 
-data_plot <-
-  technical_metadata |>
-  select(-c(UID, Sample, SampleType, Library, Notes, FragmentSize, IndexSet, `Index 1`, `Index 2`, Ext_Lib_Position)) |>
-  mutate(across(everything(), as.factor)) |>
-  dplyr::rename(
-    LibraryPool = `Library Pool`,
-    Selected4re_extraction = `Selected4re-extraction`
+summarized_rel_abs |> 
+  mutate(location = ifelse(str_detect(participant, "06810"),"US", "SA")) |> 
+  filter(SampleType == "ClinicalSample", VisitCode %in% c(seq(1000, 1900, by = 100), 2120), weird == "No") |>
+  ggplot() +
+  aes(x = participant, y = rel_abs, fill = taxa) +
+  geom_col() +
+  scale_x_discrete("Participant") + # , breaks = NULL) +
+  facet_grid(VisitCode ~ location, scales = "free_x", space = "free_x") +
+  scale_fill_manual(
+    "", 
+    values = get_taxa_colors(summarized_rel_abs$taxa |> levels()),
+    guide = guide_legend(nrow = 5)
+    ) +
+  theme(
+    strip.text.x = element_text(angle = 0, hjust = 0.5),
+    strip.text.y = element_text(angle = 0),
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+    legend.position = "bottom",
   )
 
-generate_plot <- function(df, x_var, fill_var) {
-  n_levels_fill <- nlevels(df[[fill_var]])
-  if (n_levels_fill <= 12) {
-    ggplot(df, aes_string(x = x_var, fill = fill_var)) +
-      geom_bar(position = "stack") +
-      theme_bw() +
-      scale_fill_manual(values = brewer.pal(n = n_levels_fill, name = "Set3")) +
-      labs(x = x_var, fill = fill_var, y = "Number of samples") +
-      theme(axis.text.x = element_text(angle = 90, hjust = 1))
-  } else {
-    message(cat("Trop de niveaux : x = ",x_var, "fill =", fill_var))
-    invisible(NULL) # Retourne NULL pour que walk() ne tente pas d'imprimer un message
-  }
-}
-
-factor_vars <- names(data_plot)
-
-combinations <- cross(list(x = factor_vars, fill = factor_vars)) %>%
-  keep(~ which(.x$x == factor_vars) < which(.x$fill == factor_vars)) 
-
-# Appliquer la fonction de génération de graphique à chaque combinaison
-walk(combinations, ~ print(generate_plot(data_plot, .x$x, .x$fill)))
-
 ```
+
+
+
 
 
 
@@ -1044,12 +1240,12 @@ pcoa$eig |>
 
 pcoa_data <- 
   tibble(
-    sampleID = rownames(pcoa$points),
+    sample_id = rownames(pcoa$points),
     PCoA = pcoa$points
   ) |> 
   left_join(
     SE_mg |> colData() |> as_tibble(),
-    by = join_by(sampleID)
+    by = join_by(sample_id)
   )
 
 ```
@@ -1115,11 +1311,25 @@ pcoa_plot(pcoa_data, pcoa, "Ext_Lib_Plate", c(3, 4))
 Permutation test 
 
 ```{r}
+#| eval: false
 
 manova <- adonis2(dist_matrix ~ pcoa_data$Ext_Lib_Plate)
 manova
 
 ```
+
+
+
+#### Selected for re-extraction
+
+```{r}
+
+pcoa_plot(pcoa_data, pcoa, "Selected4re.extraction", c(1, 2)) 
+pcoa_plot(pcoa_data, pcoa, "Selected4re.extraction", c(3, 4)) 
+
+```
+
+
 
 #### Bioinformatics Processing Batch 
 
@@ -1167,7 +1377,7 @@ pcoa_relab$eig |>
   as.data.frame() |>
   rownames_to_column("axis") |>
   mutate(axis = str_remove(axis, "Eigenvalue"), 
-         var_explained = 100*pcoa$eig/sum(pcoa_relab$eig)) |>
+         var_explained = 100*pcoa_relab$eig/sum(pcoa_relab$eig)) |>
   slice_head(n = 10) |>
   gt() |>
   tab_header(title = "Eigenvalues of the PCoA") |>
@@ -1251,6 +1461,15 @@ manova
 ```
 
 
+#### Selected for re-extraction
+
+```{r}
+
+pcoa_plot(pcoa_relab_data, pcoa_relab, "Selected4re.extraction", c(1, 2)) 
+pcoa_plot(pcoa_relab_data, pcoa_relab, "Selected4re.extraction", c(3, 4)) 
+
+```
+
 
 #### Library Pool
 
@@ -1269,6 +1488,20 @@ pcoa_plot(pcoa_relab_data, pcoa_relab, "Library.Pool", c(3, 4))
 
 pcoa_plot(pcoa_relab_data |> filter(Lane %in% 1:4), pcoa_relab, "Lane", c(1, 2))
 pcoa_plot(pcoa_relab_data |> filter(Lane %in% 1:4), pcoa_relab, "Lane", c(3, 4))
+
+```
+
+
+
+#### Visit
+
+
+```{r}
+
+pcoa_plot(pcoa_relab_data |> filter(SampleType == "ClinicalSample", VisitCode %in% c(seq(1000, 1900, by =100), 2120)), pcoa_relab, "VisitCode", c(1, 2)) +
+  scale_color_manual(values = c("red", "green3", colorRampPalette(c("dodgerblue1", "dodgerblue4","purple"))(7))) 
+pcoa_plot(pcoa_relab_data |> filter(SampleType == "ClinicalSample", VisitCode %in% c(seq(1000, 1900, by =100), 2120)), pcoa_relab, "VisitCode", c(3, 4)) +
+  scale_color_manual(values = c("red", "green3", colorRampPalette(c("dodgerblue1", "dodgerblue4","purple"))(7))) 
 
 ```
 

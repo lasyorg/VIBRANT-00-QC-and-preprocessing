@@ -9,12 +9,14 @@ plot_conc_by_analyte <- function(t, color_by = "value_type"){
     ungroup() |> 
     arrange(median) |>
     mutate(.feature = .feature |> fct_inorder()) |>
+    mutate(to_exclude = ifelse(analyte_to_exclude, "to exclude", "")) |> 
+    filter(!failed_sample) |> 
     ggplot(aes(x = .feature, y = conc, col = !!sym(color_by))) +
     ggbeeswarm::geom_quasirandom(alpha = 0.5, size = 0.1) +
-    scale_y_log10() +
+    scale_y_log10("Concentration") +
+    facet_grid(. ~ to_exclude, scales = "free", space = "free") +
     theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
-    ggtitle(str_c(t@metadata$name, " (", t@metadata$n_plates, " plates)")) +
-    ylab("Concentration")
+    ggtitle(str_c(t@metadata$name, " (", t@metadata$n_plates, " plates)")) 
   
   if (color_by == "value_type"){
     g <- 
@@ -23,7 +25,7 @@ plot_conc_by_analyte <- function(t, color_by = "value_type"){
   } else if (color_by == "sample_type"){
     g <- 
       g +
-      scale_color_manual("Sample type", breaks = c("Standard", "Manuf. control", "Positive control", "Sample"), values = c("coral", "black", "green", "steelblue1")) 
+      scale_color_manual("Sample type", breaks = c("Standard", "Manuf. control", "Positive control", "Softcup blank", "Sample"), values = c("coral", "black", "green","gray", "steelblue1")) 
   } else {
     g <- g + scale_color_discrete(name = color_by |> str_replace_all("_"," ") |> str_to_title())
   }

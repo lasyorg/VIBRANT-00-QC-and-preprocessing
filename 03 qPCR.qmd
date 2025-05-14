@@ -65,19 +65,16 @@ qpcr |> glimpse()
 - `Content` ???
 - `Replicate` is the replicate number from `r min(qpcr$Replicate, na.rm = TRUE)` to `r max(qpcr$Replicate, na.rm = TRUE)` (with `r sum(is.na(qpcr$Replicate))` missing values). Values are repeated 495, or 990 times
 
-> TODO: check what that is exactly
-
 - `Sample` is a sample ID --- ?
 
 - `Cq` is the quantification cycle (Cq) value.
 - `Starting Quantity (SQ)` is ???
-- `Cq Mean` is the mean Cq value for the replicate ???
+- `Cq Mean` is the mean Cq value for the replicate.
 
-> TODO: check what that is exactly
 
 - `plate_id` is the qPCR plate ID; there are `r qpcr$plate_id |> unique() |> length()` unique plate IDs in total.
 
-- `Plate_number` is the **extraction** plate number; there are `r qpcr$Plate_number |> unique() |> length()` unique plate numbers in total (5 `plate_id` per `Plate_number`).
+- `Plate_number` is the **extraction** plate number; there are `r qpcr$Plate_number |> unique() |> length()` unique plate numbers in total (5 identical `plate_id` per `Plate_number`).
 
 - `gDNA_Plate_ID` is the gDNA plate ID; there are `r qpcr$gDNA_Plate_ID |> unique() |> length()` unique gDNA plate IDs in total (match the `Plate_number`).
 
@@ -114,6 +111,13 @@ We tidy the column names for consistency and readability.
 ```{r}
 
 qpcr <- qpcr |> janitor::clean_names()
+qpcr <- qpcr |> 
+  dplyr::rename(
+    pcr_plate_id = plate_id,
+    ext_lib_plate_nb = plate_number,
+    ext_lib_plate_id = g_dna_plate_id
+  )
+
 colnames(qpcr)
 ```
 
@@ -155,7 +159,7 @@ tmp <-
   group_by(vibr_sample_id) |> 
   summarize(
     n_replicates = n(),
-    n_plates = plate_number |> unique() |> length()
+    n_plates = ext_lib_plate_nb |> unique() |> length()
   )
 
 # tmp |> dplyr::count(n_plates) # All samples's replicates are on a single plate
@@ -164,7 +168,7 @@ tmp <-
 
 ```
 
-We note that all samples's replicates are on a single plate (`plate_number` or `g_dna_plate_id`); and all samples have the same number of replicates (3).
+We note that all samples's replicates are on a single extraction plate (`ext_lib_plate_nb` or `ext_lib_plate_id`); and all samples have the same number of replicates (3).
 
 
 The plate layout is as follows:
@@ -173,7 +177,10 @@ The plate layout is as follows:
 
 qpcr <- 
   qpcr |> 
-  mutate(well_col = well |> str_sub(1, 1), well_row = well |> str_sub(2,3) |> as.integer()) |> 
+  mutate(
+    well_col = well |> str_sub(1, 1), 
+    well_row = well |> str_sub(2,3) |> as.integer()
+    ) |> 
   relocate(well_col, well_row, .after = well)
 
 ```
@@ -183,14 +190,14 @@ qpcr <-
 #| fig-height: 7
 
 qpcr |> 
-  select(plate_number, well_col, well_row, sample_type, sample) |>
+  select(ext_lib_plate_nb, well_col, well_row, sample_type, sample) |>
   distinct() |>
   ggplot() +
   aes(x =  well_row |> factor(), y = well_col |> factor() |> fct_rev(), fill = sample_type) +
   geom_tile() +
   geom_path(aes(group = sample), col = "black", alpha = 0.5) +
   geom_point() +
-  facet_wrap(~ plate_number, labeller = label_both) +
+  facet_wrap(~ ext_lib_plate_nb) +
   xlab("Well column") + ylab("Well row") +
   labs(caption = "Black lines connect replicates") 
   
@@ -205,11 +212,17 @@ qpcr <-
   mutate(
     sample_id = 
       case_when(
-        sample_type == "VIBRANT clinical sample" ~ vibr_sample_id,
-        sample_type == "Control sample" ~ vibr_sample_id,
-        sample_type == "Empty" ~ str_c(vibr_sample_id,"_plate_", plate_number |> str_pad(width = 2, pad = 0),"_", sample),
-        sample_type == "Water" ~ str_c("water_plate", plate_number |> str_pad(width = 2, pad = 0)),
-        sample_type == "Standard" ~ str_c("std_", content |> str_remove("Std-"), "_plate_", plate_number |> str_pad(width = 2, pad = 0)),
+        (sample_type == "VIBRANT clinical sample") ~ vibr_sample_id,
+        (sample_type == "Control sample") ~ vibr_sample_id,
+        (sample_type == "Empty") ~ 
+          str_c(vibr_sample_id,"_plate_", 
+                ext_lib_plate_nb |> str_pad(width = 2, pad = 0),"_", sample),
+        (sample_type == "Water") ~ 
+          str_c("water_plate", 
+                ext_lib_plate_nb |> str_pad(width = 2, pad = 0)),
+        (sample_type == "Standard") ~ 
+          str_c("std_", content |> str_remove("Std-"), 
+                "_plate_", ext_lib_plate_nb |> str_pad(width = 2, pad = 0)),
         TRUE ~ NA_character_
       )
   ) |> 
@@ -220,6 +233,12 @@ qpcr <-
   mutate(uid = str_c(sample_id, "_r", replicate_nb))
 
 ```
+
+### Add metagenomics manifest to link sample ID to participant ID and visit code.
+
+> TODO
+
+
 
 
 
@@ -232,16 +251,16 @@ The plate x Fluorescence x Target layout is as follows:
 #| fig-height: 4
 
 qpcr |> 
-  dplyr::count(fluor, target, vmrc_group, plate_id, plate_number) |> 
-  arrange(plate_number, vmrc_group, plate_id, fluor) |> 
+  dplyr::count(fluor, target, vmrc_group, pcr_plate_id, ext_lib_plate_nb) |> 
+  arrange(ext_lib_plate_nb, vmrc_group, pcr_plate_id, fluor) |> 
   mutate(
     target = target |> fct_inorder(), 
-    plate_nb = str_c("plate nb: ", plate_number) |> fct_inorder(),
-    plate_id = plate_id |> fct_inorder()
+    plate_nb = str_c("plate nb: ", ext_lib_plate_nb) |> fct_inorder(),
+    pcr_plate_id = pcr_plate_id |> fct_inorder()
     ) |> 
   ggplot() +
   aes(
-    x = plate_id,
+    x = pcr_plate_id,
     y = target |> factor() |> fct_rev(),
     fill = fluor
   ) +
@@ -260,7 +279,7 @@ qpcr |>
   )
 
 ```
-Potential batch effects due to extraction should be checked for `plate_number` and those due to the qPCR itself using the `plate_id`.
+Potential batch effects due to extraction should be checked for `ext_lib_plate_id` and those due to the qPCR itself using the `pcr_plate_id`.
 
 ### Dilution factors ?
 
@@ -268,6 +287,235 @@ Potential batch effects due to extraction should be checked for `plate_number` a
 
 qpcr |> 
   dplyr::count(target, dilution_factor) 
+
+```
+
+
+```{r}
+#| fig-height: 7
+#| fig-width: 15
+
+qpcr |> 
+  select(
+    starts_with("well"), 
+    pcr_plate_id, 
+    vmrc_group, 
+    ext_lib_plate_nb, 
+    dilution_factor
+    ) |> 
+  distinct() |> 
+  ggplot() +
+  aes(
+    x = well_row |> factor(), 
+    y = well_col |> fct_rev(), 
+    fill = dilution_factor |> factor()
+    ) +
+  geom_tile() +
+  facet_grid(vmrc_group ~ ext_lib_plate_nb, scales = "free", space = "free") +
+  scale_fill_manual(
+    "Dilution factor", 
+    values = colorRampPalette(c("black", "dodgerblue1"))(4)
+    ) +
+  xlab("Well column") + ylab("Well row") 
+
+```
+
+
+
+```{r}
+#| fig-height: 15
+#| fig-width: 15
+
+qpcr |> 
+  select(
+    starts_with("well"), 
+    pcr_plate_id, 
+    target,
+    vmrc_group, 
+    ext_lib_plate_nb, 
+    copies_per_swab
+    ) |> 
+  distinct() |> 
+  ggplot() +
+  aes(
+    x = well_row |> factor(), 
+    y = well_col |> fct_rev(), 
+    fill = copies_per_swab |> asinh()
+    ) +
+  geom_tile() +
+  facet_grid(vmrc_group + target ~ ext_lib_plate_nb, scales = "free", space = "free") +
+  xlab("Well column") + ylab("Well row") 
+
+```
+
+```{r}
+#| fig-height: 15
+#| fig-width: 15
+
+qpcr |> 
+  select(
+    starts_with("well"), 
+    pcr_plate_id, 
+    target,
+    vmrc_group, 
+    ext_lib_plate_nb, 
+    cq
+    ) |> 
+  distinct() |> 
+  ggplot() +
+  aes(
+    x = well_row |> factor(), 
+    y = well_col |> fct_rev(), 
+    fill = cq
+    ) +
+  geom_tile() +
+  facet_grid(vmrc_group + target ~ ext_lib_plate_nb, scales = "free", space = "free") +
+  xlab("Well column") + ylab("Well row") 
+
+```
+
+
+```{r}
+#| fig-height: 3.5
+#| fig-width: 12
+
+tmp <- 
+  qpcr |> 
+  select(
+    pcr_plate_id, 
+    target,
+    vmrc_group, 
+    ext_lib_plate_nb, 
+    cq,
+    copies_per_swab,
+    sample_type,
+    sample_id,
+    dilution_factor,
+    quant_adjusted
+    ) |> 
+  filter(sample_type == "Standard", vmrc_group %in% c("VMRC_1","VMRC_2")) |>
+  mutate(
+    std = 
+      sample_id |> 
+      str_remove("_plate_([0-9]+)") |> 
+      str_remove("std_") |> 
+      as.integer()
+  ) |> 
+  distinct() 
+
+tmp |> 
+  ggplot() +
+  aes(
+    x = std, 
+    y = cq, 
+    col = ext_lib_plate_nb %in% c(1:3)
+    ) +
+  geom_point(alpha = 0.5) +
+  facet_grid(. ~ vmrc_group + target, scales = "free", space = "free")
+
+
+tmp |> 
+  ggplot() +
+  aes(
+    x = std, 
+    y = cq, 
+    col = dilution_factor |> factor()
+    ) +
+  geom_point(alpha = 0.5) +
+  facet_grid(. ~ vmrc_group + target, scales = "free", space = "free")
+
+```
+
+```{r}
+
+tmp |> 
+  ggplot() +
+  aes(
+    x = std, 
+    y = copies_per_swab, 
+    col = ext_lib_plate_nb %in% c(1:3)
+    ) +
+  geom_point(alpha = 0.5) +
+  facet_grid(. ~ vmrc_group + target, scales = "free", space = "free") +
+  scale_y_log10()
+
+
+tmp |> 
+  ggplot() +
+  aes(
+    x = std, 
+    y = copies_per_swab, 
+    col = dilution_factor |> factor()
+    ) +
+  geom_point(alpha = 0.5) +
+  facet_grid(. ~ vmrc_group + target, scales = "free", space = "free") +
+  scale_y_log10()
+
+```
+```{r}
+
+tmp |> dplyr::count(std, dilution_factor, copies_per_swab)
+
+```
+
+
+
+```{r}
+
+tmp |> 
+  ggplot() +
+  aes(
+    x = std, 
+    y = quant_adjusted, 
+    col = ext_lib_plate_nb %in% c(1:3)
+    ) +
+  geom_point(alpha = 0.5) +
+  facet_grid(. ~ vmrc_group + target, scales = "free", space = "free") +
+  scale_y_log10()
+
+
+tmp |> 
+  ggplot() +
+  aes(
+    x = std, 
+    y = quant_adjusted, 
+    col = dilution_factor |> factor()
+    ) +
+  geom_point(alpha = 0.5) +
+  facet_grid(. ~ vmrc_group + target, scales = "free", space = "free") +
+  scale_y_log10()
+
+```
+```{r}
+
+tmp |> dplyr::count(std, dilution_factor, copies_per_swab, quant_adjusted)
+
+```
+
+```{r}
+
+tmp |> 
+  ggplot() +
+  aes(
+    x = cq, 
+    y = copies_per_swab, 
+    col = ext_lib_plate_nb %in% c(1:3)
+    ) +
+  geom_text(aes(label = std), alpha = 0.5) +
+  facet_grid(. ~ vmrc_group + target) +
+  scale_y_log10()
+
+
+tmp |> 
+  ggplot() +
+  aes(
+    x = cq, 
+    y = copies_per_swab, 
+    col = dilution_factor |> factor()
+    ) +
+  geom_text(aes(label = std), alpha = 0.5) +
+  facet_grid(. ~ vmrc_group + target) +
+  scale_y_log10()
 
 ```
 
@@ -326,10 +574,10 @@ g + scale_y_log10()
 g <- 
   qpcr |> 
   ggplot() +
-  aes(x = plate_number |> factor(), y = copies_per_swab, col = target, fill = target) +
+  aes(x = ext_lib_plate_nb |> factor(), y = copies_per_swab, col = target, fill = target) +
   geom_boxplot(alpha = 0.5) +
   facet_grid(sample_type ~ ., scales = "free") +
-  xlab("Plate number") +
+  xlab("Extraction plate number") +
   theme(
     strip.text.y = element_text(angle = 0),
     strip.text.x = element_text(angle = 90, hjust = 0)
@@ -352,13 +600,13 @@ From the plot above, it looks like the empty and water samples have non-zero val
 plot_qpcr_empties <- function(qpcr, color_by = "sample_type") {
   qpcr |> 
     filter(sample_type %in% c("Empty", "Water")) |> 
-    group_by(sample, plate_id, plate_number, target) |>
+    group_by(sample, pcr_plate_id, ext_lib_plate_nb, target) |>
     mutate(replicate_nb = row_number()) |> 
     ungroup() |> 
     ggplot() +
     aes(x = sample, y = copies_per_swab, label = replicate_nb, col = !!sym(color_by)) +
     geom_text(size = 3) +
-    facet_grid(target ~ plate_number, scales = "free_x", space = "free_x") +
+    facet_grid(vmrc_group + target ~ ext_lib_plate_nb, scales = "free_x", space = "free_x") +
     theme(
       axis.text.x = element_text(angle = 45, hjust = 1),
       strip.text.y = element_text(angle = 0)
@@ -417,7 +665,7 @@ qpcr <-
 
 qpcr |> 
   filter(sample_type %in% c("Control sample")) |> 
-  group_by(sample, plate_id, plate_number, target) |>
+  group_by(sample, pcr_plate_id, ext_lib_plate_nb, target) |>
   mutate(replicate_nb = row_number()) |> 
   ungroup() |> 
   ggplot() +
@@ -425,7 +673,7 @@ qpcr |>
   geom_text(size = 3) +
   scale_y_log10() +
   scale_color_discrete("replicate") +
-  facet_grid(prob_target + target ~ plate_number, scales = "free_x", space = "free_x") +
+  facet_grid(prob_target + target ~ ext_lib_plate_nb, scales = "free_x", space = "free_x") +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1),
     strip.text.y = element_text(angle = 0)
@@ -454,7 +702,7 @@ Replicability looks good, but we note the same issues with the problematic targe
 
 qpcr |> 
   filter(sample_type %in% c("VIBRANT clinical sample")) |> 
-  group_by(vibr_sample_id, sample, plate_id, plate_number, target) |>
+  group_by(vibr_sample_id, sample, pcr_plate_id, ext_lib_plate_nb, target) |>
   mutate(
     replicate_nb = row_number(),
     median_cps = median(copies_per_swab, na.rm = TRUE),
@@ -469,7 +717,7 @@ qpcr |>
   scale_y_log10() +
   scale_color_discrete("replicate") +
   scale_x_discrete("Samples", breaks = NULL) +
-  facet_grid(prob_target + target ~ plate_number, scales = "free_x", space = "free_x") +
+  facet_grid(prob_target + target ~ ext_lib_plate_nb, scales = "free_x", space = "free_x") +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1),
     strip.text.y = element_text(angle = 0)
@@ -486,8 +734,8 @@ These three targets are from the same plates (`plate_id` column):
 ```{r}
 
 qpcr |> 
-  filter(prob_target == "x", plate_number %in% 1:3) |> 
-  select(target, fluor, plate_id, plate_number) |> 
+  filter(prob_target == "x", ext_lib_plate_nb %in% 1:3) |> 
+  select(target, fluor, pcr_plate_id, ext_lib_plate_nb) |> 
   distinct() |> 
   gt()
 
@@ -498,15 +746,15 @@ qpcr |>
 #| fig-height: 10
 
 qpcr |> 
-  filter(prob_target == "x", plate_number %in% 1:3) |> 
-  select(target, fluor, plate_id, plate_number, starts_with("well"), sample, vibr_sample_id, sample_type, copies_per_swab) |> 
+  filter(prob_target == "x", ext_lib_plate_nb %in% 1:3) |> 
+  select(target, fluor, pcr_plate_id, ext_lib_plate_nb, starts_with("well"), sample, vibr_sample_id, sample_type, copies_per_swab) |> 
   arrange(sample_type) |>
   ggplot() +
   aes(x = well_row |> factor(), y = well_col |> fct_rev(), fill = sample_type) +
   geom_tile() +
   geom_point(aes(size = copies_per_swab |> log10())) +
   geom_line(aes(group = sample), col = "black", alpha = 0.5) +
-  facet_grid(target ~ plate_number) +
+  facet_grid(target ~ ext_lib_plate_nb) +
   coord_fixed() +
   xlab("Well column") + ylab("Well row") +
   labs(caption = "Black lines connect replicates") 
@@ -520,15 +768,15 @@ qpcr |>
 #| fig-height: 10
 
 qpcr |> 
-  filter(prob_target == "x", plate_number %in% 1:4) |> 
-  select(target, fluor, plate_id, plate_number, starts_with("well"), sample, vibr_sample_id, sample_type, dilution_factor, copies_per_swab) |> 
+  filter(prob_target == "x", ext_lib_plate_nb %in% 1:4) |> 
+  select(target, fluor, pcr_plate_id, ext_lib_plate_nb, starts_with("well"), sample, vibr_sample_id, sample_type, dilution_factor, copies_per_swab) |> 
   arrange(sample_type) |>
   ggplot() +
   aes(x = well_row |> factor(), y = well_col |> fct_rev(), fill = sample_type) +
   geom_tile(aes(alpha = dilution_factor)) +
   geom_point(aes(size = copies_per_swab |> log10())) +
   geom_line(aes(group = sample), col = "black", alpha = 0.5) +
-  facet_grid(target ~ plate_number) +
+  facet_grid(target ~ ext_lib_plate_nb) +
   coord_fixed() +
   xlab("Well column") + ylab("Well row") +
   labs(caption = "Black lines connect replicates") 
@@ -552,15 +800,15 @@ We could simply discard these values (exclude these targets x plates) or take th
 #| fig-height: 10
 
 qpcr |> 
-  filter(prob_target == "x", plate_number %in% 1:4) |> 
-  select(target, fluor, plate_id, plate_number, starts_with("well"), sample, vibr_sample_id, sample_type, dilution_factor, copies_per_swab, cq) |> 
+  filter(prob_target == "x", ext_lib_plate_nb %in% 1:4) |> 
+  select(target, fluor, pcr_plate_id, ext_lib_plate_nb, starts_with("well"), sample, vibr_sample_id, sample_type, dilution_factor, copies_per_swab, cq) |> 
   arrange(sample_type) |>
   ggplot() +
   aes(x = well_row |> factor(), y = well_col |> fct_rev(), fill = sample_type) +
   geom_tile(aes(alpha = dilution_factor)) +
   geom_point(aes(size = cq |> log10())) +
   geom_line(aes(group = sample), col = "black", alpha = 0.5) +
-  facet_grid(target ~ plate_number) +
+  facet_grid(target ~ ext_lib_plate_nb) +
   coord_fixed() +
   xlab("Well column") + ylab("Well row") +
   labs(caption = "Black lines connect replicates") 
@@ -588,15 +836,15 @@ We create two `Summarized Experiment` objects:
         + `sample`
         + `vibr_sample_id`
         + `sample_type`
-        + `plate_number` 
-        + `g_dna_plate_id`
+        + `ext_lib_plate_nb` 
+        + `ext_lib_plate_id`
         + (`dilution_factor`)
         
     The `rowData` contains the following columns:
     
         + `fluor`
-        + `plate_ids` (the concatenation of `plate_id` for each `plate_number`)
-        + `valid_plates` (the plate_number where signal looked good)
+        + `pcr_plate_id` (the concatenation of `pcr_plate_id` for each `ext_lib_plate_nb`)
+        + `valid_plates` (the `ext_lib_plate_nb` where signal looked good)
         
         
 - one with summarized values (aggregated across replicates) where each "sample" is a VIBRANT sample ID (including control samples) and each feature is a target (LBP taxa), with the following assays
@@ -610,16 +858,16 @@ We create two `Summarized Experiment` objects:
         + `sample_type`
         + `vibr_sample_id`
         + `sample`
-        + `plate_number` 
-        + `g_dna_plate_id`
+        + `ext_lib_plate_nb` 
+        + `ext_lib_plate_id`
         + `dilution_factor`
         
     The `rowData` contains the following columns:
     
         + `fluor`
         + `vmrc_group`
-        + `plate_ids` (the concatenation of `plate_id` for each `plate_number`)
-        + `valid_plates` (the plate_number where signal looked good)
+        + `pcr_plate_id` (the concatenation of `pcr_plate_id` for each `ext_lib_plate_nb`)
+        + `valid_plates` (the `ext_lib_plate_nb` where signal looked good)
 
         
 ### Raw `SummarizedExperiment` object
@@ -646,7 +894,7 @@ map(
       geom_point(aes(shape = sample_type), alpha = 0.3) +
       # ggbeeswarm::geom_quasirandom(alpha = 0.5) +
       scale_y_log10() + expand_limits(y = 1) +
-      facet_wrap(. ~ plate_number + plate_id, nrow = 2, scales = "free_x") +
+      facet_wrap(. ~ ext_lib_plate_nb + pcr_plate_id, nrow = 2, scales = "free_x") +
       theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
       guides(col = "none", fill = "none") +
       ggtitle(str_c("qPCR plates for targets of group ", .x)) 
@@ -664,7 +912,7 @@ valid_plates <-
     sample_type %in% c("Empty", "Water"), 
     str_detect(sample_id, "G12")|str_detect(sample_id, "H12")|str_detect(sample_id, "water")
   ) |>
-  group_by(plate_number, plate_id, vmrc_group) |>
+  group_by(ext_lib_plate_nb, pcr_plate_id, vmrc_group) |>
   summarize(
     n = n(),
     n_non_zero = sum(copies_per_swab > 0, na.rm = TRUE),
@@ -686,9 +934,9 @@ qpcr <-
   left_join(
     valid_plates |> 
       dplyr::rename(valid_qpcr_plate = valid) |>
-      select(plate_id, valid_qpcr_plate) |> 
+      select(pcr_plate_id, valid_qpcr_plate) |> 
       distinct(),
-    by = join_by(plate_id)
+    by = join_by(pcr_plate_id)
   )
 
 ```
@@ -700,7 +948,7 @@ make_raw_qpcr_SE <- function(qpcr){
   
   qpcr <- 
     qpcr |> 
-    arrange(plate_number, well_col, well_row) |>
+    arrange(ext_lib_plate_nb, well_col, well_row) |>
     mutate(uid = uid |> fct_inorder()) |> 
     arrange(vmrc_group, fluor) |> 
     mutate(target = target |> fct_inorder()) |> 
@@ -758,7 +1006,7 @@ make_raw_qpcr_SE <- function(qpcr){
   
    coldata <- 
      qpcr |> 
-     select(uid, sample_id, replicate_nb, sample, vibr_sample_id, sample_type, plate_number, g_dna_plate_id) |> 
+     select(uid, sample_id, replicate_nb, sample, vibr_sample_id, sample_type, ext_lib_plate_nb, ext_lib_plate_id) |> 
      distinct() |> 
      arrange(uid) |> 
      as.data.frame() |> 
@@ -767,18 +1015,18 @@ make_raw_qpcr_SE <- function(qpcr){
    
    rowdata <-
      qpcr |> 
-     select(target, fluor, vmrc_group, plate_id, valid_qpcr_plate, plate_number) |> 
+     select(target, fluor, vmrc_group, pcr_plate_id, valid_qpcr_plate, ext_lib_plate_nb) |> 
      distinct() |> 
-     arrange(target, plate_number) |> 
+     arrange(target, ext_lib_plate_nb) |> 
      group_by(target) |> 
      mutate(
-       plate_id = str_c(plate_id, " (gDNA plate ", plate_number |> str_pad(width = 2, pad = "0"), ")", sep = ""),
+       pcr_plate_id = str_c(pcr_plate_id, " (extr. plate ", ext_lib_plate_nb |> str_pad(width = 2, pad = "0"), ")", sep = ""),
      ) |> 
      summarize(
        fluor = fluor |> unique() |> str_c(collapse = ", "),
        vmrc_group = vmrc_group |> unique() |> str_c(collapse = ", "),
-       plate_ids = plate_id |> unique() |> str_c(collapse = ", "),
-       non_valdid_plates = plate_id[!valid_qpcr_plate] |> unique() |> str_c(collapse = ", ")
+       pcr_plate_ids = pcr_plate_id |> unique() |> str_c(collapse = ", "),
+       non_valdid_plates = pcr_plate_id[!valid_qpcr_plate] |> unique() |> str_c(collapse = ", ")
      ) |> 
      ungroup() |> 
      as.data.frame() |> 
@@ -827,16 +1075,16 @@ SE_qPCR_raw <- make_raw_qpcr_SE(qpcr)
         + `sample_type`
         + `vibr_sample_id`
         + `sample`
-        + `plate_number` 
-        + `g_dna_plate_id`
+        + `ext_lib_plate_nb` 
+        + `ext_lib_plate_id`
         + ? `dilution_factor`
         
     The `rowData` contains the following columns:
     
         + `fluor`
         + `vmrc_group`
-        + `plate_ids` (the concatenation of `plate_id` for each `plate_number`)
-        + `valid_plates` (the plate_number where signal looked good)
+        + `pcr_plate_ids` (the concatenation of `pcr_plate_id` for each `ext_lib_plate_nb`)
+        + `valid_plates` (the `ext_lib_plate_nb` where signal looked good)
 
 
 
@@ -847,7 +1095,7 @@ make_agg_qpcr_SE <- function(qpcr){
   qpcr <- 
     qpcr |> 
     filter(sample_type %in% c("VIBRANT clinical sample", "Control sample")) |>
-    arrange(plate_number, well_col, well_row) |>
+    arrange(ext_lib_plate_nb, well_col, well_row) |>
     mutate(uid = uid |> fct_inorder(), sample_id = sample_id |> fct_inorder()) |> 
     arrange(vmrc_group, fluor) |> 
     mutate(target = target |> fct_inorder()) |> 
@@ -868,16 +1116,16 @@ make_agg_qpcr_SE <- function(qpcr){
   
   coldata <- 
     qpcr |> 
-    select(sample_id, vibr_sample_id, sample, sample_type, plate_number, g_dna_plate_id) |>
+    select(sample_id, vibr_sample_id, sample, sample_type, ext_lib_plate_nb, ext_lib_plate_id) |>
     distinct() |> 
     arrange(sample_id) |> 
     left_join(
       qpcr |> 
-        select(sample_id, plate_id, valid_qpcr_plate) |> 
+        select(sample_id, pcr_plate_id, valid_qpcr_plate) |> 
         group_by(sample_id) |> 
         summarize(
-          plate_ids = str_c(plate_id, collapse = ", "),
-          non_valid_plate_ids = str_c(plate_id[!valid_qpcr_plate], collapse = ", ")
+          pcr_plate_ids = str_c(pcr_plate_id, collapse = ", "),
+          non_valid_plate_ids = str_c(pcr_plate_id[!valid_qpcr_plate], collapse = ", ")
         ),
       by = join_by(sample_id)
     ) |> 
@@ -887,17 +1135,17 @@ make_agg_qpcr_SE <- function(qpcr){
    
    rowdata <-
      qpcr |> 
-     select(target, fluor, vmrc_group, plate_id, plate_number) |> 
+     select(target, fluor, vmrc_group, pcr_plate_id, ext_lib_plate_nb) |> 
      distinct() |> 
-     arrange(target, plate_number) |> 
+     arrange(target, ext_lib_plate_nb) |> 
      group_by(target) |> 
      mutate(
-       plate_id = str_c(plate_id, " (gDNA plate ", plate_number |> str_pad(width = 2, pad = "0"), ")", sep = ""),
+       pcr_plate_id = str_c(pcr_plate_id, " (extr. plate ", ext_lib_plate_nb |> str_pad(width = 2, pad = "0"), ")", sep = ""),
      ) |> 
      summarize(
        fluor = fluor |> unique() |> str_c(collapse = ", "),
        vmrc_group = vmrc_group |> unique() |> str_c(collapse = ", "),
-       plate_ids = plate_id |> unique() |> str_c(collapse = ", ")
+       pcr_plate_ids = pcr_plate_id |> unique() |> str_c(collapse = ", ")
      ) |> 
      ungroup() |> 
      as.data.frame() |> 

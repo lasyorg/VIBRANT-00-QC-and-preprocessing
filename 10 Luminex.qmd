@@ -1,0 +1,3037 @@
+---
+title: "VIBRANT Luminex QC"
+author: Laura Symul
+date: today
+format: 
+   html:
+     page-layout: full
+     code-fold: true
+     toc: true
+     toc-location: left
+     toc-depth: 5
+     embed-resources: true
+     fig-dpi: 72
+execute:
+  cache: true # true refresh false
+  warning: false
+knitr:
+  opts_chunk:
+    out.width: "100%"
+editor: source
+---
+
+```{r}
+#| warning: false
+#| cache: false
+
+library(tidyverse)
+library(magrittr)
+library(gt)
+library(patchwork)
+library(SummarizedExperiment)
+library(tidySummarizedExperiment)
+
+tmp <- fs::dir_map("R scripts Luminex/", source)
+tmp <- fs::dir_map("R scripts/", source)
+
+
+theme_set(theme_light())
+
+```
+
+# Data
+
+## Loading Luminex data
+
+"Harmonized" Batch 1 and 2 Luminex data were prepared by Lenine and are available in the following directory:
+
+```{r}
+
+VIBRANT_dropbox_dir <-
+  "/Users/laurasymul/Dropbox/Academia/Projects/VIBRANT Study Files/"
+
+luminex_dir <- 
+  str_c(VIBRANT_dropbox_dir, "15_VIBRANT Luminex/VMRC VIBRANT LUMINEX Results_ONGOING/Harmonised Batches")
+
+
+luminex_dir |> str_remove(".*Academia/Projects/") |> str_c("/")
+
+```
+
+
+The data was made available as excel files:
+
+```{r}
+
+plate_files <- list.files(luminex_dir, full.names = TRUE, recursive = TRUE, pattern = "late [0-9]")
+
+tibble(filename = plate_files |> str_remove(luminex_dir) |> str_subset(pattern = "REMOVE FROM RECORD", negate = TRUE)) |> gt()
+
+```
+
+
+We load this data into R and store the excel sheets from the different plates in a single `SummarizedExperiment` object.
+
+```{r}
+
+plate_dirs <- luminex_dir |> list.dirs() |> extract(-1)
+
+raw <- 
+  read_luminex_excels(
+    dirs = plate_dirs,
+    pattern = "^[0-9]*_SFT_LUM_VIBRANT_plate [0-9]*.*\\.xlsx$",
+    name = "VIBRANT Batches 1 and 2"
+    ) # 
+
+raw
+
+```
+#### `colData` augmentation
+
+We add the following columns to `colData(raw)`:
+
+- `data_generation_date` with the data generation date (extracted from the file name);
+- `batch` with the batch number (1 or 2);
+- `plate_name` becomes `plate_filename`;
+- `plate_name` becomes a short name `B[batch]_P[plate_nb]` (*e.g.*, B1_P01, B2_P10).
+
+```{r}
+
+raw <- 
+  raw |> 
+  mutate(
+    data_generation_date = 
+      plate_name |> 
+      str_sub(start = 1, end = 8) |> 
+      lubridate::as_date(format = "%Y%m%d"),
+    batch = ifelse(data_generation_date < lubridate::as_date("2025-03-01"), 1, 2)
+  ) 
+
+raw <- 
+  raw |> 
+  dplyr::rename(plate_filename = plate_name)
+
+tmp <- 
+  colData(raw) |> 
+  as.data.frame() |> 
+  select(batch, plate_nb) |> 
+  distinct() |> 
+  group_by(batch) |> 
+  mutate(
+    plate_name = 
+      str_c("B", batch, "_P", row_number() |> str_pad(width = 2, pad = "0"))
+    ) |>
+  ungroup()
+
+tmp <-
+  colData(raw) |> 
+  as.data.frame() |> 
+  left_join(tmp, by = join_by(plate_nb, batch)) 
+
+raw$plate_name <- tmp$plate_name
+
+```
+
+
+We also update the `sample_id` column using the `updated_description` column
+
+```{r}
+
+tmp <- 
+  raw |> 
+  mutate(
+    sample_id_new = 
+      case_when(
+        !is.na(updated_description) ~ updated_description,
+        TRUE ~ sample_id
+      )
+  )
+
+# colData(tmp) |> 
+#   as.data.frame() |> 
+#   as_tibble() |> 
+#   filter(is.na(sample_id_new))
+
+# colData(tmp) |> 
+#   as.data.frame() |> 
+#   as_tibble() |> 
+#   filter(sample_type == "Sample") |> 
+#   mutate(
+#     str_len = str_length(sample_id_new),
+#   ) |> 
+#   filter(str_len > 17) |> 
+#   select(sample_id_new, sample_id, str_len) 
+
+tmp <- 
+  tmp |> 
+  mutate(
+    str_len = str_length(sample_id_new),
+    sample_id_new = 
+      case_when(
+        str_len > 18 ~ sample_id_new |> str_remove_all("-") |> str_remove("_V[0-9]"),
+        str_len == 14 ~ sample_id_new |> str_c("000"),
+        TRUE ~ sample_id_new
+      )
+  )
+
+raw$sample_id = tmp$sample_id_new
+
+rm(tmp)
+
+```
+
+
+
+## Plate design and sample names
+
+```{r}
+plate_design_plots <- plot_plate_design(raw) 
+```
+
+
+::: panel-tabset
+```{r}
+#| results: asis
+#| fig-width: 12
+#| fig-height: 5
+
+
+purrr::walk(
+  seq_along(plate_design_plots),
+  \(x) {
+    cat('### plate #', plate_design_plots[[x]]$data$plate_name |> unique(), '\n\n')
+    print(plate_design_plots[[x]])
+    cat('\n\n')
+  }
+)
+```
+:::
+
+
+::: callout-note
+Some manual fixes have to be made on the sample names based on the plate layouts and we harmonized the names of the biological controls (e.g., `BIOL CTRL` and `BIO CTRL`).
+:::
+
+
+```{r}
+
+raw <- 
+  raw |> 
+  mutate(
+    sample_id = 
+      case_when(
+        sample_id == "BIO CTRL" ~ "BIOL CTRL",
+        sample_id == "X65"  ~ "BIOL CTRL",
+        sample_id == "LO[" ~ "SA_068200153_1000",
+        sample_id == "X58"  ~ "US_068100029_2120",
+        sample_id == "X30"  ~ "US_068100050_1700",
+        sample_id == "X47"  ~ "SA_068200366_1500",
+        TRUE ~ sample_id
+      )
+  )
+
+```
+
+```{r}
+
+samples <- 
+  raw |> 
+  as_tibble() |> 
+  select(.sample, sample_type, sample_id) |> 
+  distinct()
+
+# samples |> filter(sample_id |> str_detect("CTRL")) |> dplyr::count(sample_id)
+
+```
+
+```{r}
+rm(samples)
+```
+
+```{r}
+
+raw <- 
+  raw |> 
+  mutate(
+    sample_type = 
+      case_when(
+        str_detect(sample_id, " CTRL") ~ "Positive control", 
+        TRUE ~ sample_type
+        )
+    )
+
+```
+
+There were two "Softcup blanks" from the US - we identify those with "`XX`" in their sample name. We flag them as such.
+
+:::callout-note
+Not clear what "softcup blanks" are - maybe worth checking with the team again.
+:::
+
+```{r}
+
+raw <- 
+  raw |> 
+  mutate(
+    sample_type = 
+      case_when(
+        str_detect(sample_id, "XX") ~ "Softcup blank",
+        TRUE ~ sample_type
+      )
+  )
+
+```
+
+
+
+
+## Loading manifest data
+
+We load the data contained in the first sheet (`MANIFEST`) from the `Combined batches_LS.xlsx` file.
+
+```{r}
+
+manifest_file <- 
+  list.files(
+    luminex_dir, 
+    full.names = TRUE, 
+    pattern = "^Combined batches_LS_LL_20250507.xlsx"
+  )
+
+manifest <- 
+  read_xlsx(
+    manifest_file, 
+    sheet = "MANIFEST", range = "A1:AK853"
+  )
+
+manifest |> glimpse()
+
+rm(manifest_file)
+
+```
+
+```{r}
+
+manifest_col <- 
+  c(
+    "BATCH", 
+    "LOCATION", "MANIFEST_SAMPLE_VCODE", "PATIENT", "VISIT CODE", "VISIIT", "SAMPLED_DATE",
+    "Weight", "Volume", "ALIQUOT VOLUME...14", "DILUTION/200ul TUBE...15", 
+    "VOLUME ADDED FOR ASSAY...16", "VOLUME AFTER DILUTION...17", "DILUTION OF ORIGINAL SAMPLE", 
+    "Originial volume (total - 500ul)",
+    "SHORTHAND TITLE", "ALTERNATE TITLE", "UPDATED HARMONISED TITLE", "PLATE POSITIONS"
+    )
+
+```
+
+We subset and rename the columns of interest (`r manifest_col |> stringr::str_c(collapse = ", ")`):
+
+```{r}
+
+manifest <- 
+  manifest |> 
+  select(all_of(manifest_col)) |> 
+  janitor::clean_names() |> 
+  dplyr::rename(
+    visit = visiit,
+    participant = patient,
+    aliquot_volume = aliquot_volume_14,
+    dilution_200ul_tube = dilution_200ul_tube_15,
+    volume_added_for_assay = volume_added_for_assay_16,
+    volume_after_dilution = volume_after_dilution_17,
+    approx_volume_based_on_aliquot_repos = originial_volume_total_500ul
+  )
+
+```
+
+
+```{r}
+
+manifest <- 
+  manifest |> 
+  dplyr::rename(sample_primary_batch = batch) |> 
+  mutate(
+    # new_rerun = new_rerun |> factor(), # all "New"
+    location = location |> factor(),
+    visit_code = visit_code |> as.integer(),
+    sampling_date = sampled_date |> lubridate::as_date(format = "%m/%d/%Y"),
+    sample_id = updated_harmonised_title
+  ) |> 
+  select(-c(sampled_date))  
+
+manifest |> head() |> gt(caption = "Top rows of the manifest data after column selection and renaming.")
+
+
+```
+
+```{r}
+
+new_coldata <- 
+  colData(raw) |> 
+  as.data.frame() |> 
+  rownames_to_column(".sample") |>
+  left_join(
+    manifest , 
+    by = join_by(sample_id)
+  ) |> 
+  dplyr::rename(
+    dilution_luminex = dilution,
+    dilution_manifest = dilution_of_original_sample
+  ) |> 
+  as_tibble() |> 
+  select(
+    .sample, sample_id, batch, plate_name, sample_type,
+    location, participant, visit_code, visit,
+    weight, volume, approx_volume_based_on_aliquot_repos,
+    aliquot_volume, dilution_200ul_tube, 
+    volume_added_for_assay, volume_after_dilution, 
+    dilution_manifest, dilution_luminex, 
+    type, plate_nb, plate_filename, 
+    plate_row, plate_col, data_generation_date,
+    description, updated_description, 
+    shorthand_title, alternate_title, updated_harmonised_title,
+    manifest_sample_vcode, sample_primary_batch, plate_positions
+  )
+
+raw@colData <-  
+  new_coldata |> 
+  as.data.frame() |> 
+  column_to_rownames(".sample") |>
+  DataFrame()
+  
+```
+
+
+
+## Number of replicates per location, participants, and visits
+
+```{r}
+#| fig-height: 6
+#| fig-width: 7
+
+# colData(raw) |> 
+#   as.data.frame() |> 
+#   dplyr::count(location, pid, visit_nb) |> 
+#   filter(!is.na(pid), !is.na(visit_nb)) |> 
+#   pivot_wider(names_from = visit_nb, values_from = n, names_prefix = "V", values_fill = 0) |> 
+#   gt(caption = "Number of samples per location, participant, and visit.")
+
+colData(raw) |> 
+  as.data.frame() |> 
+  dplyr::count(location, participant, visit) |> 
+  filter(!is.na(participant), !is.na(visit)) |>
+  arrange(visit) |> 
+  mutate(
+    visit = str_c("V", visit) |> fct_inorder(),
+    n = n |> factor()
+    ) |>
+  ggplot(aes(x = visit, y = participant, fill = n)) +
+  geom_tile() +
+  facet_wrap(. ~ location, scales = "free") +
+  scale_fill_manual(name = "Number of samples", values = c("steelblue1", "steelblue3", "steelblue4", "black")) +
+  ylab("Participant IDs")
+
+```
+### Comparison with expected samples based on CRF35
+
+
+
+```{r}
+
+expected_samples <- 
+  read_csv(
+    str_c(VIBRANT_dropbox_dir, 
+          "99_VIBRANT_specimen_collection_CRF_data/CRF35_weekly_specimen_collection.csv")
+    )
+
+```
+
+```{r}
+
+matched <- 
+  full_join(
+    expected_samples |> 
+      mutate(
+        in_CRF_35 = TRUE,
+        visit_code = visit_code |> factor(), 
+        pid = pid |> as.character()
+      ) |> select(-randomized),
+    colData(raw) |> 
+      as.data.frame() |> 
+      as_tibble() |> 
+      select(location, participant, visit_code, visit) |>
+      filter(!is.na(participant), !is.na(visit_code), !str_detect(participant, "XX")) |> 
+      distinct() |> 
+      mutate(
+        has_luminex_data = TRUE,
+        visit_code = visit_code |> factor(), 
+        pid = participant |> str_remove("68")
+        ),
+    by = join_by(location, pid, visit_code)
+  ) |> 
+  left_join(
+    expected_samples |> 
+      select(pid, randomized) |> 
+      distinct() |> 
+      mutate(
+        pid = pid |> as.character(),
+        pid_in_CRF_35 = TRUE
+        ),
+    by = join_by(pid)
+  ) |> 
+  mutate(
+    randomized = randomized |> replace_na(FALSE),
+    has_luminex_data = has_luminex_data |> replace_na(FALSE) ,
+    in_CRF_35 = in_CRF_35 |> replace_na(FALSE),
+    pid_in_CRF_35 = pid_in_CRF_35 |> replace_na(FALSE),
+    has_luminex_data = ifelse(has_luminex_data, "Yes", "No"),
+    in_CRF_35 = ifelse(in_CRF_35, "Yes", "No"),
+    pid_in_CRF_35 = ifelse(pid_in_CRF_35, "Yes", "No"),
+    randomized = ifelse(randomized, "Yes", "No"),
+    softcup_collected = 
+      case_when(
+        (softcup == "Checked") & !is.na(softcup_time_placed) & (softcup_time_placed != "not done") ~ "Yes",
+        (softcup == "Checked") & is.na(softcup_time_placed) ~ "Maybe",
+        (softcup == "Checked") & (softcup_time_placed == "not done") ~ "Maybe",
+        (softcup == "Unchecked") & !is.na(softcup_time_placed) ~ "Maybe",
+        (softcup == "Unchecked") & is.na(softcup_time_placed) ~ "No",
+        (softcup == "not done") ~ "No",
+        is.na(softcup) ~ "Not in CRF35",
+        TRUE ~ "???"
+      ) |> factor(levels = c("Yes", "Maybe", "No", "Not in CRF35", "???"))
+  )
+
+
+```
+
+```{r}
+matched |> 
+  dplyr::count(
+    pid_in_CRF_35,
+    has_luminex_data) |> 
+  gt()
+
+```
+
+
+All Luminex data participant IDs match those from the CRF35 data.
+
+```{r}
+#| fig-height: 9.5
+#| fig-width: 7
+
+matched |> 
+  filter(((randomized == "Yes") & (softcup_collected != "No")) | (has_luminex_data == "Yes")) |> 
+  ggplot() +
+  aes(x = visit_code, y = pid, shape = softcup_collected, col = has_luminex_data) +
+  geom_point() +
+  facet_grid(location + randomized  ~ ., scales = "free", space = "free") +
+  scale_shape_manual(values = c(16, 1, 4, 8)) 
+
+```
+
+There are only 5 participants for whom we are missing one softcup sample, and 3 participants that do not have matching sample ids in the CRF35 data.
+
+
+```{r}
+
+
+matched |> 
+  filter(((randomized == "Yes") & (softcup_collected != "No")) | (has_luminex_data == "Yes")) |> 
+  filter(((has_luminex_data == "No")) | (softcup_collected == "Not in CRF35")) |> #  
+  select(pid, visit_code, softcup_collected, has_luminex_data, location) |>
+  arrange(location, pid) |> 
+  group_by(pid) |> 
+  gt(row_group_as_column = TRUE) 
+
+```
+
+For the 3 participants that had Luminex data not expected according to CRF35, it looks like the visit was miscoded (11 or 1 instead of 10, 1000, or 2120). 
+
+There remain two participants for whom CRF35 claims that softcups were collected but for whom we do not have any data.
+
+:::callout-caution
+To be checked with the team.
+:::
+
+
+```{r}
+
+matched |> 
+ dplyr::count(
+   randomized,
+   pid_in_CRF_35,
+   in_CRF_35,
+   softcup_collected,
+   has_luminex_data
+ )
+
+```
+
+
+## Dilution factors, and samples' volumes and weights
+
+We first compare the dilution factors from the excel files and the manifest:
+
+```{r}
+#| fig-width: 10
+#| fig-height: 5
+
+colData(raw) |> 
+  as.data.frame() |> 
+  rownames_to_column(".sample") |>
+  as_tibble() |>
+  ggplot() +
+  aes(x = dilution_luminex, y = dilution_manifest, col = plate_name) +
+  geom_abline(intercept = 0, slope = 1, col = "gray80") +
+  geom_point(alpha = 0.5, size = 0.2) +
+ #  coord_fixed() +
+  labs(
+    x = "Dilution factor from Luminex excel file\n(dilution sheet)", 
+    y = "Dilution factor from manifest\nRound 1 Final dilution factor",
+    color = "Plate"
+    ) +
+  facet_wrap(plate_name |> str_replace_all("_", " ") |> str_wrap(20) ~ ., nrow = 4, scales = "free") +
+  guides(col = "none")
+ 
+```
+::: callout-note
+The dilution factors have been rounded to the lowest integer on some plates. Since we will likely use different dilution factors (see below the discussion the sample volumes and weights), re-calculate the concentrations, this is not an issue for now.
+:::
+
+
+::: callout-caution
+In SA, the **volume** of samples were not collected, only the samples' **weight**.
+:::
+
+
+```{r}
+
+dilution_related_data <- 
+  colData(raw) |> 
+  as.data.frame() |>
+  rownames_to_column(".sample") |>
+  as_tibble() |>
+  filter(sample_type == "Sample") |> 
+  select(
+    sample_id, batch, location, participant, visit_code, 
+    dilution_luminex, dilution_manifest, weight, volume, approx_volume_based_on_aliquot_repos
+    ) 
+
+```
+
+
+```{r}
+location_colors <- c("US" = "coral", "SA" = "steelblue3")
+```
+
+
+```{r}
+#| fig-width: 10
+#| fig-height: 3.5
+
+dilution_related_data |> 
+  ggplot() +
+  aes(x = weight, fill = location) +
+  geom_histogram(bins = 50, alpha = 0.5, position = "identity") +
+  scale_fill_manual(values = location_colors) +
+  xlab("Sample weight") +
+  ylab("n samples") +
+  
+  dilution_related_data |> 
+  ggplot() +
+  aes(x = volume, fill = location) +
+  geom_histogram(bins = 50, alpha = 0.5, position = "identity")  +
+  scale_fill_manual(values = location_colors) +
+  guides(fill = "none") +
+  xlab("Sample volume") +
+  ylab("n samples") +
+  
+  plot_layout(guides = "collect")
+
+
+```
+::: callout-caution
+It looks like the weights of two SA sample is an order of magnitude larger than all other samples.
+:::
+
+```{r}
+
+dilution_related_data |> 
+  filter(location == "SA", weight > 10) |> 
+  select(sample_id, participant, visit_code, weight) |> 
+  gt("The two samples that have weights larger than 10g") 
+
+```
+
+Probably a typo, so for now, we divide these values by 10.
+
+```{r}
+
+raw <- 
+  raw |> 
+  mutate(
+    weight = ifelse(weight > 10, weight/10, weight)
+  )
+
+```
+
+
+
+```{r}
+
+dilution_related_data <- 
+  colData(raw) |> 
+  as.data.frame() |>
+  rownames_to_column(".sample") |>
+  as_tibble() |>
+  filter(sample_type == "Sample") |> 
+  select(
+    sample_id, batch, location, participant, visit_code, 
+    dilution_luminex, dilution_manifest, weight, volume, approx_volume_based_on_aliquot_repos
+    ) 
+
+```
+
+
+
+```{r}
+#| fig-width: 10
+#| fig-height: 5
+
+
+dilution_related_data |> 
+  ggplot() +
+  aes(x = volume, fill = location) +
+  geom_histogram(bins = 50, alpha = 0.5, position = "identity")  +
+  scale_fill_manual(values = location_colors) +
+  guides(fill = "none") +
+  xlab("Sample volume") +
+  ylab("n samples") +
+  
+  dilution_related_data |> 
+  ggplot() +
+  aes(x = weight, fill = location) +
+  geom_histogram(bins = 50, alpha = 0.5, position = "identity") +
+  scale_fill_manual(values = location_colors) +
+  xlab("Sample weight") +
+  ylab("n samples") +
+  
+  dilution_related_data |> 
+  filter(!is.na(location)) |> 
+  ggplot() +
+  aes(y = weight, x = location, fill = location, color = location) +
+  geom_boxplot(alpha = 0.5) +
+  scale_fill_manual(values = location_colors) +
+  scale_color_manual(values = location_colors) +
+  ylab("Sample weight") +
+  xlab("Study site") +
+  
+  plot_layout(guides = "collect")
+
+
+wilcox.test(weight ~ location, data = dilution_related_data) |> 
+  broom::tidy() |> 
+  gt() |> 
+  gt::tab_header("Wilcoxon test for differences in sample weights between locations")
+
+```
+Sample weights are significantly higher in the US compared to SA.
+
+::: callout-note
+In the manifest, US weights are rounded with 1 decimal in batch 1, but have up to 4 decimals in batch 2. 
+:::
+
+We load the original US manifests received by Lenine to obtain the non-rounded weights.
+
+```{r}
+
+us_weight_data <- 
+  read_xlsx(
+    str_c(luminex_dir, "/US manifests/VIBRANT_LUMINEX_US MANIFEST all boxes.xlsx"),
+    range = "A1:N210"
+  )
+  
+us_weight_data <- 
+  us_weight_data |> 
+  dplyr::rename(
+    box_name = `Box name`,
+    participant = `Participant ID*`,
+    visit = `VISIT #`,
+    visit_code = `Visit code*`,
+    softcup_volume_with_saline = `Softcup Volume with Saline (mL)`,
+    softcup_weight = `Softcup Weight (g)`,
+    description = Description
+  ) |> 
+  select(
+    box_name, participant, visit, visit_code,
+    softcup_volume_with_saline, softcup_weight, description
+  ) |> 
+  mutate(
+    box_id = box_name |> str_remove("VIBRANT LUMINEX "),
+    visit_code = visit_code |> as.integer(),
+    participant = participant |> str_remove_all("-") |> str_remove("^0")
+    )
+
+
+```
+
+
+```{r}
+#| fig-width: 10
+#| fig-height: 4
+
+us_weight_data |> 
+  ggplot() +
+  aes(x = softcup_weight, fill = box_id) +
+  geom_histogram(binwidth = 0.025) +
+  facet_grid(box_id ~ ., scales = "free") +
+
+us_weight_data |> 
+  ggplot() +
+  aes(x = softcup_volume_with_saline, fill = box_id) +
+  geom_histogram(binwidth = 0.025) +
+  facet_grid(box_id ~ ., scales = "free") +
+
+us_weight_data |> 
+  ggplot() +
+  aes(x = softcup_weight, y = softcup_volume_with_saline, col = box_id) +
+  geom_point(alpha = 0.5) +
+  
+  plot_layout(guides = "collect")
+
+```
+It looks like the volume data were rounded for some samples. I assume that this is how they have been recorded and that we won't be able to obtain the non-rounded values for these samples.
+
+
+We now compare the US manifest data with the data provided in Lenine's consolidated manifest:
+
+```{r}
+#| fig-width: 10
+#| fig-height: 4
+
+tmp <- 
+  raw |> colData() |> as.data.frame() |> as_tibble() |> 
+  select(location, participant, visit_code, weight, volume) |>
+  distinct() |> 
+  filter(location == "US") |> 
+  left_join(us_weight_data) 
+
+tmp |> 
+  ggplot() +
+  aes(x = weight, y = softcup_weight, col = box_id) +
+  geom_abline(slope = 1, intercept = 0) +
+  geom_point(alpha = 0.5) +
+  coord_fixed() +
+
+tmp |> 
+  ggplot() +
+  aes(x = volume, y = softcup_volume_with_saline, col = box_id) +
+  geom_abline(slope = 1, intercept = 0) +
+  geom_point(alpha = 0.5) +
+  coord_fixed() +
+  
+  plot_layout(guides = "collect")
+
+```
+
+Values match to rounding differences, so we will replace the weights and volumes by these more precise values.
+
+::: callout-important
+One important note is that the volume provided by the US team is the softcup volume **with** saline added (*i.e.*, the volume of the secretion + the saline volume).
+::: 
+
+Indeed, all (but 2) volumes are larger than 0.5 as 0.5 mL of saline was supposed to be added to each softcup sample. 
+
+
+From the US manifest comments (`description` column), we also note, that **4 US samples were added 1 mL of saline instead of 0.5 mL**.
+
+```{r}
+
+us_weight_data |> 
+  filter(!is.na(description)) |> 
+  gt()
+
+```
+
+
+
+```{r}
+
+us_weight_data <- 
+  us_weight_data |> 
+  mutate(
+    volume_of_saline_added = 
+      case_when(
+        str_detect(description, "1 m") ~ 1,
+        TRUE ~ 0.5
+      )
+  )
+
+```
+
+```{r}
+#| fig-height: 3.5
+#| fig-width: 6
+
+us_weight_data |> 
+  ggplot() +
+  aes(x = softcup_weight, y = softcup_volume_with_saline, col = volume_of_saline_added |> factor()) +
+  geom_point(alpha = 0.5) +
+  scale_color_manual("Volume of saline\nadded to\nsoftcup secretions", values = c("steelblue3", "deeppink")) 
+
+```
+
+These samples explain the "outliers" in the weight-volume relationship.
+
+```{r}
+#| fig-height: 3.5
+#| fig-width: 6
+
+us_weight_data |> 
+  ggplot() +
+  aes(x = softcup_weight, y = softcup_volume_with_saline - volume_of_saline_added, col = softcup_volume_with_saline < 0.5) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  geom_point(alpha = 0.5) +
+  ylab("Softcup volume (without saline)") +
+  coord_fixed()
+
+```
+
+:::callout-important
+The two samples that had volumes smaller than 0.5 ml are likely typo (*i.e.*, 0.369 instead of 1.369).
+:::
+
+We manually fix these values by adding 1 to these volumes.
+
+```{r}
+#| fig-height: 3.5
+#| fig-width: 7
+
+us_weight_data <- 
+  us_weight_data |> 
+  mutate(
+    softcup_volume_with_saline_imp =
+      case_when(
+        softcup_volume_with_saline < 0.5 ~ softcup_volume_with_saline + 1,
+        TRUE ~ softcup_volume_with_saline
+      )
+  ) 
+  
+us_weight_data |> 
+  ggplot() +
+  aes(x = softcup_weight, y = softcup_volume_with_saline_imp - volume_of_saline_added, col = softcup_volume_with_saline < 0.5) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  geom_point(alpha = 0.5) +
+  ylab("Softcup volume (without saline)\n(imputed)") +
+  coord_fixed()
+
+```
+This manual fix puts them closer to the identity line (weight = volume).
+
+
+```{r}
+#| eval: false
+#| fig-width: 12
+#| fig-height: 4
+  
+us_weight_data |> 
+  ggplot() +
+  aes(x = softcup_weight, y = softcup_volume_with_saline_imp - volume_of_saline_added, col = !is.na(description)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  geom_point(alpha = 0.5) +
+  geom_text(
+    aes(label = description), size = 3,
+    hjust = 0, vjust = 0.5, nudge_x = 0.05
+  ) +
+  ylab("Softcup volume (without saline)\n(imputed)") +
+  coord_fixed() +
+  scale_x_continuous(limits = c(0, 7))
+
+
+```
+
+In the chunk below, we replace the weights and volumes in the `SE` object with the values from the US manifest.
+
+::: callout-note
+We assume that the SA team added 0.5 mL of saline to all samples. Might be worth checking with the team.
+::: 
+
+```{r}
+# we replace the values of the columns `weight`, `volume` from the `us_weight_data`, and add the `volume_of_saline_added`
+
+# first we store the original weights and volumes in a new column
+raw$weight_manifest <- raw$weight
+raw$volume_manifest <- raw$volume
+
+# next we create a data.frame with the same rows as the colData DF and merge with the `us_weight_data`
+tmp_coldata <- 
+  raw |> 
+  colData() |> 
+  as.data.frame() |> 
+  as_tibble() |> 
+  select(sample_id, location, participant, visit_code, weight_manifest, volume_manifest, weight, volume) |>
+  left_join(
+    us_weight_data |> 
+      select(participant, visit_code, softcup_weight, softcup_volume_with_saline_imp, volume_of_saline_added)
+  ) |> 
+  mutate(
+    weight = 
+      case_when(
+        !is.na(softcup_weight) ~ softcup_weight,
+        TRUE ~ weight
+      ),
+    volume = 
+      case_when(
+        !is.na(softcup_volume_with_saline_imp) ~ softcup_volume_with_saline_imp - volume_of_saline_added,
+        TRUE ~ volume
+      ),
+    volume_of_saline_added_original = volume_of_saline_added,
+    volume_of_saline_added = 
+      case_when(
+        !is.na(volume_of_saline_added) ~ volume_of_saline_added,
+        (location == "SA") ~ 0.5,
+        TRUE ~ volume_of_saline_added
+      )
+  )
+  
+raw$weight <- tmp_coldata$weight
+raw$volume <- tmp_coldata$volume
+raw$volume_of_saline_added <- tmp_coldata$volume_of_saline_added
+
+```
+
+
+We now check the volumes of SA samples imputed from the number of Aliquots that were created from the original material (stock inventory)
+
+```{r}
+#| fig-height: 3.5
+#| fig-width: 7
+
+raw |> 
+  colData() |> 
+  as.data.frame() |> 
+  as_tibble() |> 
+  filter(location == "SA") |> 
+  select(sample_id, weight, approx_volume_based_on_aliquot_repos) |> 
+  ggplot() +
+  aes(x = weight, y = approx_volume_based_on_aliquot_repos/1000) +
+  geom_abline(intercept = 0, slope = 1, col = "blue", linetype = "dashed") +
+  geom_point(alpha = 0.1) +
+  coord_fixed() +
+  expand_limits(x = 0, y = 0)
+  
+
+```
+This matches quite well the identity line (assumption of the ECHO study).
+
+::: callout-note
+Since we do not have the original volumes for all samples, we assume 1g = 1mL for **all** samples to compute the final dilution factors (ECHO protocol).
+:::
+
+
+Note that there are a few samples without weights. For these samples, Lenine assumed a dilution factor of 1.
+
+```{r}
+
+raw |> 
+  colData() |> 
+  as.data.frame() |> 
+  as_tibble() |> 
+  filter(sample_type == "Sample", is.na(weight)) |>
+  select(location, sample_id, weight, dilution_luminex) |> distinct() |> 
+  gt()
+
+```
+
+This is not realistic to assume that these dilution factors are 1. Instead, we will impute their weight to 0.4 (~ average weight).
+
+```{r}
+
+tmp <- 
+  raw |> 
+  mutate(
+    new_weight = 
+      case_when(
+        (sample_type == "Sample") & is.na(weight) ~ 0.4,
+        TRUE ~ weight
+      )
+  )
+
+tmp |> 
+  colData() |> 
+  as.data.frame() |> 
+  as_tibble() |> 
+  filter(sample_type == "Sample", is.na(weight)) |>
+  select(location, sample_id, weight, new_weight, dilution_luminex) |> distinct() 
+
+raw$weight <- tmp$new_weight
+rm(tmp)
+
+```
+
+
+
+The dilution factors are computed as follow:
+
+- $V_0$ is the volume of the softcup material in mL imputed from the sample weights, assuming 1g = 1ml;
+- $V_1 = V_0 + V_s$ where $V_s$ is the volume of saline systematically added to all samples (0.5 ml for all but 4 US samples);
+- $V_a$ is the volume of the aliquot taken from $V_1$ for Luminex data generation. For all, but 3 US samples, $V_a$ = 200uL (= 400 uL for 3 US samples);
+- $d_a = \frac{V_1}{V_0}$ is the dilution factor of the aliquot;
+
+
+- Lenine then adds for most (but not all) samples a volume of 250ul of buffer to the sample ($V_b$ = Volume buffer) such that
+- $V_2 = V_a + V_b$ where $V_b$ is the volume of buffer Lenine added to the sample;
+- $d_s = \frac{V_2}{V_a}$ is the dilution factor of the sample such that 
+- $d = d_a d_s$ is the final dilution factor of the sample.
+
+
+Below, 
+
+- I check that I obtain the same value as Lenine when computing the final dilution factor using the assumption that 1g = 1ml for all samples (`_LL`) and the weight provided in the manifest;
+- I then compute a new dilution factor using the more precise weights (US samples) and account for the extra saline (few US samples) (`_new`);
+
+
+
+Since there were a few samples for which the aliquot volume was missing; we impute it to 200 uL.
+
+```{r}
+
+raw <- 
+  raw |> 
+  mutate(
+    aliquot_volume = 
+      case_when(
+        (sample_type == "Sample") & is.na(aliquot_volume) ~ 200,
+        TRUE ~ aliquot_volume
+      ),
+    volume_of_saline_added = 
+      case_when(
+        (sample_type == "Sample") & is.na(volume_of_saline_added) ~ 0.5,
+        TRUE ~ volume_of_saline_added
+      )
+  )
+
+
+```
+
+
+```{r}
+
+raw <- 
+  raw |> 
+  mutate(
+    volume_LL = weight,
+    dilution_aliquot_LL = (volume_LL + 0.5)/volume_LL, # should be the same as `dilution_200ul_tube`
+    dilution_sample_LL = (aliquot_volume + volume_added_for_assay)/(aliquot_volume),
+    dilution_LL = dilution_aliquot_LL * dilution_sample_LL,
+    
+    volume_new = weight,
+    dilution_aliquot_new = (volume_new + volume_of_saline_added)/volume_new,
+    dilution_sample_new = (aliquot_volume + volume_added_for_assay)/(aliquot_volume),
+    dilution_new = dilution_aliquot_new * dilution_sample_new
+  )
+
+```
+
+
+```{r}
+
+dilution_related_data <- 
+  colData(raw) |> 
+  as.data.frame() |>
+  rownames_to_column(".sample") |>
+  as_tibble() |>
+  filter(sample_type == "Sample") |> 
+  select(sample_id, location, participant, visit_code, dilution_luminex, dilution_manifest, dilution_LL, dilution_new, weight, volume, approx_volume_based_on_aliquot_repos, volume_of_saline_added, aliquot_volume)
+
+```
+
+```{r}
+#| fig-width: 10
+#| fig-height: 8
+
+ggplot(dilution_related_data) +
+  aes(
+    x = dilution_manifest, 
+    y = dilution_luminex, 
+    col = location,
+    shape = volume_of_saline_added |> factor()
+    ) +
+  geom_abline(intercept = 0, slope = 1, col = "gray80") +
+  geom_point(alpha = 0.5) +
+  scale_color_manual(values = location_colors) +
+  scale_shape_manual("Volume of saline\nadded to softcup", values = c(16, 4)) +
+  scale_x_log10() +
+  scale_y_log10() +
+  coord_fixed() +
+
+
+ggplot(dilution_related_data) +
+  aes(
+    x = dilution_manifest, 
+    y = dilution_LL, 
+    col = location,
+    shape = volume_of_saline_added |> factor()
+    ) +
+  geom_abline(intercept = 0, slope = 1, col = "gray80") +
+  geom_point(alpha = 0.5) +
+  scale_color_manual(values = location_colors) +
+  scale_shape_manual("Volume of saline\nadded to softcup", values = c(16, 4)) +
+  scale_x_log10() +
+  scale_y_log10() +
+  xlab("Dilution (manifest values)") +
+  ylab("Dilution recalculated\nas in the manifest") +
+  coord_fixed() +
+
+
+ggplot(dilution_related_data) +
+  aes(
+    x = dilution_manifest, 
+    y = dilution_new, 
+    col = location,
+    shape = volume_of_saline_added |> factor()
+    ) +
+  geom_abline(intercept = 0, slope = 1, col = "gray80") +
+  geom_point(alpha = 0.5) +
+  scale_color_manual(values = location_colors) +
+  scale_shape_manual("Volume of saline\nadded to softcup", values = c(16, 4)) +
+  scale_x_log10() +
+  scale_y_log10() +
+  xlab("Dilution (manifest values)") +
+  ylab("Dilution re-calculated\nwith the actual volume of saline added") +
+  coord_fixed() +
+
+ggplot(dilution_related_data) +
+  aes(
+    x = dilution_luminex, 
+    y = dilution_new, 
+    col = location,
+    shape = volume_of_saline_added |> factor()
+    ) +
+  geom_abline(intercept = 0, slope = 1, col = "gray80") +
+  geom_point(alpha = 0.5) +
+  scale_color_manual(values = location_colors) +
+  scale_shape_manual("Volume of saline\nadded to softcup", values = c(16, 4)) +
+  scale_x_log10() +
+  scale_y_log10() +
+  xlab("Dilution (Luminex values)") +
+  ylab("Dilution re-calculated\nwith the actual volume of saline added") +
+  coord_fixed() +
+  
+  plot_layout(guides = "collect") & theme(legend.position = "bottom") 
+
+
+```
+Lenine had actually used the more precise weights for computing her dilution factor (it's just that the weight values were not copy-pasted with the decimals in the manifest).
+
+::: callout-important
+TODO: check with Lenine why we have different values for a few US samples
+:::
+
+
+For now, the current dilution values used by the Luminex software per plate and sample are:
+
+```{r}
+#| fig-height: 12
+#| fig-width: 21
+
+raw |> mutate(dilution = dilution_luminex) |> plot_dilution_factors()
+
+```
+
+
+
+```{r}
+#| eval: false
+
+raw |> 
+  colData() |> 
+  as.data.frame() |> 
+  as_tibble() |> 
+  dplyr::count(sample_type, is.na(dilution_new))
+
+
+```
+
+
+```{r}
+
+raw <- raw |> mutate(dilution_new = ifelse(is.na(dilution_new), 1, dilution_new))
+
+```
+
+```{r}
+
+rm(dilution_related_data, us_weight_data, manifest_file, manifest)
+
+```
+
+
+
+## Exclusion of failed analytes
+
+We exclude any analytes that does not have any values across all plates
+
+```{r}
+
+raw <- exclude_missing_analytes(raw)
+
+```
+
+
+# Basic QC
+
+## Bead counts
+
+
+```{r}
+total_bead_count_range <- 
+  raw |> as_tibble() |> group_by(plate_name, plate_row, plate_col) |> 
+  summarise(total_bead_count = sum(bead_count, na.rm = TRUE), .groups = "drop") |> 
+  filter(total_bead_count > 0) |> 
+  pull(total_bead_count) |> 
+  range()
+```
+
+
+::: panel-tabset
+```{r}
+#| results: asis
+#| fig-width: 8
+#| fig-height: 4.5
+
+purrr::walk(
+  raw$plate_name |> unique(),
+  \(x) {
+    cat('### plate ', x, '\n\n')
+    print(
+      raw |> 
+        as_tibble() |> 
+        filter(plate_name == x) |> 
+        group_by(plate_col, plate_row, sample_type, type) |> 
+        summarise(total_bead_count = sum(bead_count, na.rm = TRUE), .groups = "drop") |>
+        ggplot() +
+        aes(x = plate_col, y = plate_row |> fct_rev(), fill = total_bead_count |> log10()) +
+        geom_tile(col = "white") +
+        geom_text(aes(label = type), size = 2.5) +
+        coord_fixed() +
+        scale_fill_gradient2(
+          low = "red", midpoint = 2.5, high = "steelblue", 
+          limits = c(total_bead_count_range[1] |> log10() |> floor(), total_bead_count_range[2] |> log10() |> ceiling()),
+          ) +
+        xlab("") + ylab("") +
+        ggtitle(x)
+    )
+    cat('\n\n')
+  }
+)
+```
+:::callout-important
+There is no "Bead count" sheet in the excel file for plate 2 of batch 1
+:::
+
+```{r}
+ raw |> as_tibble() |> group_by(plate_name, plate_row, plate_col) |> 
+  summarise(total_bead_count = sum(bead_count, na.rm = TRUE), .groups = "drop") |> 
+  filter(total_bead_count > 0, total_bead_count < 1000)
+```
+
+
+:::callout-caution
+One well appear to have a very low bead count; we will flag this sample as "failed" in the section @sec-filtering below. 
+:::
+
+All other wells have over 1000 total bead counts.
+
+
+
+## Total fluorescence intensity per well
+
+```{r}
+total_FI_range <- 
+  raw |> as_tibble() |> group_by(plate_name, plate_row, plate_col) |> 
+  summarise(total_FI = sum(FI, na.rm = TRUE), .groups = "drop") |> 
+  filter(total_FI > 0) |> 
+  pull(total_FI) |> 
+  range()
+```
+
+
+::: panel-tabset
+```{r}
+#| results: asis
+#| fig-width: 8
+#| fig-height: 4.5
+
+purrr::walk(
+  raw$plate_name |> unique(),
+  \(x) {
+    cat('### plate ', x, '\n\n')
+    print(
+      raw |> 
+        as_tibble() |> 
+        filter(plate_name == x) |> 
+        group_by(plate_col, plate_row, sample_type, type) |> 
+        summarise(total_FI = sum(FI, na.rm = TRUE), .groups = "drop") |>
+        ggplot() +
+        aes(x = plate_col, y = plate_row |> fct_rev(), fill = total_FI |> log10()) +
+        geom_tile(col = "white") +
+        geom_text(aes(label = type), size = 2.5) +
+        coord_fixed() +
+        scale_fill_gradient2(
+          low = "red", midpoint = 3.5, high = "steelblue", 
+          limits = c(total_FI_range[1] |> log10() |> floor(), total_FI_range[2] |> log10() |> ceiling()),
+          ) +
+        xlab("") + ylab("") +
+        ggtitle(x)
+    )
+    cat('\n\n')
+  }
+)
+```
+:::
+
+There are a few "failed" wells per plate, but nothing dramatic or that would indicate that a whole plate failed.
+
+We'll investigate these "failed" samples later (see "Filtering" section).
+
+
+# Data transformations I
+
+## Unadjusted concentrations
+
+
+In this section, we compute the "unadjusted concentrations" by dividing the observed concentrations provided by the Luminex software by the dilution factor the Luminex software used. 
+
+First, we need to convert the `raw_obs_conc` values so that they are numerical (extrapolated concentrations are preceded by a `*`, and out-of-range values are denoted by `OOR >` or `OOR <`). 
+We also create a `value_type` character assays to indicate whether the value is an extrapolated, OOR, or observed concentration. 
+
+```{r}
+
+raw <- format_obs_conc(raw)
+
+```
+
+`OOR >` values are imputed to 0, and `OOR <` values to $\infty$.
+
+The `unadj_conc` values are computed as `raw_obs_conc_num/dilution_luminex`
+
+```{r}
+
+raw <- 
+  raw |> 
+  mutate(
+    unadj_conc = raw_obs_conc_num/dilution_luminex,
+  )
+
+```
+
+
+
+
+# Standards and standard curves
+
+## Standards
+
+```{r}
+#| fig-width: 18
+#| fig-height: 10
+
+raw |> plot_standard_curves() 
+
+```
+This plot indicates that a few standards "failed":
+
+- one S4 on plate 1 from batch 1; 
+- one S3 on plate 6 from batch 1; 
+- one S1 on plate 4 from batch 1.
+
+```{r}
+#| fig-width: 8
+#| fig-height: 8
+
+raw |> filter(.feature %in% "Hu MIP-1b (18)") |> 
+  plot_standard_curves() + 
+  facet_wrap(. ~ plate_name + .feature) + 
+  guides(col = "none") +
+  ggtitle("Standards for Hu MIP-1b (18) as example")
+
+```
+
+
+
+```{r}
+#| fig-height: 10
+#| fig-width: 15
+
+blanks <- 
+  raw |> 
+  as_tibble() |> 
+  filter(sample_type == "Blank") |> 
+  group_by(.feature) |> 
+  mutate(median_FI = median(FI)) |> 
+  ungroup() |> 
+  arrange(median_FI) |> 
+  mutate(.feature = .feature |> fct_inorder()) 
+
+raw |> 
+  as_tibble() |> 
+  filter(sample_type == "Standard") |> 
+  mutate(
+    sample_id = sample_id |> factor(levels = str_c("S", 1:10)),
+    .feature = .feature |> factor(levels = blanks$.feature |> levels())
+    ) |>
+  ggplot() +
+  aes(x = .feature, y = FI, col = plate_nb |> factor()) +
+  geom_hline(yintercept = 1, linetype = 1) +
+  geom_point(data = blanks |> select(.feature, plate_nb, FI), alpha = 0.5, size = 0.5, col = "black") +
+  geom_point(alpha = 0.5, size = 0.9) +
+  facet_grid(sample_id ~ plate_name, scales = "free_y") +
+  guides(col = "none") +
+  scale_y_log10("Fluorescence intensity") +
+  scale_x_discrete("Analytes, ordered by median FI in blank samples", breaks = NULL) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
+  labs(caption = "Colored dots correspond to wells with standards, black dots correspond to wells with 'blank' samples.")
+
+rm(blanks)
+
+```
+::: callout-note
+The figure above shows that the fluorescence intensity of S9 and S10 are overlapping with the fluorescence intensity of the blanks wells. This is why we did not include S9 and S10 in batch 2 to save space on the plates.
+:::
+
+
+
+## Standard and sample concentrations
+
+Below, we check the relationship between Fluorescence intensity (FI with background removed), and calculated concentration (in log2 scale) for the samples against the standard curves (for which we show the expected concentrations). 
+
+```{r}
+#| eval: false
+#| fig-width: 10
+#| fig-height: 30
+
+raw |> 
+  as_tibble() |> 
+  filter(sample_type == "Standard") |> 
+  ggplot() +
+  aes(
+    x = exp_conc |> log2(),
+    y = FI_wo_background |> asinh(),
+    col = value_type, shape = value_type
+      ) +
+  geom_point() +
+  facet_grid(.feature ~ plate_name) +
+  scale_color_manual(breaks = value_types_levels(), values = value_types_colors()) +
+  scale_shape_manual(breaks = value_types_levels(), values = value_types_shapes()) +
+  theme(strip.text.y = element_text(angle = 0)) 
+
+
+```
+### Standards per analyte
+
+::: panel-tabset
+```{r}
+#| results: asis
+#| fig-width: 12
+#| fig-height: 7
+
+
+purrr::walk(
+  raw@NAMES,
+  \(x) {
+    cat('### ', x, '\n\n')
+    g <- 
+      raw |> 
+      as_tibble() |> 
+      filter(sample_type == "Standard", .feature == x) |> 
+      ggplot() +
+      aes(
+        x = exp_conc |> log2(),
+        y = FI_wo_background |> asinh(),
+        col = value_type, shape = value_type
+      ) +
+      geom_point() +
+      facet_wrap(. ~ plate_name, nrow = 4) +
+      scale_color_manual(breaks = value_types_levels(), values = value_types_colors()) +
+      scale_shape_manual(breaks = value_types_levels(), values = value_types_shapes()) +
+      theme(strip.text.y = element_text(angle = 0)) +
+      ggtitle(x) 
+    g |> print()
+    
+    cat('\n\n')
+  }
+)
+
+```
+:::
+
+### Standards per plate
+
+::: panel-tabset
+```{r}
+#| results: asis
+#| fig-width: 12
+#| fig-height: 7
+
+
+purrr::walk(
+  raw$plate_name |> unique(),
+  \(x) {
+    cat('### ', x, '\n\n')
+    g <- 
+      raw |> 
+      as_tibble() |> 
+      filter(sample_type == "Standard", plate_name == x) |> 
+      ggplot() +
+      aes(
+        x = exp_conc |> log2(),
+        y = FI_wo_background |> asinh(),
+        col = value_type, shape = value_type
+      ) +
+      geom_point() +
+      facet_wrap(. ~ .feature) +
+      scale_color_manual(breaks = value_types_levels(), values = value_types_colors()) +
+      scale_shape_manual(breaks = value_types_levels(), values = value_types_shapes()) +
+      theme(strip.text.y = element_text(angle = 0)) +
+      ggtitle(x) 
+    g |> print()
+    
+    cat('\n\n')
+  }
+)
+
+```
+:::
+
+
+### Samples on standard curves
+
+
+::: panel-tabset
+```{r}
+#| results: asis
+#| fig-width: 12
+#| fig-height: 7
+
+
+purrr::walk(
+  raw@NAMES,
+  \(x) {
+    cat('### ', x, '\n\n')
+    g <- 
+      plot_samples_on_standard_curves(se = raw, feature = x)
+    g |> print()
+    
+    cat('\n\n')
+  }
+)
+
+```
+:::
+
+
+
+::: panel-tabset
+```{r}
+#| results: asis
+#| fig-width: 8
+#| fig-height: 8
+
+
+purrr::walk(
+  raw@NAMES,
+  \(x) {
+    cat('### ', x, '\n\n')
+    
+    tmp <- 
+      raw |> 
+      as_tibble() |> 
+      filter(.feature == x, sample_type == "Sample", value_type == "Observed concentration") 
+    
+    biol_ctrl <- 
+      raw |> 
+      as_tibble() |> 
+      filter(.feature == x, sample_id == "BIOL CTRL", value_type == "Observed concentration") 
+    
+    g_FI_con <- 
+      tmp |>
+      ggplot() +
+      aes(
+        x = unadj_conc |> log2(), 
+        y = FI_wo_background |> asinh(),
+        col = plate_name
+      ) +
+      geom_point(size = 0.25, alpha = 0.75) +
+      geom_point(data = biol_ctrl, col = "black", size = 1) +
+      guides(col = "none")
+    
+    g_FI <- 
+      tmp |> 
+      ggplot() +
+      aes(y = FI_wo_background |> asinh(), x = plate_name, col = plate_name, fill = plate_name) +
+      geom_boxplot(alpha = 0.5, outlier.size = 0.5) +
+      geom_point(data = biol_ctrl, col = "black", size = 1) +
+      theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
+      guides(col = "none", fill = "none") +
+      xlab("Plate")
+    
+    g_unadj_conc <- 
+      tmp |> 
+      ggplot() +
+      aes(x = unadj_conc |> log2(), y = plate_name |> factor() |> fct_rev(), col = plate_name, fill = plate_name) +
+      geom_boxplot(alpha = 0.5, outlier.size = 0.5) +
+      geom_point(data = biol_ctrl, col = "black", size = 1) +
+      guides(col = "none", fill = "none") +
+      ylab("Plate") +
+      scale_y_discrete(position = "right")
+    
+    g <- 
+      plot_spacer() + g_unadj_conc +
+      g_FI + g_FI_con +
+      plot_layout(ncol = 2, guides = "collect", heights = c(0.4, 1), widths = c(0.5, 1)) +
+      plot_annotation(title = x)
+    
+    g |> print()
+    
+    cat('\n\n')
+  }
+)
+
+```
+:::
+
+
+
+
+::: callout-important
+It looks like for a few analytes and plates (see list below), the calibration curves were not fitted properly. It might improve data quality to systematically identify poor calibration curve fits and re-fit them. 
+:::
+
+- Eotaxin plate B1 1 and 7, 
+- GM-CSF plate B1 2 et B2 9, 
+- IL-7 plate B1 1, 
+- IL-5 plate B1 2, 
+- IL-1b plate B1 1, 
+- MCP-3 plate B1 7, 
+- MIP-1b plate B1 2, 
+- VEGF plate B1 7.
+
+
+Besides these, there is no clear plate effect on concentrations.
+
+
+# Filtering {#sec-filtering}
+
+## Fraction of within range analytes and samples
+
+```{r}
+#| fig-width: 14
+#| fig-height: 8
+
+raw |> 
+  filter(sample_type == "Sample") |>
+  as_tibble() |> 
+  mutate(value_type = value_type |> factor(levels = value_types_levels())) |> 
+  ggplot() +
+  aes(y = .feature, fill = value_type) +
+  geom_bar() +
+  facet_grid(. ~ plate_name) +
+  scale_fill_manual(
+    "", 
+    breaks = value_types_levels(),
+    values = value_types_colors()
+    ) +
+  ylab("") +
+  xlab("Number of samples per plate")
+
+```
+
+Most analytes are within quantifiable range, but we will probably need to exclude IL-13, and potentially IL-7 and IL-1ra, as they have many samples outside the limit of quantification.
+
+
+```{r}
+#| fig-width: 14
+#| fig-height: 7
+
+raw |> 
+  as_tibble() |> 
+  filter(sample_type == "Sample")  |> 
+  arrange(plate_row, plate_col) |> 
+  mutate(well = str_c(plate_row, plate_col) |> fct_inorder()) |>
+  ggplot() +
+  aes(y = well |> fct_rev(), fill = value_type) +
+  geom_bar() +
+  facet_grid(. ~ plate_name, scales = "free_y") +
+  xlab("Number of analytes") +
+  ylab("Plate well") +
+  scale_fill_manual("", breaks = value_types_levels(), values = value_types_colors()) 
+
+```
+
+Most samples (wells) have quantifiable concentrations, but we notice a few samples that may have "failed" (*i.e.,* that have a substantial number of analytes below the limit of quantification or not quantified at all).
+
+
+```{r}
+#| fig-height: 10
+#| fig-width: 10
+
+samples <- 
+  raw |> 
+  as_tibble() |> 
+  group_by(plate_name, plate_nb, plate_row, plate_col, .sample, sample_id, sample_type, dilution_luminex, dilution_new) |> 
+  summarize(n_OOR = sum(value_type != "Observed concentration"), .groups = "drop") |> 
+  arrange(plate_col, plate_row) |> 
+  mutate(well = str_c(plate_col, plate_row) |> fct_inorder()) 
+
+samples |> 
+  ggplot() +
+  aes(x = well, y = n_OOR, fill = sample_type) +
+  geom_col() +
+  facet_wrap(plate_name ~ .,  ncol = 2) +
+  ylab("Number of analytes out of range") + 
+  scale_fill_discrete("Sample type") +
+  theme(
+    axis.text.x = element_text(angle = 90, size = 7, vjust = 0.5, hjust = 1)
+  )
+
+```
+
+```{r}
+
+# raw$n_OOR <- samples[match(colnames(raw), samples$.sample), "n_OOR"]
+
+```
+
+
+
+## Analytes to exclude
+
+We first flag as "to exclude" any analyte that has more than 20% of their clinical sample values out of range (OOR).
+
+```{r}
+
+analytes_to_exclude <- 
+  raw |> 
+  as_tibble() |> 
+  filter(sample_type == "Sample") |>
+  group_by(.feature) |> 
+  summarize(
+    n_OOR = sum(value_type != "Observed concentration"),
+    n_samples = n()
+  ) |>
+  mutate(
+    frac_OOR = n_OOR/n_samples,
+    exclude = frac_OOR > 0.2
+  ) |>
+  arrange(desc(frac_OOR)) |> 
+  mutate(.feature = .feature |> fct_inorder() |> fct_rev())
+
+```
+
+
+```{r}
+#| fig-height: 7
+
+analytes_to_exclude |> 
+  ggplot() +
+  aes(y = .feature, x = frac_OOR, fill = exclude) +
+  geom_col() +
+  ylab("") +
+  scale_fill_manual(
+    "", 
+    breaks = c(TRUE, FALSE),
+    values = c("red", "steelblue1"),
+    labels = c("Excluded analyte", "Included analyte")
+  ) +
+  scale_x_continuous("Percentage of out-of-range values", labels = scales::percent_format(accuracy = 1)) 
+
+```
+
+```{r}
+
+# analytes_to_exclude <- analytes_to_exclude |> filter(exclude) |> pull(.feature) |> as.character() |> sort()
+
+# raw <- 
+#   raw |> 
+#   mutate(analyte_to_exclude = (.feature %in% analytes_to_exclude))
+
+tmp <- 
+  raw |> 
+  as_tibble() |> 
+  left_join(
+    analytes_to_exclude |> select(.feature, frac_OOR, exclude),
+    by = join_by(.feature)
+  )
+
+raw <- 
+  raw |> 
+  mutate(
+    prop_OOR_per_analyte = tmp$frac_OOR, 
+    analyte_to_exclude = tmp$exclude
+    )
+
+rm(analytes_to_exclude, tmp)
+
+```
+
+
+## Failed samples
+
+As displayed above, there are a few samples that had many analytes that were out of range (mostly having many analytes below the LLOQ). 
+
+We suspect that these samples are technical "fails" (rather than actual biological signal) because, among technical replicates, it is not infrequent to observe that one of the replicates has low signal, while the other replicates have a high signal. 
+
+```{r}
+
+failed_samples <- 
+  raw |> 
+  as_tibble() |> 
+  filter(!analyte_to_exclude, sample_type == "Sample") |> 
+  group_by(.sample, sample_id, participant, visit_code, visit, plate_name) |> 
+  summarize(
+    n_OOR = sum(value_type != "Observed concentration"), 
+    n_analytes = n(), 
+    f_OOR = n_OOR/n_analytes, 
+    .groups = "drop"
+    ) |> 
+  group_by(sample_id) |> mutate(min_n_OOR = min(n_OOR), n = n()) |> ungroup() |> 
+  group_by(participant) |> mutate(min_n_OOR_participant = min(min_n_OOR), mean_n_OOR_participant = mean(n_OOR)) |> ungroup() |>
+  arrange(-min_n_OOR, sample_id, -n_OOR) 
+
+```
+
+```{r}
+#| fig-width: 12
+#| fig-height: 3
+
+
+failed_samples |> 
+  filter(n >= 2) |> 
+  arrange(min_n_OOR, sample_id, -n_OOR) |> 
+  mutate(sample_id = sample_id |> fct_inorder()) |> 
+  ggplot() +
+  aes(x = sample_id, y = n_OOR, col = plate_name) + 
+  geom_hline(yintercept = c(0, failed_samples$n_analytes |> max()), col = "gray") +
+  geom_point(alpha = 0.5) +
+  theme(axis.text.x = element_blank())
+
+```
+
+Another likely justification for these extreme OOR values to be technical fail and not low biological signal is that most participants have at most of their samples for which the number of out-of-range analytes is low:
+
+```{r}
+#| fig-width: 12
+#| fig-height: 2.5
+
+failed_samples |> 
+  arrange(mean_n_OOR_participant) |> 
+  mutate(participant = participant |> fct_inorder()) |> 
+  arrange(-n_OOR) |> 
+  ggplot() +
+  aes(y = visit |> factor() |> fct_rev(), x = participant, col = n_OOR, size = n_OOR) +
+  geom_point() +
+  scale_color_gradient("Number of\nout of range", low = "steelblue1", high = "red") +
+  theme(axis.text.x = element_blank()) +
+  ylab("Visit") +
+  guides(size = "none")
+
+
+
+failed_samples |> 
+  arrange(mean_n_OOR_participant) |> 
+  mutate(participant = participant |> fct_inorder()) |> 
+  arrange(-n_OOR) |> 
+  ggplot() +
+  aes(y = visit |> factor() |> fct_rev(), x = participant, col = (n_OOR > 21), size = n_OOR) +
+  geom_point() +
+  theme(axis.text.x = element_blank()) +
+  ylab("Visit") +
+  guides(size = "none")
+
+```
+
+We still see some "participant-effect" (maybe due to the properties of their mucus), but there a no "failed" samples for which we do not have a replicate.
+
+:::callout-note
+We flag samples with less than 100 total bead count and more than 50% OOR analytes as "failed".
+:::
+
+```{r}
+
+tmp <- 
+  raw |> 
+  colData() |> 
+  as.data.frame() |> 
+  rownames_to_column(".sample") |>
+  as_tibble() |> 
+  select(.sample) |> 
+  left_join(
+    raw |> 
+      as_tibble() |> 
+      filter(!analyte_to_exclude) |> 
+      group_by(.sample, sample_type) |> 
+      summarize(
+        total_bead_count = ifelse(all(is.na(bead_count)), Inf, sum(bead_count, na.rm = TRUE)),
+        n_OOR = sum(value_type != "Observed concentration"), n = n(), 
+        .groups = "drop"
+        ) |> 
+      mutate(
+        failed_sample = 
+          case_when(
+            (sample_type == "Sample") & ((n_OOR/n > 0.5) | (total_bead_count < 100))  ~ TRUE,
+            TRUE ~ FALSE
+          )
+      )
+  )
+
+raw$failed_sample <- tmp$failed_sample
+raw$n_OOR <- tmp$n_OOR
+raw$total_bead_count <- tmp$total_bead_count
+rm(tmp, failed_samples)
+
+```
+
+> TODO: check if any of the failed sample did not have a replicate
+
+
+# Data transformation II
+
+
+## Imputation of out-of-range values
+
+Samples that are considered as out-of-range (per the Luminex software output) have been imputed to $0$ and $\infty$ at the previous step. 
+It might make more sense for downstream analyses to impute the unadjusted concentrations to
+
+- [below LLOQ] 1/2 the smallest (extrapolated) sample or standard unadjusted concentration for that analyte and plate; and 
+- [above ULOQ] 110% the largest (extrapolated) sample or standard unadjusted concentration for that analyte and plate.
+
+
+```{r}
+
+raw <- impute_OOR(raw)
+
+```
+
+
+## Observed concentrations using the new dilution factor
+
+```{r}
+
+raw <- 
+  raw |> 
+  mutate(
+    obs_conc = unadj_conc * dilution_new,
+    obs_conc_imp = unadj_conc_imp * dilution_new,
+  )
+
+```
+
+
+Were any samples "too diluted"?
+
+```{r}
+#| fig-width: 8
+#| fig-height: 4
+
+raw |> 
+  colData() |> 
+  as.data.frame() |> 
+  as_tibble() |> 
+  filter(sample_type == "Sample") |> 
+  ggplot() +
+  aes(x = n_OOR, y = dilution_new) +
+  geom_point(alpha = 0.5) +
+  scale_y_log10()
+
+```
+
+
+There is no systematic trend.
+
+
+
+## Concentrations used for downstream analyses
+
+For now, we will assume that `obs_conc_imp` is our best estimate of the true concentrations. We will thus use this assay for downstream analyses and copy that assay to an `conc` assay, which is the assay on which all downstream analyses will be performed.
+
+```{r}
+
+raw <- 
+  raw |> 
+  mutate(
+    conc = obs_conc_imp
+  )
+
+```
+
+
+
+
+### Overview of concentrations by analyte
+
+```{r}
+#| fig-width: 10
+#| fig-height: 5
+
+plot_conc_by_analyte(raw, color_by = "value_type")
+
+```
+
+The reason why some "below LLOQ" values are above "observed concentration" values is because the concentrations computed from the standard curves were multiplied by the dilution factor. One should be careful when deciding to include values that were imputed for downstream analyses.
+
+```{r}
+#| fig-width: 10
+#| fig-height: 5
+
+plot_conc_by_analyte(raw, color_by = "sample_type")
+
+```
+
+```{r}
+#| fig-width: 10
+#| fig-height: 5
+
+plot_conc_by_analyte(raw, color_by = "plate_name")
+
+```
+
+# Data transformations III (variance stabilization)
+
+
+We next explore which transformation (no transformation, log, asinh, or square root) of the data is most suitable to stabilize the variance of the data.
+
+```{r}
+#| fig-width: 10
+#| fig-height: 8
+
+check_transformation(raw, transf = "none") +
+check_transformation(raw, transf = "asinh") +
+check_transformation(raw, transf = "log") +
+check_transformation(raw, transf = "sqrt")
+
+```
+
+As expected, the `log` transformation appears to be the most suitable for stabilizing the variance of the data.
+
+```{r}
+
+assay(raw, "conc_log2") <- raw |> assay("conc") |> log2()
+
+```
+
+
+
+# QC Exploratory analyses
+
+## Standards and controls
+
+Comparison of standards and controls concentrations across plates (x-axis) and analytes (facets).
+
+```{r}
+#| fig-height: 12
+#| fig-width: 14
+
+raw |> 
+  as_tibble() |> 
+  filter(sample_type %in% c("Standard", "Positive control", "Manuf. control")) |> 
+  mutate(
+    sample_type = 
+      case_when(
+        sample_type == "Positive control" ~ sample_id,
+        TRUE ~ sample_type
+      )
+  ) |> 
+  ggplot() +
+  aes(x = plate_name, y = conc_log2, col = sample_type) +
+  geom_point(size = 1, alpha = 0.5) +
+  facet_wrap(.feature ~ ., nrow = 4) +
+  theme(
+    legend.position = "top",
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
+    ) +
+  xlab("Plate nb") +
+  ylab("log2(concentration)")
+
+```
+
+Comparison of biological controls (colored dots) across plates (x-axis) and analytes (facets) (constrasted with the distribution of samples in light gray):
+
+```{r}
+#| fig-height: 6
+#| fig-width: 14
+
+raw |> 
+  filter((sample_id == "BIOL CTRL") | (sample_type == "Sample")) |> 
+  mutate(plate_ctrl = ifelse(sample_id == "BIOL CTRL", plate_nb, NA) |> factor()) |>
+  ggplot() +
+  aes(x = plate_nb |> factor(), y = conc_log2, col = plate_ctrl, alpha = is.na(plate_ctrl), shape = (value_type == "Observed concentration")) +
+  geom_point(size = 1) +
+  facet_wrap(. ~ .feature |> str_remove("Hu ") |> str_remove("\\([0-9]*\\)"), nrow = 3) + # , scales = "free"
+  scale_x_discrete(breaks = NULL) +
+  scale_alpha_manual(values = c(1, 0.1)) +
+  xlab("Plate nb") +
+  ylab("log2(concentration)") + 
+  scale_color_discrete("Plate nb") # + theme(strip.text.x = element_text(angle = 90, hjust = 0)) 
+
+
+```
+Biological controls are a bit too low (probably because they were from CVL, not from softcups).
+
+
+## PCA
+
+
+```{r}
+
+complete_samples <- 
+  raw |> 
+  as_tibble() |> 
+  group_by(.sample) |>
+  summarize(ok = !any(is.na(conc_log2))) |>
+  mutate(i = row_number()) |>
+  filter(ok)
+
+complete <- raw[, complete_samples$.sample]
+
+```
+
+
+```{r}
+
+pca_res <- 
+  prcomp(complete |> assay("conc_log2") |> t(), center = TRUE, scale = TRUE)
+
+```
+
+```{r}
+#| fig-height: 3
+#| fig-width: 9
+
+factoextra::fviz_eig(pca_res, ncp = 48)
+
+```
+
+As often with Luminex data, the first component explains most of the variance.
+
+Excluding the 1st component, we can then see that the variance decreases rapidly. 
+
+```{r}
+#| fig-height: 3
+#| fig-width: 9
+
+factoextra::fviz_eig(pca_res, ncp = 48) +
+  geom_hline(yintercept = 100*1/48, linetype = 2) +
+  ylim(c(0, 20))
+
+```
+```{r}
+#| fig-height: 6
+#| fig-width: 18
+
+factoextra::fviz_pca_var(pca_res) + ggtitle("PC1-2") +
+factoextra::fviz_pca_var(pca_res, axes = 2:3) + ggtitle("PC2-3") +
+  factoextra::fviz_pca_var(pca_res, axes = 3:4) + ggtitle("PC3-4") 
+
+```
+
+```{r}
+#| fig-height: 6
+#| fig-width: 18
+
+factoextra::fviz_pca_var(pca_res, select.var = list(contrib = 10)) + ggtitle("PC1-2; Top 10 contributing variables") +
+factoextra::fviz_pca_var(pca_res, axes = 2:3, select.var = list(contrib = 10)) + ggtitle("PC2-3; Top 10 contributing variables") +
+  factoextra::fviz_pca_var(pca_res, axes = 3:4, select.var = list(contrib = 10)) + ggtitle("PC3-4; Top 10 contributing variables") 
+
+```
+
+```{r}
+#| fig-height: 6
+#| fig-width: 18
+
+analytes_of_interest <- c("Hu IL-1a (63)", "Hu IL-1b (39)", "Hu IP-10 (48)",  "Hu MIG (14)", "Hu MIP-1a (55)", "Hu MIP-1b (18)")
+
+factoextra::fviz_pca_var(pca_res, select.var = list(name = analytes_of_interest)) + ggtitle("PC1-2; selected cytokines") +
+factoextra::fviz_pca_var(pca_res, axes = 2:3, select.var = list(name = analytes_of_interest)) + ggtitle("PC2-3; selected cytokines") +
+  factoextra::fviz_pca_var(pca_res, axes = 3:4, select.var = list(name = analytes_of_interest)) + ggtitle("PC3-4; selected cytokines") 
+
+```
+
+
+```{r}
+
+plot_pca_scores <- function(pca_res, raw, axes = 1:2, col_by = "sample_type"){
+  scores <- 
+    colData(raw) |> 
+    as.data.frame() |> 
+    rownames_to_column(".sample") |> 
+    as_tibble() |> 
+    left_join(
+      as_tibble(pca_res$x) |> 
+        mutate(.sample = rownames(pca_res$x)),
+      by = join_by(.sample)
+    )
+  
+  var <- factoextra::get_eig(pca_res)
+  
+  xvar <- str_c("PC", axes[1])
+  yvar <- str_c("PC", axes[2])
+  ggplot(scores) +
+    aes(x = .data[[xvar]], y = .data[[yvar]], col = .data[[col_by]]) +
+    geom_vline(xintercept = 0, col = "gray") +
+    geom_hline(yintercept = 0, col = "gray") +
+    geom_point(alpha = 0.8) +
+    labs(
+      x = str_c(xvar, " (", var$variance.percent[axes[1]] |> round(1), "%)"), 
+      y = str_c(yvar, " (", var$variance.percent[axes[2]] |> round(1), "%)")
+      ) +
+    coord_fixed()
+}
+
+```
+
+
+Below, we display the scores coloring wells by various attributes
+
+### Sample type
+
+```{r}
+#| fig-height: 6
+#| fig-width: 10
+
+g_12 <- plot_pca_scores(pca_res, complete, axes = 1:2, col_by = "sample_type") 
+
+g_23 <- plot_pca_scores(pca_res, complete, axes = 2:3, col_by = "sample_type") 
+
+g_45 <- plot_pca_scores(pca_res, complete, axes = 4:5, col_by = "sample_type")
+
+g_12 / (g_23 | g_45) +
+  plot_layout(guides = "collect", heights = c(1, 1.5))
+
+
+```
+### Controls and standards
+
+
+```{r}
+#| fig-height: 6
+#| fig-width: 10
+
+complete <- 
+  complete |> 
+  mutate(control_id = ifelse(sample_type == "Sample", NA, sample_id))
+
+g_12 <- plot_pca_scores(pca_res, complete, axes = 1:2, col_by = "control_id") 
+
+g_23 <- plot_pca_scores(pca_res, complete, axes = 2:3, col_by = "control_id") 
+
+g_45 <- plot_pca_scores(pca_res, complete, axes = 4:5, col_by = "control_id")
+
+g_12 / (g_23 | g_45) +
+  plot_layout(guides = "collect", heights = c(1, 1.5))
+
+```
+:::callout-note
+One of the "Softcup blank" is located with samples that had low concentrations, but the other one looks like a normal sample.
+:::
+
+
+### Biological controls across plates
+
+
+```{r}
+#| fig-height: 9
+#| fig-width: 15
+
+complete <- 
+  complete |> 
+  mutate(plate_biol_ctrl = ifelse(sample_id == "BIOL CTRL", plate_name, NA))
+
+g_12 <- 
+  plot_pca_scores(pca_res, complete, axes = 1:2, col_by = "plate_biol_ctrl") +
+  scale_color_discrete(na.value = "gray90")
+
+g_23 <- 
+  plot_pca_scores(pca_res, complete, axes = 2:3, col_by = "plate_biol_ctrl") +
+  scale_color_discrete(na.value = "gray90")
+
+
+g_45 <- 
+  plot_pca_scores(pca_res, complete, axes = 4:5, col_by = "plate_biol_ctrl") +
+  scale_color_discrete(na.value = "gray90")
+
+g_12 / (g_23 | g_45) +
+  plot_layout(guides = "collect", heights = c(1, 1.5))
+
+```
+
+
+```{r}
+#| fig-height: 9
+#| fig-width: 15
+
+
+g_12 <- 
+  plot_pca_scores(pca_res, complete |> filter(!is.na(plate_biol_ctrl)), axes = 1:2, col_by = "plate_biol_ctrl") +
+  geom_path(aes(group = plate_biol_ctrl), alpha = 0.5) +
+  scale_color_discrete(na.value = "gray90")
+
+g_23 <- 
+  plot_pca_scores(pca_res, complete |> filter(!is.na(plate_biol_ctrl)), axes = 2:3, col_by = "plate_biol_ctrl") +
+  geom_path(aes(group = plate_biol_ctrl), alpha = 0.5) +
+  scale_color_discrete(na.value = "gray90")
+
+
+g_45 <- 
+  plot_pca_scores(pca_res, complete |> filter(!is.na(plate_biol_ctrl)), axes = 4:5, col_by = "plate_biol_ctrl") +
+  geom_path(aes(group = plate_biol_ctrl), alpha = 0.5) +
+  scale_color_discrete(na.value = "gray90")
+
+g_12 / (g_23 | g_45) +
+  plot_layout(guides = "collect", heights = c(1, 1.5))
+
+```
+
+### Number of out-of-range analytes per well
+
+```{r}
+#| fig-height: 6
+#| fig-width: 10
+
+g_12 <- plot_pca_scores(pca_res, complete, axes = 1:2, col_by = "n_OOR") +
+  scale_color_gradient("Number of out-of-range values", low = "gray90", high = "red")
+
+g_23 <- plot_pca_scores(pca_res, complete, axes = 2:3, col_by = "n_OOR") +
+  scale_color_gradient("Number of out-of-range values", low = "gray90", high = "red")
+
+g_45 <- plot_pca_scores(pca_res, complete, axes = 4:5, col_by = "n_OOR") +
+  scale_color_gradient("Number of out-of-range values", low = "gray90", high = "red")
+
+g_12 / (g_23 | g_45) +
+  plot_layout(guides = "collect", heights = c(1, 1.5))
+
+
+```
+
+### Plate
+
+
+
+```{r}
+#| fig-height: 7
+#| fig-width: 12
+
+g_12 <- plot_pca_scores(pca_res, complete, axes = 1:2, col_by = "plate_name") 
+
+g_23 <- plot_pca_scores(pca_res, complete, axes = 2:3, col_by = "plate_name") 
+
+g_45 <- plot_pca_scores(pca_res, complete, axes = 4:5, col_by = "plate_name") 
+  
+
+g_12 / (g_23 | g_45) +
+  plot_layout(guides = "collect", heights = c(1, 1.5))
+
+```
+
+
+Plate effects when only considering samples (no controls or standards) excluding failed samples
+
+
+```{r}
+#| fig-height: 7
+#| fig-width: 12
+
+g_12 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", !failed_sample), axes = 1:2, col_by = "plate_name") +
+  stat_ellipse()
+
+g_23 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", !failed_sample), axes = 2:3, col_by = "plate_name") +
+  stat_ellipse()
+
+g_45 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", !failed_sample), axes = 4:5, col_by = "plate_name") +
+  stat_ellipse()
+  
+
+g_12 / (g_23 | g_45) +
+  plot_layout(guides = "collect", heights = c(1, 1.5))
+
+```
+
+### Sites
+
+```{r}
+#| fig-height: 6
+#| fig-width: 10
+
+g_12 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample"), axes = 1:2, col_by = "location") +
+  stat_ellipse()
+
+g_23 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample"), axes = 2:3, col_by = "location") +
+  stat_ellipse() 
+
+g_45 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample"), axes = 4:5, col_by = "location") +
+  stat_ellipse()
+  
+
+g_12 / (g_23 | g_45) +
+  plot_layout(guides = "collect", heights = c(1, 1.5))
+
+```
+
+### Visits
+
+```{r}
+
+
+complete <- complete |> mutate(visit_V = str_c("V", visit))
+
+visit_colors <- 
+  c(
+    "V1" = "red", "V2" = "green3", 
+    "V3" = "steelblue1", "V4" = "steelblue2", "V5" = "steelblue3", "V6" = "steelblue4",
+    "V7" = "black", "V8" = "purple3", "V9" = "purple1"
+  )
+
+```
+
+```{r}
+#| fig-height: 6
+#| fig-width: 10
+
+g_12 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample"), axes = 1:2, col_by = "visit_V") +
+  stat_ellipse() +
+  scale_color_manual(values = visit_colors) 
+
+g_23 <- 
+ plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample"), axes = 2:3, col_by = "visit_V") +
+  stat_ellipse() +
+  scale_color_manual(values = visit_colors) 
+
+g_45 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample"), axes = 4:5, col_by = "visit_V") +
+  stat_ellipse() +
+  scale_color_manual(values = visit_colors) 
+  
+
+g_12 / (g_23 | g_45) +
+  plot_layout(guides = "collect", heights = c(1, 1.5))
+
+```
+
+
+### Dilution factor
+
+```{r}
+#| fig-height: 6
+#| fig-width: 10
+
+g_12 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample"), axes = 1:2, col_by = "dilution_new") +
+  scale_color_gradient(low = "gray80", high = "dodgerblue") 
+
+g_23 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample"), axes = 2:3, col_by = "dilution_new")  +
+  scale_color_gradient(low = "gray80", high = "dodgerblue") 
+
+g_45 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample"), axes = 4:5, col_by = "dilution_new")  +
+  scale_color_gradient(low = "gray80", high = "dodgerblue") 
+  
+
+g_12 / (g_23 | g_45) +
+  plot_layout(guides = "collect", heights = c(1, 1.5))
+
+```
+
+
+
+
+```{r}
+
+scores_long <- 
+    colData(raw) |> 
+    as.data.frame() |> 
+    rownames_to_column(".sample") |> 
+    as_tibble() |> 
+    inner_join(
+      as_tibble(pca_res$x) |> 
+        mutate(.sample = rownames(pca_res$x)) |> 
+        pivot_longer(cols = -.sample, names_to = "PC", values_to = "value", names_prefix = "PC") |> 
+        mutate(PC = PC |> as.integer()),
+      by = join_by(.sample)
+    )
+  
+
+```
+
+
+```{r}
+#| fig-width: 7
+#| fig-height: 5
+
+scores_long |> 
+  filter(sample_type == "Sample", PC <= 6) |>
+  ggplot(aes(x = dilution_new, y = value, col = n_OOR)) +
+  geom_point(alpha = 0.5, size = 0.5) +
+  geom_smooth(method = "lm", formula = "y ~ x") +
+  facet_wrap(PC ~ ., scales = "free", labeller = label_both) +
+  ylab("PC score") +
+  xlab("Dilution factor from manifest") +
+  scale_x_log10()
+
+
+
+scores_long |> 
+  filter(sample_type == "Sample", PC <= 6) |>
+  ggplot(aes(x = dilution_new, y = value, col = location)) +
+  geom_point(alpha = 0.5, size = 0.5) +
+  geom_smooth(method = "lm", formula = "y ~ x") +
+  facet_wrap(PC ~ ., scales = "free", labeller = label_both) +
+  ylab("PC score") +
+  xlab("Dilution factor from manifest")  +
+  scale_x_log10()
+
+
+```
+
+
+::: callout-caution
+It looks like the correction for the dilution might be little too aggressive (samples with high dilution factors have higher concentrations on average).
+:::
+
+
+### Replicates
+
+
+```{r}
+#| fig-height: 10
+#| fig-width: 15
+
+g_12 <- 
+ plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", n_OOR < 5), axes = 1:2, col_by = "sample_id") +
+  geom_path(aes(group = sample_id)) +
+  guides(col = "none")
+
+g_23 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample",  n_OOR < 5), axes = 2:3, col_by = "sample_id") +
+  geom_path(aes(group = sample_id)) +
+  guides(col = "none")
+
+g_45 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", n_OOR < 5), axes = 4:5, col_by = "sample_id") +
+  geom_path(aes(group = sample_id)) +
+  guides(col = "none")
+  
+
+g_12 / (g_23 | g_45) +
+  plot_layout(guides = "collect", heights = c(1, 1.5))
+
+
+```
+
+
+```{r}
+#| fig-height: 10
+#| fig-width: 15
+
+g_12 <- 
+ plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", n_OOR < 5), axes = 1:2, col_by = "plate_name") +
+  geom_path(aes(group = sample_id)) +
+  guides(col = "none")
+
+g_23 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", n_OOR < 5), axes = 2:3, col_by = "plate_name") +
+  geom_path(aes(group = sample_id)) +
+  guides(col = "none")
+
+g_45 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", n_OOR < 5), axes = 4:5, col_by = "plate_name") +
+  geom_path(aes(group = sample_id)) +
+  guides(col = "none")
+  
+
+g_12 / (g_23 | g_45) +
+  plot_layout(guides = "collect", heights = c(1, 1.5))
+
+
+```
+
+## Comparing within-plate and across-plate variability
+
+```{r}
+
+tmp <- 
+  raw |> 
+  as_tibble() |> 
+  group_by(sample_id, .feature) |> 
+  mutate(n = n()) |> 
+  ungroup() |> 
+  filter(n > 1, !is.na(conc_log2))
+
+tmp <- 
+  left_join(
+    tmp |> 
+      select(.feature, .sample, sample_id, sample_type, plate_nb, conc_log2) |> 
+      dplyr::rename(.sample_r1 = .sample, plate_nb_r1 = plate_nb, conc_log2_r1 = conc_log2),
+    tmp |> 
+      select(.feature, .sample, sample_id, plate_nb, conc_log2) |> 
+      dplyr::rename(.sample_r2 = .sample, plate_nb_r2 = plate_nb, conc_log2_r2 = conc_log2),
+    by = join_by(.feature, sample_id),
+    relationship = "many-to-many"
+  ) |> 
+  filter(.sample_r1 != .sample_r2)
+
+```
+
+```{r}
+
+tmp <- 
+  tmp |> 
+  mutate(
+    diff = conc_log2_r1 - conc_log2_r2,
+    abs_diff = abs(diff),
+    mean = (conc_log2_r1 + conc_log2_r2)/2,
+    sd = sqrt(((conc_log2_r1 - mean)^2 + (conc_log2_r2 - mean)^2)),
+    cv = sd/mean,
+    replicate_type = ifelse(plate_nb_r1 == plate_nb_r2, "within plate", "across plate")
+  )
+
+```
+
+
+
+```{r}
+#| fig-height: 8
+#| fig-width: 12
+
+tmp |> 
+  ggplot() +
+  aes(x = diff, col = replicate_type) +
+  geom_density(bw = 0.05) +
+  facet_wrap(.feature ~ ., scales = "free") +
+  scale_x_continuous(limits = c(-2.5, 2.5))
+   
+```
+
+```{r}
+
+rm(complete, complete_samples, g_12, g_23, g_45, scores_long)
+
+```
+
+
+# Summarizing at the participant x visit level
+
+
+We now create a new `SummarizedExperiment` object with sample data at the participant x visit level (omitting standards and controls).
+
+
+Some samples have a few replicates within and across plates. The aggregation is done as follow:
+
+- wells that have "failed" are excluded. 
+
+- aggregated concentrations are computed as the **median** of the (imputed) concentrations (`obs_conc`; `obs_conc_imp`);
+
+In addition we define four additional assays:
+
+- `value_type_details` and `value_type`: the concatenation (`value_type_details`) or summary (`value_type`) of the value types of included wells for a given analyte (*e.g.*, "Observed concentration" or "Below LLOQ")
+
+- `sd_log2_obs_conc_imp`: the standard deviation of the log2 of the imputed concentrations across replicates;
+
+
+- `obs_conc_log2`: log2 of the median concentrations;
+
+- `obs_conc_imp_log2`: log2 of the median imputed concentrations;
+
+
+
+In the `SE` `colData`, we add several columns that document the aggregation:
+
+- `n_wells`: number of wells used for the aggregation;
+
+- `wells`: the concatenation of the well IDs used for the aggregation;
+
+- `excluded wells`: the concatenation of the well IDs that were excluded from the aggregation.
+
+
+We also rename the analytes to remove the prefix "Hu " and the suffix with the analyte number.
+
+
+```{r}
+
+aggregate_se <- function(se){
+  
+  # we first only keep the analytes that are not excluded
+  excluded_analytes <- se@NAMES[rowData(se)$analyte_to_exclude] # we'll add them to the metadata
+  se <- se[!rowData(se)$analyte_to_exclude, ] 
+
+  # we only keep clinical samples
+  se <- se[, se$sample_type == "Sample"]
+  
+  # we define a well identifier
+  se <- 
+    se |> 
+    mutate(well_id = str_c(plate_name, "_", plate_row, plate_col))
+  
+  # aggregation
+  aggregate_assay <- function(se, assay_name){
+    se |> 
+      as_tibble() |> 
+      arrange(sample_id, .feature) |> 
+      mutate(values = !!sym(assay_name)) |> 
+      group_by(sample_id, .feature) |> 
+      summarize(
+        values = median(values[!failed_sample], na.rm = TRUE),
+        .groups = "drop"
+      ) |> 
+      pivot_wider(names_from = sample_id, values_from = values) |> 
+      as.data.frame() |> 
+      column_to_rownames(".feature")
+  }
+  
+  obs_conc_assay <- aggregate_assay(se, assay_name = "obs_conc")
+  obs_conc_imp_assay <- aggregate_assay(se, assay_name = "obs_conc_imp")
+  
+  value_type_assay <- 
+    se |> 
+    as_tibble() |> 
+    mutate(
+      value_type = 
+        case_when(
+          failed_sample ~ "Failed sample",
+          TRUE ~ value_type
+        ) |> factor(levels = c(value_types_levels(), "Failed sample"))
+      ) |> 
+    arrange(sample_id, .feature, value_type) |> 
+    group_by(sample_id, .feature, value_type) |> 
+    summarize(value_type = str_c(value_type[1], " (n = ", n(), ")"), .groups = "drop_last") |> 
+    summarize(values = value_type |> str_c(collapse = ", "), .groups = "drop") |> 
+    pivot_wider(names_from = sample_id, values_from = values) |> 
+    as.data.frame() |> 
+    column_to_rownames(".feature")
+  
+  value_type_summary_assay <- 
+    se |> 
+    as_tibble() |> 
+    filter(!failed_sample) |> 
+    mutate(value_type = value_type |> factor(levels = value_types_levels())) |> 
+    arrange(sample_id, .feature, value_type) |> 
+    group_by(sample_id, .feature) |> 
+    summarise(
+      value_type_summary = 
+        case_when(
+          all(value_type == "Observed concentration") ~ "Observed concentration",
+          all(value_type == "Below LLOQ") ~ "Below LLOQ",
+          all(value_type == "Above ULOQ") ~ "Above ULOQ",
+          all(str_detect(value_type, "LLOQ")) ~ "Extrapolated or below LLOQ",
+          all(str_detect(value_type, "ULOQ")) ~ "Extrapolated or above ULOQ",
+          any(value_type == "Below LLOQ") ~ "Observed or below LLOQ",
+          any(value_type == "Above ULOQ") ~ "Observed or above ULOQ",
+          all(str_detect(value_type, "Extrapolated")) ~ "Extrapolated",
+          any(str_detect(value_type, "Extrapolated")) ~ "Observed or extrapolated",
+          TRUE ~ "ERROR"
+          ),
+      .groups = "drop"
+      ) 
+  
+  value_type_summary_assay <- 
+    value_type_summary_assay |> 
+    full_join(
+       se |> as_tibble() |> select(.feature, sample_id) |> distinct(),
+      by = join_by(.feature, sample_id)
+    ) |>
+    mutate(
+      value_type_summary = value_type_summary |> str_replace_na("Failed sample")
+    ) |>
+    pivot_wider(names_from = sample_id, values_from = value_type_summary) |> 
+    as.data.frame() |> 
+    column_to_rownames(".feature")
+  
+  sd_log2_conc_assay <- 
+    se |> 
+    as_tibble() |>
+    arrange(sample_id, .feature) |> 
+    group_by(sample_id, .feature) |> 
+    summarize(
+      sd = conc_log2[!failed_sample] |> sd(na.rm = TRUE),
+      .groups = "drop"
+    ) |> 
+    pivot_wider(names_from = sample_id, values_from = sd) |>
+    as.data.frame() |>
+    column_to_rownames(".feature")
+  
+  # new colData
+  
+  ## sample-level information from the manifest
+  coldata_manifest <- 
+    se |> 
+    as_tibble() |> 
+    select(
+      sample_id, location, participant, visit_code, visit, 
+      weight, volume, approx_volume_based_on_aliquot_repos, 
+      aliquot_volume, dilution_200ul_tube, volume_added_for_assay, 
+      dilution_manifest, dilution_new,
+      shorthand_title, alternate_title, updated_harmonised_title, 
+      manifest_sample_vcode, sample_primary_batch, plate_positions
+      ) |>
+    distinct()
+  
+  ## sample-level information aggregated over replicates
+  coldata_agg <- 
+    se |> 
+    as_tibble() |> 
+    filter(.feature == .feature[1]) |> 
+    group_by(sample_id) |> 
+    summarize(
+      n_wells = sum(!failed_sample),
+      wells = str_c(well_id[!failed_sample], collapse = ", "),
+      excl_wells = str_c(well_id[failed_sample], collapse = ", "),
+      .groups = "drop"
+    ) 
+
+  coldata <- 
+    coldata_manifest |> 
+    left_join(coldata_agg, by = join_by(sample_id)) |> 
+    mutate(rownames = sample_id) |> 
+    as.data.frame() |> 
+    column_to_rownames("rownames") 
+    
+  f <- se@NAMES
+  s <- coldata$sample_id |> sort()
+  
+  new_f <- f |> str_remove("Hu ") |> str_remove(" \\([0-9]*\\)")
+  
+  # We create the new `SummarizedExperiment` object
+  agg_se <- 
+    SummarizedExperiment(
+      assays = 
+        list(
+          obs_conc = obs_conc_assay[f, s] |> set_rownames(new_f), 
+          obs_conc_imp = obs_conc_imp_assay[f, s] |> set_rownames(new_f),
+          value_type = value_type_summary_assay[f, s] |> set_rownames(new_f),
+          value_types = value_type_assay[f, s] |> set_rownames(new_f),
+          sd_log2_obs_conc_imp = sd_log2_conc_assay[f, s] |> set_rownames(new_f),
+          obs_conc_log2 = obs_conc_assay[f, s] |> log2() |> set_rownames(new_f),
+          obs_conc_imp_log2 = obs_conc_imp_assay[f, s] |> log2() |> set_rownames(new_f)
+          ),
+      colData = coldata[s,],
+      rowData = rowData(se) |> set_rownames(new_f),
+      metadata = 
+        se@metadata |>
+        c(
+          list(
+            se_creation_date = today(),
+            excluded_analytes = excluded_analytes |> str_remove("Hu ") |> str_remove(" \\([0-9]*\\)")
+          )
+        )
+    )
+  
+  agg_se
+  
+}
+
+```
+
+
+```{r}
+
+agg <- aggregate_se(raw)
+
+```
+
+
+
+## Visualization of participants time-series
+
+Below, we show the time-series of the median concentrations for a selection of analytes across visits.
+
+Analytes are selected based on the fraction of samples with values within QR and their correlation with the first 4 PCs.
+
+```{r}
+
+selected_features <- c("G-CSF", "IL-1b", "IP-10", "IL-18")
+
+selection <- 
+  agg |> 
+  as_tibble() |> 
+  filter(.feature %in% selected_features) |>
+  group_by(participant) |> mutate(n_visits = visit |> n_distinct()) |> ungroup() |> 
+  filter(n_visits > 5, visit_code %in% c(0, seq(1000, 1900, by = 100), 2120)) 
+
+
+```
+
+
+```{r}
+#| fig-height: 10
+#| fig-width: 6
+
+
+selection |> 
+  ggplot() +
+  aes(x = visit |> factor(), y = obs_conc_imp_log2, col = participant) +
+  geom_line(aes(group = participant), alpha = 0.5) +
+  geom_point(size = 0.5, alpha = 0.5) +
+  facet_grid(.feature ~ location) +
+  guides(col = "none") +
+  ylab("log2(concentration)") +
+  xlab("Visit") 
+
+```
+
+
+```{r}
+#| fig-height: 6
+#| fig-width: 10
+
+
+selection |> 
+  group_by(.feature) |> 
+  mutate(z = scale(obs_conc_imp_log2)) |>
+  ungroup() |> 
+  ggplot() +
+  aes(x = visit |> factor(), y = participant, fill = z) +
+  geom_tile() +
+  facet_grid(location ~ .feature, scales = "free", space = "free") +
+  scale_fill_gradient2("z-score\nof log2(conc.)", low = "steelblue1", mid = "white", high = "red2") +
+  ylab("participants") +
+  xlab("Visit") 
+
+```
+
+
+# Exporting the SE objects
+
+We export data both at the "well-level" (`05_se_luminex_raw_<date>.rds`) and at the "participant x visit" level (`05_se_luminex_agg_<date>.rds`).
+
+```{r}
+
+saveRDS(
+  raw, 
+  str_c(
+    get_output_dir(data_source = "real"),  
+    "05_se_luminex_raw_", today() |> str_remove_all("-"), ".rds"
+    )
+  )
+
+saveRDS(
+  agg, 
+  str_c(
+    get_output_dir(data_source = "real"),  
+    "05_se_luminex_agg_", today() |> str_remove_all("-"), ".rds"
+    )
+  )
+
+```
+
+
+
+
+

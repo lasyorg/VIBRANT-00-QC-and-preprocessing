@@ -20,14 +20,235 @@ editor: source
 ---
 
 
+```{r}
+#| warning: false
+
+library(tidyverse)
+library(magrittr)
+library(gt)
+library(patchwork)
+library(SummarizedExperiment)
+library(tidySummarizedExperiment)
+library(phyloseq)
+
+
+# tmp <- fs::dir_map("R scripts mg/", source)
+tmp <- fs::dir_map("R scripts/", source)
+
+theme_set(theme_light())
+```
 
 ## Load the data
 
-Should be a phyloseq object
+```{r}
+
+# TODO: change so it runs for different users.
+VIBRANT_dropbox_dir <- 
+  "/Users/laurasymul/Dropbox/Academia/Projects/VIBRANT Study Files/"
+
+
+ps <- 
+  readRDS(str_c(VIBRANT_dropbox_dir,"12_VIBRANT 16S/raw_merged_all_pools_ps_20250512.rds"))
+
+ps
+
+```
+
+Sample data:
+
+```{r}
+
+ps@sam_data |> 
+  as.data.frame() |> 
+  as_tibble() |> 
+  glimpse()
+
+```
+
+Taxonomic table:
+
+```{r}
+
+ps@tax_table |> as.data.frame() |> as.tibble() |> glimpse()
+
+```
+```{r}
+
+manifest <- 
+  tibble(
+    Patient.ID = ps@sam_data$Patient.ID,
+    Visit.code = ps@sam_data$Visit.code,
+    sampleID = ps@sam_data$sampleID,
+    Sample.ID.Barcode = ps@sam_data$Sample.ID.Barcode,
+    Site = ps@sam_data$Site
+  )
+
+```
+
+
+```{r}
+
+
+manifest |> 
+  dplyr::count(Site, Patient.ID) |> 
+  arrange(Site, -n, Patient.ID) |> 
+  gt()
+
+```
+
+```{r}
+
+sam_data |> 
+  dplyr::count(Visit.code) |> 
+  gt()
+
+```
+
+
+```{r}
+#| fig-height: 10
+#| fig-width: 15
+
+manifest |> 
+  ggplot() +
+  aes(x = Patient.ID, y = Visit.code) +
+  geom_point() +
+  facet_grid(. ~ Site, scales = "free", space = "free") +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
+  )
+
+```
+
+```{r}
+
+load("/Users/laurasymul/OneDrive - UCL/Academia/Research/VIBRANT clinical data UCLouvain/Data processed/2025-05-14/visits_summary.RData", verbose = TRUE)
+
+```
+
+
+```{r}
+#| fig-height: 10
+#| fig-width: 15
+
+v |> 
+  ggplot() +
+  aes(x = pid, y = visit_code) +
+  geom_point() +
+  facet_grid(. ~ location, scales = "free", space = "free") +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
+  )
+
+```
+```{r}
+
+manifest <- 
+  manifest |> 
+  mutate(
+    pid = 
+      sampleID |> 
+      str_remove("^[0-9]*_") |>
+      str_remove("_Pool10") |> 
+      str_remove("_[0-9]*$") |> 
+      str_remove("_V[0-9]*$") |> 
+      str_remove_all("_") |> 
+      str_remove("^0") |>
+      str_remove("^68"),
+    sample_type = 
+      case_when(
+        str_sub(pid, 1,1) %in% c("1", "2","9") ~ "Clinical sample",
+        TRUE ~ "Other"
+      )
+  )
+
+# manifest |> dplyr::count(pid, Patient.ID) |> View()
+  
+```
+
+```{r}
+
+matched <- 
+  full_join(
+    manifest |> filter(sample_type == "Clinical sample") |> mutate(has_16S_data = TRUE) |> mutate(visit_code = Visit.code |> factor()),
+    v |> mutate(has_CRF_data = TRUE),
+    by = join_by(pid, visit_code)
+  ) |> 
+  mutate(
+    has_16S_data = has_16S_data |> replace_na(FALSE),
+    has_CRF_data = has_CRF_data |> replace_na(FALSE)
+  ) |> 
+  left_join(
+    v |> select(pid) |> distinct() |> mutate(pid_in_CRFs = TRUE),
+    by = join_by(pid)
+  ) |> 
+  mutate(
+    pid_in_CRFs = pid_in_CRFs |> replace_na(FALSE)
+  )
+
+```
+
+```{r}
+
+matched |> 
+  dplyr::count(has_16S_data, has_CRF_data, pid_in_CRFs) |> 
+  gt()
+
+```
+
+
+```{r}
+
+matched |> 
+  filter(has_16S_data, !has_CRF_data) |>
+  arrange(pid, Visit.code) |> 
+  gt()
+
+```
+
+
+- 1 "weird" pid (_xx)
+
+- the "patient 0" at CAPRISA (20000)
+
+- one person from a different study? (098)
+
+
+
+```{r}
+
+matched |> 
+  dplyr::count(has_16S_data, has_CRF_data, pid_in_CRFs, met_eligibility, randomized) |> 
+  gt()
+
+```
+
+
+
 
 ## Create a SummarizedExperiment object
 
-Should be straight forward
+```{r}
+
+make_se_from_ps <- function(ps, assay_name = "counts") {
+  
+  tax_table <- 
+    ps@tax_table |> 
+    as.data.frame() |>
+    rownames_to_column("ASV_sequence") |> 
+    mutate(ASV_nb = row_number()) |>
+    group_by(Species) |> 
+    mutate(ASV_id = str_c(Species, " (ASV", ASV_nb |> str_pad(width = 6, pad = "0"),")")) |> 
+    ungroup() |> 
+    mutate(rownames = ASV_id) |> 
+    column_to_rownames("rownames") 
+  
+  # ... to continue
+  
+}
+
+```
+
 
 
 ## Exploratory & QC analyses

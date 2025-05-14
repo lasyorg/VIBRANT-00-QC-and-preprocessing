@@ -4,8 +4,925 @@ format: html
 editor: source
 ---
 
+# Luminex
+
+
+
+```{r}
+
+dilution_related_data |> 
+  filter(location == "SA", dilution_imputed < 3, dilution > 10) |> 
+  gt()
+
+```
+
+
+```{r}
+
+ggplot(dilution_related_data) +
+  aes(
+    x = dilution_manifest, 
+    y = dilution_imputed, 
+    col = location
+    ) +
+  geom_point(alpha = 0.5, size = 0.5) +
+  scale_color_manual(values = location_colors) +
+  scale_x_log10() +
+  scale_y_log10() +
+  xlab("Dilution (manifest values)") +
+  ylab("Dilution (imputed values)\ncomputed from actual volumes in the US\nand imputed volumes in SA") +
+  coord_fixed()
+
+```
+
+
+```{r}
+
+ggplot(dilution_related_data) +
+  aes(
+    x = dilution_manifest, 
+    y = dilution_imputed, 
+    shape = location,
+    col = volume_added_for_assay |> factor()
+    ) +
+  geom_point(alpha = 0.5, size = 1) +
+  scale_x_log10() +
+  scale_y_log10() +
+  scale_color_discrete("Volume added by Lenine for assay") +
+  xlab("Dilution (manifest values)") +
+  ylab("Dilution (imputed values)\ncomputed from actual volumes in the US\nand imputed volumes in SA") +
+  coord_fixed()
+
+```
+
+
+
+```{r}
+
+ggplot(dilution_related_data) +
+  aes(x = dilution_manifest, y = dilution_imputed, col = weight |> log2(), shape = location) +
+  geom_point(alpha = 0.5, size = 0.8) +
+  scale_color_gradient(low = "red", high = "black") +
+  scale_x_log10() +
+  scale_y_log10() +
+  xlab("Dilution (manifest values)") +
+  ylab("Dilution (imputed values)\ncomputed from actual volumes in the US\nand imputed volumes in SA") +
+  coord_fixed()
+
+```
+
+
+::: callout-caution
+There are marked differences between the dilution values as computed from the sample weight and those using the actual or imputed volume... The largest differences are observed when the measured weights were very small... Something to discuss :)
+
+For now, I continue the analyses with the rounded dilution values that were provided in the excel files, but at the end of the document, I've done some of the analyses again using the imputed dilution values. I think that what would be the best course of action is to compute the "unadjusted concentrations" from those provided by the Luminex software (simply by dividing by the dilution factor that it used), impute the out-of-range values, then multiply these "unadjusted concentrations" by the computed/imputed dilution factors as done above to obtain our final estimates for the dilution-adjusted concentrations.
+:::
+
+
+
+## Marginal distributions
+
+```{r}
+
+plot_marginals <- function(raw, by = "plate_nb", binwidth = 1){
+  tmp <- raw |> as_tibble()
+  tmp <- tmp |> bind_rows(tmp |> mutate(.feature = "all analytes"))
+  tmp$by <- str_c(by ," ", tmp[[by]])
+  
+  min_c <- min(tmp$conc_log2[!is.infinite(tmp$conc_log2)], na.rm = TRUE)
+  max_c <- max(tmp$conc_log2[!is.infinite(tmp$conc_log2)], na.rm = TRUE)
+
+  tmp |> 
+    mutate(
+      conc_log2_bin = 
+        conc_log2 |> 
+        cut(breaks = seq(min_c, max_c, by = binwidth))
+    ) |> 
+    dplyr::count(by, .feature, conc_log2_bin) |>
+    group_by(by, .feature) |> 
+    mutate(f = n/sum(n)) |> 
+    ggplot( ) +
+    aes(x = conc_log2_bin, y = by, fill = by, alpha = f) +
+    geom_tile() +
+    facet_wrap(.feature ~ ., scale = "free") +
+    labs(
+      x = "log2(concentration)\n(independent scales per analyte)",
+      y = by
+    ) +
+    scale_x_discrete(breaks = NULL) +
+    guides(fill = "none") +
+    theme(strip.text.y = element_text(angle = 0))
+  
+}
+
+```
+
+
+Per plate
+
+
+```{r}
+#| fig-height: 15
+#| fig-width: 15
+
+plot_marginals(raw, by = "plate_name")
+
+```
+
+
+
+Per location
+
+```{r}
+#| fig-height: 11
+#| fig-width: 15
+
+plot_marginals(raw, by = "location")
+
+```
+
+Per visit
+
+```{r}
+#| fig-height: 15
+#| fig-width: 15
+
+plot_marginals(raw, by = "visit")
+
+```
+
+
+
+## Across-plate replicability 
+
+
+::: panel-tabset
+```{r}
+#| results: asis
+#| fig-width: 10
+#| fig-height: 4.5
+
+purrr::walk(
+  raw@NAMES,
+  \(x) {
+    cat('### ', x, '\n\n')
+    tmp <- 
+      raw |> 
+      as_tibble() |> 
+      filter(sample_type == "Sample", .feature == x) |>
+      group_by(sample_id) |> mutate(n_plates = plate_name |> unique() |> length()) |> ungroup() |> 
+      filter(n_plates > 1) |> 
+      select(.sample, sample_id, plate_name, conc_log2, value_type) |> 
+      mutate(plate_name = plate_name |> factor())
+    
+    g <- 
+      tmp |> 
+      group_by(sample_id) |> 
+      mutate(conc_log2_median_centered = conc_log2 - median(conc_log2, na.rm = TRUE)) |> 
+      ungroup() |> 
+      ggplot() +
+      aes(x = plate_name, y = conc_log2_median_centered, col = plate_name) +
+      geom_hline(yintercept = 0) +
+      # geom_path(aes(group = sample_id), linewidth = 0.5, alpha = 0.5) +
+      geom_point(aes(shape = value_type), alpha = 0.5) +
+      stat_summary(aes(y = conc_log2_median_centered), fun = median, geom = "point", col = "black") +
+      scale_shape_manual("Value type", values = value_types_shapes(), breaks = value_types_levels()) +
+      guides(col = "none") +
+      theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
+      xlab("Plate") + ylab("Median-centered log2(concentration)") +
+      ggtitle(x) 
+    
+    g |> print()
+    
+    cat('\n\n')
+  }
+)
+
+```
+:::
+
+
+## Marginal differences between replicates
+
+
+
+# Samples to re-run
+
+
+
+I'd suggest to re-run the following samples:
+
+- samples that have a substantial number of analytes below the limit of quantification
+
+- samples that exhibit large differences between their replicates
+
+- one V3 or V4 sample per participant for 1+ SA and 1+ US participant per plate (= 2-3 samples per plate) depending on material availability and space on plate.
+
+
+
+```{r}
+
+
+samples_to_rerun_OOR <- 
+  colData(raw) |>
+  as.data.frame() |>
+  rownames_to_column(".sample") |>
+  as_tibble() |> 
+  filter(sample_type == "Sample", n_OOR > 12) |> 
+  select(.sample, plate_nb, plate_row, plate_col, sample_id) |> 
+  mutate(reason = "many OOR values")
+
+```
+
+```{r}
+
+samples_with_large_differences_between_replicates <- 
+  raw |> 
+  as_tibble() |> 
+  filter(sample_type == "Sample") |> 
+  group_by(sample_id) |>
+  mutate(
+    n_samples = length(unique(.sample)),
+    n_plates = length(unique(plate_nb))
+    ) |> 
+  ungroup() |> 
+  filter(n_samples >= 2) |> 
+  group_by(sample_id, n_plates, .feature) |>
+  summarize(
+    max_n_OOR = max(n_OOR),
+    log2_conc_diff_sq = sum((conc_log2 - mean(conc_log2))^2),
+    .groups = "drop"
+  ) |> 
+  group_by(sample_id, max_n_OOR, n_plates) |>
+  summarize(log2_conc_diff_sq = sum(log2_conc_diff_sq), .groups = "drop") 
+
+samples_with_large_differences_between_replicates |> 
+  ggplot() +
+  aes(x = log2_conc_diff_sq |> sqrt(), fill = max_n_OOR > 12 ) +
+  geom_histogram(bins = 30) +
+  facet_grid(n_plates ~ .) 
+
+samples_with_large_differences_between_replicates <- 
+  samples_with_large_differences_between_replicates |> 
+  filter(log2_conc_diff_sq > 100, max_n_OOR <= 12)
+
+samples_with_large_differences_between_replicates <- 
+  colData(raw) |>
+  as.data.frame() |>
+  rownames_to_column(".sample") |>
+  as_tibble() |> 
+  filter(sample_id %in% samples_with_large_differences_between_replicates$sample_id) |> 
+  select(.sample, plate_nb, plate_row, plate_col, sample_id) |> 
+  arrange(sample_id, plate_nb) |> 
+  mutate(reason = "large differences between replicates")
+
+```
+
+
+```{r}
+
+samples_to_rerun <- 
+  bind_rows(samples_to_rerun_OOR, samples_with_large_differences_between_replicates) |> 
+  group_by(.sample, plate_nb, plate_row, plate_col, sample_id) |> 
+  summarize(reason = reason |> sort() |> str_c(collapse = ", "), .groups = "drop") 
+
+```
+
+
+```{r}
+
+samples_to_rerun |> 
+  ggplot() +
+  aes(x = plate_row, y = plate_col, fill = reason) +
+  geom_tile() +
+  facet_wrap(. ~ plate_nb) 
+
+```
+
+
+```{r}
+
+samples_to_rerun |>
+  left_join(
+    colData(raw) |> as.data.frame() |>  select(weight, volume, dilution, dilution_imputed)  |> rownames_to_column(".sample"),
+  ) |> 
+  arrange(sample_id) |> 
+    mutate(i = row_number()) |> 
+  select(i, everything()) |> 
+  gt()
+
+```
+
+::: callout-caution
+It looks like it's often all samples from the same participants that tend to fail. I wonder if there could be "properties" of the mucus from those participants that make them harder to quantify.
+Maybe, the re-run won't help, but at least, since it seems that there is some "biological" origin to the "failed" samples, we should account for those in the analyses.
+:::
+
+That would be a total of `r nrow(samples_to_rerun)` samples to re-run + 2-3 samples per batch 1 plate (~20 samples) = `r nrow(samples_to_rerun) + 20` to add to the batch 2 samples and to randomly distribute across the batch 2 plates.
+
+
+# MISC - Concentrations estimated using the imputed dilution factor
+
+```{r}
+
+raw <- 
+  raw |> 
+  mutate(
+    unadjusted_conc = conc / dilution,
+    conc_imputed = unadjusted_conc * (dilution_imputed |> replace_na(1)),
+    conc_log2_imputed = log2(conc_imputed)
+  )
+
+```
+
+```{r}
+
+raw |> 
+  as_tibble() |> 
+  filter(!is.na(location)) |> 
+  ggplot() +
+  aes(x = conc_log2, y = conc_log2_imputed, col = location) +
+  geom_point(size = 0.5, alpha = 0.5) +
+  geom_abline(slope = 1, intercept = 0) +
+  facet_wrap(.feature ~ .)
+
+```
+
+
+
+```{r}
+
+complete_samples <- 
+  raw |> 
+  as_tibble() |> 
+  group_by(.sample) |>
+  summarize(ok = !any(is.na(conc_log2_imputed))) |>
+  mutate(i = row_number()) |>
+  filter(ok)
+
+complete <- raw[, complete_samples$.sample]
+
+```
+
+
+```{r}
+
+pca_res <- 
+  prcomp(complete |> assay("conc_log2_imputed") |> t(), center = TRUE, scale = TRUE)
+
+```
+
+```{r}
+#| fig-height: 3
+#| fig-width: 9
+
+factoextra::fviz_eig(pca_res, ncp = 48)
+
+```
+
+As often with Luminex data, the first component explains most of the variance.
+
+Excluding the 1st component, we can then see that the variance decreases rapidly. 
+
+```{r}
+#| fig-height: 3
+#| fig-width: 9
+
+factoextra::fviz_eig(pca_res, ncp = 48) +
+  geom_hline(yintercept = 100*1/48, linetype = 2) +
+  ylim(c(0, 20))
+
+```
+
+```{r}
+
+plot_pca_scores <- function(pca_res, raw, axes = 1:2, col_by = "sample_type"){
+  scores <- 
+    colData(raw) |> 
+    as.data.frame() |> 
+    rownames_to_column(".sample") |> 
+    as_tibble() |> 
+    left_join(
+      as_tibble(pca_res$x) |> 
+        mutate(.sample = rownames(pca_res$x)),
+      by = join_by(.sample)
+    )
+  
+  var <- factoextra::get_eig(pca_res)
+  
+  xvar <- str_c("PC", axes[1])
+  yvar <- str_c("PC", axes[2])
+  ggplot(scores) +
+    aes(x = .data[[xvar]], y = .data[[yvar]], col = .data[[col_by]]) +
+    geom_vline(xintercept = 0, col = "gray") +
+    geom_hline(yintercept = 0, col = "gray") +
+    geom_point(alpha = 0.8) +
+    labs(
+      x = str_c(xvar, " (", var$variance.percent[axes[1]] |> round(1), "%)"), 
+      y = str_c(yvar, " (", var$variance.percent[axes[2]] |> round(1), "%)")
+      ) +
+    coord_fixed()
+}
+
+```
+
+
+Checking the scores and biplots by sample type:
+
+```{r}
+#| fig-height: 6
+#| fig-width: 10
+
+g_12 <- plot_pca_scores(pca_res, complete, axes = 1:2, col_by = "sample_type") 
+
+g_23 <- plot_pca_scores(pca_res, complete, axes = 2:3, col_by = "sample_type") 
+
+g_45 <- plot_pca_scores(pca_res, complete, axes = 4:5, col_by = "sample_type")
+
+g_12 / (g_23 | g_45) +
+  plot_layout(guides = "collect", heights = c(1, 1.5))
+
+
+```
+Focus on controls and standards:
+
+```{r}
+#| fig-height: 6
+#| fig-width: 10
+
+complete <- 
+  complete |> 
+  mutate(control_id = ifelse(sample_type == "Sample", NA, sample_id))
+
+g_12 <- plot_pca_scores(pca_res, complete, axes = 1:2, col_by = "control_id") 
+
+g_23 <- plot_pca_scores(pca_res, complete, axes = 2:3, col_by = "control_id") 
+
+g_45 <- plot_pca_scores(pca_res, complete, axes = 4:5, col_by = "control_id")
+
+g_12 / (g_23 | g_45) +
+  plot_layout(guides = "collect", heights = c(1, 1.5))
+
+```
+
+Focus on the biological controls across plates:
+
+```{r}
+#| fig-height: 9
+#| fig-width: 15
+
+complete <- 
+  complete |> 
+  mutate(plate_biol_ctrl = ifelse(sample_id == "BIOL CTRL", plate_name, NA))
+
+g_12 <- 
+  plot_pca_scores(pca_res, complete, axes = 1:2, col_by = "plate_biol_ctrl") +
+  scale_color_discrete(na.value = "gray90")
+
+g_23 <- 
+  plot_pca_scores(pca_res, complete, axes = 2:3, col_by = "plate_biol_ctrl") +
+  scale_color_discrete(na.value = "gray90")
+
+
+g_45 <- 
+  plot_pca_scores(pca_res, complete, axes = 4:5, col_by = "plate_biol_ctrl") +
+  scale_color_discrete(na.value = "gray90")
+
+g_12 / (g_23 | g_45) +
+  plot_layout(guides = "collect", heights = c(1, 1.5))
+
+```
+Plate effects?
+
+
+```{r}
+#| fig-height: 7
+#| fig-width: 12
+
+g_12 <- plot_pca_scores(pca_res, complete, axes = 1:2, col_by = "plate_name") 
+
+g_23 <- plot_pca_scores(pca_res, complete, axes = 2:3, col_by = "plate_name") 
+
+g_45 <- plot_pca_scores(pca_res, complete, axes = 4:5, col_by = "plate_name") 
+  
+
+g_12 / (g_23 | g_45) +
+  plot_layout(guides = "collect", heights = c(1, 1.5))
+
+```
+
+
+Plate effects when only considering samples (no controls or standards):
+
+
+```{r}
+#| fig-height: 7
+#| fig-width: 12
+
+g_12 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample"), axes = 1:2, col_by = "plate_name") +
+  stat_ellipse()
+
+g_23 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample"), axes = 2:3, col_by = "plate_name") +
+  stat_ellipse()
+
+g_45 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample"), axes = 4:5, col_by = "plate_name") +
+  stat_ellipse()
+  
+
+g_12 / (g_23 | g_45) +
+  plot_layout(guides = "collect", heights = c(1, 1.5))
+
+```
+
+Site differences?
+
+```{r}
+#| fig-height: 6
+#| fig-width: 10
+
+g_12 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample"), axes = 1:2, col_by = "location") +
+  stat_ellipse()
+
+g_23 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample"), axes = 2:3, col_by = "location") +
+  stat_ellipse() 
+
+g_45 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample"), axes = 4:5, col_by = "location") +
+  stat_ellipse()
+  
+
+g_12 / (g_23 | g_45) +
+  plot_layout(guides = "collect", heights = c(1, 1.5))
+
+```
+
+Visit differences?
+
+```{r}
+
+
+complete <- complete |> mutate(visit = str_c("V", visit_nb))
+
+visit_colors <- 
+  c(
+    "V1" = "red", "V2" = "green3", 
+    "V3" = "steelblue1", "V4" = "steelblue2", "V5" = "steelblue3", "V6" = "steelblue4"
+  )
+
+```
+
+```{r}
+#| fig-height: 6
+#| fig-width: 10
+
+g_12 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample"), axes = 1:2, col_by = "visit") +
+  stat_ellipse() +
+  scale_color_manual(values = visit_colors) 
+
+g_23 <- 
+ plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample"), axes = 2:3, col_by = "visit") +
+  stat_ellipse() +
+  scale_color_manual(values = visit_colors) 
+
+g_45 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample"), axes = 4:5, col_by = "visit") +
+  stat_ellipse() +
+  scale_color_manual(values = visit_colors) 
+  
+
+g_12 / (g_23 | g_45) +
+  plot_layout(guides = "collect", heights = c(1, 1.5))
+
+```
+
+
+Effect of the dilution factor?
+
+```{r}
+#| fig-height: 6
+#| fig-width: 10
+
+g_12 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample"), axes = 1:2, col_by = "dilution_imputed") +
+  scale_color_gradient(low = "gray80", high = "dodgerblue") 
+
+g_23 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample"), axes = 2:3, col_by = "dilution_imputed")  +
+  scale_color_gradient(low = "gray80", high = "dodgerblue") 
+
+g_45 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample"), axes = 4:5, col_by = "dilution_imputed")  +
+  scale_color_gradient(low = "gray80", high = "dodgerblue") 
+  
+
+g_12 / (g_23 | g_45) +
+  plot_layout(guides = "collect", heights = c(1, 1.5))
+
+```
+
+
+
+
+```{r}
+
+scores_long <- 
+    colData(raw) |> 
+    as.data.frame() |> 
+    rownames_to_column(".sample") |> 
+    as_tibble() |> 
+    inner_join(
+      as_tibble(pca_res$x) |> 
+        mutate(.sample = rownames(pca_res$x)) |> 
+        pivot_longer(cols = -.sample, names_to = "PC", values_to = "value", names_prefix = "PC") |> 
+        mutate(PC = PC |> as.integer()),
+      by = join_by(.sample)
+    )
+  
+
+```
+
+
+```{r}
+#| fig-width: 7
+#| fig-height: 5
+
+scores_long |> 
+  filter(sample_type == "Sample", PC <= 6) |>
+  ggplot(aes(x = dilution_imputed, y = value, col = location)) +
+  geom_point(alpha = 0.5, size = 0.5) +
+  geom_smooth(method = "lm", formula = "y ~ x") +
+  facet_wrap(PC ~ ., scales = "free", labeller = label_both) +
+  ylab("PC score") +
+  xlab("Imputed/recomputed dilution factor from actual weight and (imputed) volume")
+
+
+```
+
+Effect of the sample weight?
+
+```{r}
+#| fig-height: 6
+#| fig-width: 10
+
+g_12 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", location == "US"), axes = 1:2, col_by = "weight") +
+  scale_color_gradient(low = "gray80", high = "purple") 
+
+g_23 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", location == "US"), axes = 2:3, col_by = "weight")  +
+  scale_color_gradient(low = "gray80", high = "purple") 
+
+g_45 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", location == "US"), axes = 4:5, col_by = "weight")  +
+  scale_color_gradient(low = "gray80", high = "purple") 
+  
+
+g_12 / (g_23 | g_45) +
+  plot_layout(guides = "collect", heights = c(1, 1.5))
+
+```
+
+```{r}
+#| fig-height: 6
+#| fig-width: 10
+
+g_12 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", location == "SA"), axes = 1:2, col_by = "weight") +
+  scale_color_gradient(low = "gray80", high = "purple") 
+
+g_23 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", location == "SA"), axes = 2:3, col_by = "weight")  +
+  scale_color_gradient(low = "gray80", high = "purple") 
+
+g_45 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", location == "SA"), axes = 4:5, col_by = "weight")  +
+  scale_color_gradient(low = "gray80", high = "purple") 
+  
+
+g_12 / (g_23 | g_45) +
+  plot_layout(guides = "collect", heights = c(1, 1.5))
+
+```
+
+
+
+```{r}
+#| fig-height: 6
+#| fig-width: 10
+
+complete <- 
+  complete |> 
+  mutate(
+    w_per_v = weight / volume_imputed,
+  )
+
+g_12 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", location == "US"), axes = 1:2, col_by = "w_per_v") +
+  scale_color_gradient(low = "gray80", high = "red") 
+
+g_23 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", location == "US"), axes = 2:3, col_by = "w_per_v")  +
+  scale_color_gradient(low = "gray80", high = "red") 
+
+g_45 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", location == "US"), axes = 4:5, col_by = "w_per_v")  +
+  scale_color_gradient(low = "gray80", high = "red") 
+  
+
+g_12 / (g_23 | g_45) +
+  plot_layout(guides = "collect", heights = c(1, 1.5))
+
+```
+
+```{r}
+#| fig-height: 6
+#| fig-width: 10
+
+complete <- 
+  complete |> 
+  mutate(
+    w_per_v = weight / volume_imputed,
+  )
+
+g_12 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", location == "SA"), axes = 1:2, col_by = "w_per_v") +
+  scale_color_gradient(low = "gray80", high = "red") 
+
+g_23 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", location == "SA"), axes = 2:3, col_by = "w_per_v")  +
+  scale_color_gradient(low = "gray80", high = "red") 
+
+g_45 <- 
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", location == "SA"), axes = 4:5, col_by = "w_per_v")  +
+  scale_color_gradient(low = "gray80", high = "red") 
+  
+
+g_12 / (g_23 | g_45) +
+  plot_layout(guides = "collect", heights = c(1, 1.5))
+
+```
+
+
+
+
+# Luminex
+
+However, when we examine the relationship between weight and volume in the US samples, we not not observe data compatible with that assumption:
+
+```{r}
+
+g_exact <- 
+  dilution_related_data |> 
+  ggplot() +
+  aes(y = volume, x = weight) +
+  geom_abline(intercept = 0, slope = 1) +
+  scale_color_discrete("Batch") +
+  coord_fixed()
+
+g_jittered <-   
+  g_exact +
+  geom_jitter(
+    aes(col = batch |> factor()), 
+    height = 0.025, width = 0.025, size = 0.5, alpha = 0.5
+    ) +
+  guides(col = "none")
+
+g_exact <- 
+  g_exact +
+  geom_point(aes(col = batch |> factor()), alpha = 0.1) +
+  theme(legend.position = "bottom")
+
+
+
+```
+
+
+```{r}
+#| fig-height: 10
+#| fig-width: 10
+
+mod <- lm(volume ~ weight, data = dilution_related_data)
+mod_label <- str_c("V = ", mod$coefficients[2] |> round(2), "W + ",mod$coefficients[1] |> round(2))
+
+mod_color <- "purple"
+
+g_exact + 
+  annotate(geom = "text", x = 1, y = 1, label = "1mL = 1g", col = "black", hjust = -0.1) +
+    ggtitle("(Exact coordinates)") +
+  g_jittered +
+  ggtitle("(Jittered coordinates)") +
+  
+  g_exact + 
+  geom_abline(slope = 1, intercept = 0.4, col = mod_color) + 
+  annotate(geom = "text", x = 0.8, y = 1.2, label = "V = W + 0.4", col = mod_color, hjust = 1.1, vjust = 0) +
+  ggtitle("Systematic bias in weight measurements") +
+  g_jittered + 
+  geom_abline(slope = 1, intercept = 0.4, col = mod_color) + 
+  annotate(geom = "text", x = 0.8, y = 1.2, label = "V = W + 0.4", col = mod_color, hjust = 1.1, vjust = 0) +
+  
+  g_exact + 
+  geom_abline(slope = mod$coefficients[2], intercept = mod$coefficients[1], col = mod_color) + 
+  annotate(geom = "text", x = 1, y = 1.2, label = mod_label, col = mod_color, hjust = 1.1, vjust = 0) +
+  ggtitle("Linear relationship between volume and weight") +
+  g_jittered + 
+  geom_abline(slope = mod$coefficients[2], intercept = mod$coefficients[1], col = mod_color) + 
+  annotate(geom = "text", x = 1, y = 1.2, label = mod_label, col = mod_color, hjust = 1.1, vjust = 0) +
+  
+  
+  g_exact + 
+  geom_smooth(method = "lm", formula = "y ~ x + I(x^2)", se = FALSE, col = mod_color) +
+  ggtitle("Quadratic relationship between volume and weight") +
+  g_jittered + 
+   geom_smooth(method = "lm", formula = "y ~ x + I(x^2)", se = FALSE, col = mod_color) +
+  
+  plot_layout(guides = "collect", ncol = 2) & theme(legend.position = "bottom")
+
+
+```
+
+
+
+If we assume that the quadratic relationship between volume and weight observed in the US is generalizeable to SA samples, we can impute the SA samples' volume using the quadratic model, then, recalculate the dilution factors.
+
+```{r}
+
+mod2 <- lm(volume ~ weight + I(weight^2), data = dilution_related_data |> filter(location == "US"))
+pred_volume <- predict(mod2, newdata = tibble(weight = raw$weight))
+raw$volume_imputed <- ifelse((raw$location == "SA") & (raw$sample_type == "Sample"), pred_volume, raw$volume)
+
+```
+
+```{r}
+#| fig-width: 7
+#| fig-height: 3.5
+
+raw |> 
+  as_tibble() |> 
+  filter(sample_type == "Sample") |> 
+  select(sample_id, location, weight, volume_imputed) |> 
+  distinct() |> 
+  ggplot() +
+  aes(x = weight, y = volume_imputed, col = location) +
+  geom_abline(intercept = 0, slope = 1) +
+  geom_point(alpha = 0.1) + 
+  coord_fixed() +
+  scale_color_manual(values = location_colors)
+
+```
+
+
+
+
+
+
 
 # Metagenomics
+
+
+
+### Technical metadata
+
+```{r}
+
+data_plot <-
+  technical_metadata |>
+  select(-c(UID, Sample, SampleType, Library, Notes, FragmentSize, IndexSet, `Index 1`, `Index 2`, Ext_Lib_Position)) |>
+  mutate(across(everything(), as.factor)) |>
+  dplyr::rename(
+    LibraryPool = `Library Pool`,
+    Selected4re_extraction = `Selected4re-extraction`
+  )
+
+generate_plot <- function(df, x_var, fill_var) {
+  n_levels_fill <- nlevels(df[[fill_var]])
+  if (n_levels_fill <= 12) {
+    ggplot(df, aes_string(x = x_var, fill = fill_var)) +
+      geom_bar(position = "stack") +
+      theme_bw() +
+      scale_fill_manual(values = brewer.pal(n = n_levels_fill, name = "Set3")) +
+      labs(x = x_var, fill = fill_var, y = "Number of samples") +
+      theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  } else {
+    message(cat("Trop de niveaux : x = ",x_var, "fill =", fill_var))
+    invisible(NULL) # Retourne NULL pour que walk() ne tente pas d'imprimer un message
+  }
+}
+
+factor_vars <- names(data_plot)
+
+combinations <- cross(list(x = factor_vars, fill = factor_vars)) %>%
+  keep(~ which(.x$x == factor_vars) < which(.x$fill == factor_vars)) 
+
+# Appliquer la fonction de génération de graphique à chaque combinaison
+walk(combinations, ~ print(generate_plot(data_plot, .x$x, .x$fill)))
+
+```
 
 ### Missing values
 
@@ -512,4 +1429,93 @@ dist_matrix <-
   vegdist(
     counts |> dplyr::select(-c(CST, subCST, score)) |> column_to_rownames("sampleID"),
     method = "bray")
+```
+
+
+# qPCR
+
+
+
+```{r}
+#| fig-height: 15
+#| fig-width: 15
+
+qpcr |> 
+  filter(sample_type != "Standard") |> 
+  select(
+    starts_with("well"), 
+    pcr_plate_id, 
+    target,
+    vmrc_group, 
+    ext_lib_plate_nb, 
+    starting_quantity_sq
+    ) |> 
+  distinct() |> 
+  ggplot() +
+  aes(
+    x = well_row |> factor(), 
+    y = well_col |> fct_rev(), 
+    fill = starting_quantity_sq
+    ) +
+  geom_tile() +
+  facet_grid(vmrc_group + target ~ ext_lib_plate_nb, scales = "free", space = "free") +
+  xlab("Well column") + ylab("Well row") 
+
+```
+
+
+```{r}
+#| fig-height: 15
+#| fig-width: 15
+
+qpcr |> 
+  filter(sample_type != "Standard") |> 
+  select(
+    starts_with("well"), 
+    pcr_plate_id, 
+    target,
+    vmrc_group, 
+    ext_lib_plate_nb, 
+    quant_adjusted
+    ) |> 
+  distinct() |> 
+  ggplot() +
+  aes(
+    x = well_row |> factor(), 
+    y = well_col |> fct_rev(), 
+    fill = quant_adjusted
+    ) +
+  geom_tile() +
+  facet_grid(vmrc_group + target ~ ext_lib_plate_nb, scales = "free", space = "free") +
+  xlab("Well column") + ylab("Well row") 
+
+```
+
+
+```{r}
+#| fig-height: 15
+#| fig-width: 15
+
+qpcr |> 
+  select(
+    starts_with("well"), 
+    pcr_plate_id, 
+    target,
+    vmrc_group, 
+    ext_lib_plate_nb, 
+    cq,
+    sample_type
+    ) |> 
+  filter(sample_type == "Standard") |>
+  distinct() |> 
+  ggplot() +
+  aes(
+    x = well_row |> factor(), 
+    y = well_col |> fct_rev(), 
+    fill = cq
+    ) +
+  geom_tile() +
+  facet_grid(vmrc_group + target ~ ext_lib_plate_nb, scales = "free", space = "free") +
+  xlab("Well column") + ylab("Well row") 
+
 ```

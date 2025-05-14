@@ -7,17 +7,14 @@ impute_OOR <- function(se, LLOQ_factor = 0.5, ULOQ_factor = 1.1){
     se |> 
     as_tibble() |> 
     filter(
-      is.finite(raw_obs_conc_num),  (raw_obs_conc_num > 0), !is.na(raw_obs_conc_num),
+      is.finite(unadj_conc),  (unadj_conc > 0), !is.na(unadj_conc),
       !(value_type %in% c("Below LLOQ", "Above ULOQ", "Not available"))
       ) |> 
-    select(plate_nb, .feature, .sample, sample_id, dilution, raw_obs_conc_num) |>
-    mutate(
-      non_diluted_conc = raw_obs_conc_num/dilution,
-    ) |> 
+    select(plate_nb, .feature, .sample, sample_id, dilution_luminex, unadj_conc) |>
     group_by(plate_nb, .feature) |>
     summarize(
-      min_obs = min(non_diluted_conc),
-      max_obs = max(non_diluted_conc),
+      min_unadj_conc = min(unadj_conc),
+      max_unadj_conc = max(unadj_conc),
       .groups = "drop"
     )
   
@@ -30,18 +27,18 @@ impute_OOR <- function(se, LLOQ_factor = 0.5, ULOQ_factor = 1.1){
     as_tibble() |>
     left_join(extremes, by = join_by(.feature, plate_nb)) |>
     mutate(
-      obs_conc =
+      unadj_conc_imp =
         case_when(
-          is.na(raw_obs_conc_num) ~ NA_real_,
-          (raw_obs_conc == "OOR <") ~ min_obs * LLOQ_factor * dilution,
-          (raw_obs_conc == "OOR >") ~ max_obs * ULOQ_factor * dilution,
-          TRUE ~ raw_obs_conc_num
+          is.na(unadj_conc) ~ NA_real_,
+          (raw_obs_conc == "OOR <") ~ min_unadj_conc * LLOQ_factor,
+          (raw_obs_conc == "OOR >") ~ max_unadj_conc * ULOQ_factor,
+          TRUE ~ unadj_conc
         )
     )
   
   # tmp |> select(.feature, .sample, sample_id, sample_type, value_type, dilution, raw_obs_conc,raw_obs_conc_num, obs_conc, min_obs, max_obs) |> filter(sample_type == "Sample")
   
-  se <- se |> mutate(conc = tmp$obs_conc)
+  se <- se |> mutate(unadj_conc_imp = tmp$unadj_conc_imp)
   
   # We now add the extremes to the se.
   # We do not add it to the rowData since we have one value per plate and analyte
@@ -52,7 +49,7 @@ impute_OOR <- function(se, LLOQ_factor = 0.5, ULOQ_factor = 1.1){
     str_c(
       se@metadata$name,"\n\t",
       "Added 1 assays:\n\t\t",
-      "-`conc` with the imputed concentrations\n\t\t",
+      "-`unadj_conc_imp` with the imputed unadjusted concentrations\n\t\t",
       "and 1 table to @metadata:\n\t\t",
       "-`extremes` with the minimum and maximum observed values for each analyte and plate\n"
     )
