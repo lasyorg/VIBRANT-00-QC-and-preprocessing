@@ -332,7 +332,7 @@ mae_coldata |>
 > will have the following columns:
 
 - `visit_type` (`clinic` or `home`)
-- `visit_category` (`planned`, `additional`)
+- `visit_planned` (`planned`, `additional`, `not documented in CRFs`)
 - `visit_attendance` (`attended`, `missed`)
 - `specimen_collection_swab` (`collected`, `not collected`, `unclear`)
 - `specimen_collection_softcup` (`collected`, `not collected`, `unclear`)
