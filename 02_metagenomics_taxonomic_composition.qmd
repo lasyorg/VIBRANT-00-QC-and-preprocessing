@@ -144,15 +144,17 @@ technical_metadata <-
   technical_metadata |> 
   janitor::clean_names() |>
   dplyr::rename(
-    mg_sample_id = uid,
-    swab_barcode = sample_number,
+    mg_uid = uid,
     mg_pid = pid,
+    mg_visit_code = visit_code,
+    mg_sample_type = sample_type,
+    swab_barcode = sample_number,
     ext_lib_plate_nb = ext_lib_plate,
     sequencing_sample_id = sample,
     sequencing_lane = lane,
     sequencing_date = date_sequenced,
     selected_for_re_extraction = selected4re_extraction
-  )
+  ) 
 
 ```
 
@@ -183,12 +185,14 @@ dictionary |> gt() |>
 
 ### Sample and control type harmonization
 
+
+
 ```{r}
 
 technical_metadata <- 
   technical_metadata |> 
   mutate(
-    sample_type = sample_type |> str_replace("lS", "l s") |> str_replace("b\\+C", "b \\+ C"),
+    sample_type = mg_sample_type |> str_replace("lS", "l s") |> str_replace("b\\+C", "b \\+ C"),
     control_type = 
       case_when(
         sample_type == "Clinical sample" ~ NA_character_,
@@ -202,21 +206,23 @@ technical_metadata <-
       ) |> 
       fct_infreq()
   ) |> 
-  relocate(control_type, .after = sample_type) 
+  relocate(sample_type, control_type, .after = mg_sample_type) 
 
-technical_metadata |> dplyr::count(sample_type, control_type) |> gt()
+technical_metadata |> dplyr::count(mg_sample_type, sample_type, control_type) |> gt()
 
 ```
 
 ```{r}
+
 dictionary <- 
   dictionary |> 
   bind_rows(
     tibble(
-      name = "control_type",
-      description = "Control type (Mock 1, Mock 2, etc.)"
+      name = c("sample_type", "control_type"),
+      description = c("Sample type (harmonized)", "Control type (Mock 1, Mock 2, etc.)")
     )
   )
+
 ```
 
 
@@ -246,17 +252,59 @@ technical_metadata <-
 #| eval: false
 technical_metadata |> 
   mutate(pid_length = str_length(pid)) |> 
-  filter(pid_length != 9)
+  filter(pid_length != 9) |> 
+  View()
 
 ```
+
+There are a few samples from a participant from a different study ("CAP098"):
+
+```{r}
+
+technical_metadata |> 
+  mutate(pid_length = str_length(pid)) |> 
+  filter(pid_length != 9, sample_type == "Clinical sample") |> 
+  select(mg_uid, swab_barcode, pid, mg_pid, mg_visit_code, ext_lib_plate_nb) |> 
+  gt()
+
+```
+
+We modify the `sample_type` of these samples to "Clinical sample (other study)".
+
+```{r}
+
+technical_metadata <- 
+  technical_metadata |> 
+  mutate(
+    sample_type = 
+      ifelse(
+        str_detect(pid, "^98"), 
+        "Clinical sample (other study)", 
+        sample_type |> as.character()
+        ) |> factor()
+    ) 
+
+```
+
+Visit codes are already in the desired format (*i.e.,* a 4 digit character string), so we keep them as is.
+
+```{r}
+
+technical_metadata <-
+  technical_metadata |> 
+  mutate(visit_code = mg_visit_code)
+
+```
+
+
 
 ```{r}
 dictionary <- 
   dictionary |> 
   bind_rows(
     tibble(
-      name = "pid",
-      description = "Harmonized participant ID"
+      name = c("pid", "visit_code"),
+      description = c("Harmonized participant ID", "Harmonized visit code")
     )
   )
 ```
@@ -269,7 +317,7 @@ dictionary <-
 
 samples_sequenced_twice <- 
   technical_metadata |> 
-  group_by(mg_sample_id) |> 
+  group_by(mg_uid) |> 
   summarize(n_rows = n(), library_sequenced_twice = sum(library_sequenced_twice, na.rm = TRUE)) |> 
   arrange(-n_rows)
 
@@ -305,7 +353,7 @@ rm(samples_sequenced_twice)
 
 technical_metadata_agg <- 
     technical_metadata |> 
-    group_by(mg_sample_id) |> 
+    group_by(mg_uid) |> 
     arrange(sequencing_date) |> 
     summarise(
       across(everything(), ~ unique(.) |> na.omit() |> str_c(collapse = "; ")),
@@ -331,7 +379,7 @@ expected_samples <-
   read_csv(
     str_c(
       "/Users/laurasymul/Dropbox/Academia/Projects/VIBRANT Study Files/", 
-      "99_VIBRANT_specimen_collection_CRF_data/CRF35_weekly_specimen_collection.csv"
+      "91_VIBRANT_specimen_collection_CRF_data/CRF35_weekly_specimen_collection.csv"
       )
     )
 
@@ -358,14 +406,14 @@ expected_samples <-
 ```{r}
 
 matched <- 
-  full_join(
+  dplyr::full_join(
     expected_samples |> select(pid, visit_code, in_CRF_35, self_collected_swabs, other_specimen_collected),
     technical_metadata_agg |> 
       select(pid, visit_code, sample_type, control_type, swab_barcode, mg_pid) |> 
       mutate(has_mg_data = TRUE),
     by = join_by(pid, visit_code)
   ) |> 
-  left_join(
+  dplyr::left_join(
     expected_samples |> 
       select(pid, location, randomized) |> 
       distinct() |> 
@@ -394,17 +442,19 @@ matched <-
   mutate(
     category = 
       case_when(
+        sample_type == "Clinical sample (other study)" ~ "Clinical sample from another study",
         sample_type != "Clinical sample" ~ "Not a clinical sample",
         has_mg_data & !pid_in_CRF_35 ~ "Unexpected participant ID",
         has_mg_data & !randomized ~ "Sequenced sample from non-randomized participants",
         has_mg_data & !in_CRF_35 ~ "Sequenced sample not listed in CRF35",
-        !has_mg_data & in_CRF_35 & (self_collected_swabs > 0) ~ "Sample not sequenced",
+        !has_mg_data & in_CRF_35 & (self_collected_swabs > 0) & randomized ~ "Sample from a randomized participant not sequenced",
+        !has_mg_data & in_CRF_35 & (self_collected_swabs > 0) & (!randomized) ~ "Sample from a non-randomized participant not sequenced",
         !has_mg_data & in_CRF_35 & (self_collected_swabs == 0) ~ "No swab collected according to CRF35 (and no MG data)",
         has_mg_data & in_CRF_35 & (self_collected_swabs == 0) ~ "Unexpected sequencing data (no swab collected according to CRF35)",
         has_mg_data & in_CRF_35 ~ "Expected sample",
         TRUE ~ "???"
       )
-  )
+  ) 
 
 ```
 
@@ -412,8 +462,8 @@ matched <-
 
 matched |> 
   mutate(randomized = ifelse(randomized, "Randomized", "Not randomized")) |> 
-  dplyr::count(randomized, category, name = "n samples") |> 
-  arrange(randomized, -`n samples`) |> 
+  dplyr::count(randomized, has_mg_data, category, name = "n samples") |> 
+  arrange(randomized, has_mg_data, -`n samples`) |> 
   dplyr::rename(
     `Sample category` = category,
     `Randomized` = randomized,
@@ -441,7 +491,9 @@ plot_sample_categories <- function(matched){
       "Expected sample" = "steelblue1",
       "No swab collected according to CRF35 (and no MG data)" = "gray80",
       "Not a clinical sample" = "gray60",
-      "Sample not sequenced" = "red",
+      "Clinical sample from another study" = "gray40",
+      "Sample from a randomized participant not sequenced" = "red",
+      "Sample from a non-randomized participant not sequenced" = "red4",
       "Sequenced sample from non-randomized participants" = "steelblue3",
       "Sequenced sample not listed in CRF35" = "orange",
       "Unexpected participant ID" = "purple"
@@ -460,8 +512,8 @@ plot_sample_categories <- function(matched){
 #| fig-height: 5
 
 plot_sample_categories(matched) + ggtitle("Combined rows from the MG manifest and CRF35 data")
-plot_sample_categories(matched |> filter(randomized | category == "Unexpected participant ID")) + 
-  ggtitle("Randomized participants and unexpected participant IDs")
+plot_sample_categories(matched |> filter(randomized)) + 
+  ggtitle('Randomized participants')
 
 ```
 
@@ -469,8 +521,9 @@ plot_sample_categories(matched |> filter(randomized | category == "Unexpected pa
 #| eval: false
 
 matched |> 
-  filter(randomized & (category == "Sample not sequenced")) |> 
-  select(pid, visit_code) |> 
+  filter(randomized & (category == "Sample from a randomized participant not sequenced")) |> 
+  select(pid, visit_code, self_collected_swabs) |> 
+  arrange(-self_collected_swabs) |> 
   gt(caption = "Expected samples (collected swabs according to CRF35) with missing metagenomics data")
 
 ```
@@ -481,12 +534,18 @@ This is likely a `pid` or `visit_code` mistake because that entry is not listed 
 
 ```{r}
 
-matched |> 
-  filter(sample_type == "Clinical sample") |> 
-  group_by(pid, visit_code) |>
-  mutate(n = n()) |> 
-  ungroup() |> 
-  filter(n > 1) |> 
+matched <- 
+  matched |> 
+  mutate(
+    category = 
+      case_when(
+        (sample_type == "Clinical sample") & (n_mg_rows > 1) ~ str_c(category, " (two distinct barcodes for the same participant x visit)"),
+        TRUE ~ category
+      )
+    ) 
+
+matched |>
+  filter((sample_type == "Clinical sample"), n_mg_rows > 1) |> 
   gt()
 
 ```
@@ -518,7 +577,7 @@ We add a column to the manifest data with the sample categories defined above.
 
 technical_metadata_agg <- 
   technical_metadata_agg |> 
-  left_join(
+  dplyr::left_join(
     matched |> select(pid, visit_code, category) |> distinct() |> 
       dplyr::rename(sample_category = category)
   )
@@ -529,6 +588,7 @@ technical_metadata_agg |> dplyr::count(sample_category) |> gt(caption = "Sample 
 ```
 
 ```{r}
+
 dictionary <- 
   dictionary |> 
   bind_rows(
@@ -537,12 +597,31 @@ dictionary <-
       description = "Sample classification based on the data about collected specimen as documented in CRF35."
     )
   )
+
 ```
 
 
 ```{r}
+#| eval: false
 write_csv(
-  matched, 
+  matched |> 
+    dplyr::rename(entry_in_CRF35 = in_CRF_35, mg_sequenced = has_mg_data) |> 
+    select(
+      swab_barcode, sample_type, control_type, 
+      ends_with("pid"), location, randomized, visit_code, 
+      entry_in_CRF35, self_collected_swabs, other_specimen_collected, pid_in_CRF_35,
+      mg_sequenced, n_mg_rows, category
+      ) |> 
+    mutate(
+      needs_review = 
+        (
+          category %in% c(
+            "Sample from a randomized participant not sequenced", 
+            "Sequenced sample not listed in CRF35",
+            "Sequenced sample from non-randomized participants (two distinct barcodes for the same participant x visit)"
+            )
+          )
+      ), 
   file = 
     str_c(
       get_output_dir(data_source = data_source),  
@@ -565,28 +644,17 @@ The unique cross-assay identifier (`uid`) is
 
 technical_metadata_agg <- 
   technical_metadata_agg |> 
-  group_by(pid, visit_code) |> mutate(n = n()) |> ungroup() |> 
-  mutate(
-    expected = 
-      (sample_type != "Clinical sample") |
-      (
-        (sample_category %in% c("Expected sample", "Sequenced sample from unrandomized participants")) & 
-          (n == 1)
-      )
-  ) |>
-  # arrange(pid, visit_code, sample_category, sample_type, swab_barcode) |>
-  # group_by(expected) |> 
-  # mutate(i = row_number() |> as.character() |> str_pad(width = 2, pad = "0")) |> 
-  # ungroup() |>
+  group_by(pid, visit_code) |> mutate(i = row_number()) |> ungroup() |> 
   mutate(
     uid = 
       case_when(
-        (sample_type == "Clinical sample") & expected ~ str_c(pid, "_", visit_code),
+        str_detect(sample_type, "Clinical sample") & (i > 1) ~ str_c(pid, "_", visit_code, "_", i),
+        str_detect(sample_type, "Clinical sample") ~ str_c(pid, "_", visit_code),
         TRUE ~ swab_barcode
       ),
   ) |> 
-  relocate(uid, .before = mg_sample_id) |> 
-  select(-n, -expected)
+  relocate(uid, .before = mg_uid) |> 
+  select(-i)
 
 ```
 
@@ -681,29 +749,29 @@ mg_to_SE <- function(counts, counts_corr, relabs, technical_metadata_agg, dictio
 
   assay_counts <- 
     counts |> 
-    mutate(mg_sample_id = sampleID) |> 
+    mutate(mg_uid = sampleID) |> 
     dplyr::select(-c(sampleID, CST, subCST, score)) |> 
     as.data.frame() |> 
-    column_to_rownames("mg_sample_id") |> 
+    column_to_rownames("mg_uid") |> 
     drop_na() |> 
     t() |> 
     pmax(0)
   
   assay_counts_corr <- 
     counts_corr |> 
-    mutate(mg_sample_id = sampleID) |> 
+    mutate(mg_uid = sampleID) |> 
     dplyr::select(-c(sampleID, CST, subCST, score)) |> 
     as.data.frame() |> 
-    column_to_rownames("mg_sample_id") |>
+    column_to_rownames("mg_uid") |>
     t() |> 
     pmax(0)
   
   assay_relative_ab <- 
     relabs |> 
-    mutate(mg_sample_id = sampleID) |> 
+    mutate(mg_uid = sampleID) |> 
     dplyr::select(-c(sampleID, CST, subCST, score)) |> 
     as.data.frame() |> 
-    column_to_rownames("mg_sample_id") |>
+    column_to_rownames("mg_uid") |>
     t() |> 
     pmax(0)
     
@@ -715,10 +783,10 @@ mg_to_SE <- function(counts, counts_corr, relabs, technical_metadata_agg, dictio
   # and the cst related data
   se_coldata <- 
     technical_metadata_agg |> 
-    left_join(
+    dplyr::left_join(
       counts |> 
-        mutate(mg_sample_id = sampleID) |> 
-        select(mg_sample_id, CST, subCST, score) |>
+        mutate(mg_uid = sampleID) |> 
+        select(mg_uid, CST, subCST, score) |>
         dplyr::rename(
           cst = CST,
           sub_cst = subCST,
@@ -728,9 +796,9 @@ mg_to_SE <- function(counts, counts_corr, relabs, technical_metadata_agg, dictio
           total_non_human_reads = 
             rowSums(counts |> select(-c(sampleID, CST, subCST, score)))
         ), 
-      by = join_by(mg_sample_id)
+      by = join_by(mg_uid)
     ) |> 
-    select(uid, mg_sample_id, sample_type, control_type, total_non_human_reads, cst, sub_cst, valencia_score, everything()) |> 
+    select(uid, mg_uid, sample_type, control_type, total_non_human_reads, cst, sub_cst, valencia_score, everything()) |> 
     arrange(sample_type, uid)
   
   dictionary <- 
@@ -753,7 +821,7 @@ mg_to_SE <- function(counts, counts_corr, relabs, technical_metadata_agg, dictio
         dplyr::select(-c(sampleID, CST, subCST, score)) |>
         colnames()
     ) |> 
-    left_join(
+    dplyr::left_join(
       VIRGO2_taxonomic_table |> 
         mutate(
           taxon_id = Taxa,
@@ -764,7 +832,7 @@ mg_to_SE <- function(counts, counts_corr, relabs, technical_metadata_agg, dictio
         dplyr::rename(taxon_category = Category),
       by = join_by(taxon_id)
     ) |> 
-    left_join(
+    dplyr::left_join(
       LBP_strain_info |> 
         dplyr::rename(taxon_id = strain_id_mg),
       by = join_by(taxon_id)
@@ -790,10 +858,10 @@ mg_to_SE <- function(counts, counts_corr, relabs, technical_metadata_agg, dictio
     
   # Harmonization of the order of samples and feature
   
-  ordered_mg_sample_ids <- se_coldata$mg_sample_id
-  assay_counts <- assay_counts[, ordered_mg_sample_ids] |> set_colnames(se_coldata$uid)
-  assay_counts_corr <- assay_counts_corr[, ordered_mg_sample_ids] |> set_colnames(se_coldata$uid)
-  assay_relative_ab <- assay_relative_ab[, ordered_mg_sample_ids] |> set_colnames(se_coldata$uid)
+  ordered_mg_uids <- se_coldata$mg_uid
+  assay_counts <- assay_counts[, ordered_mg_uids] |> set_colnames(se_coldata$uid)
+  assay_counts_corr <- assay_counts_corr[, ordered_mg_uids] |> set_colnames(se_coldata$uid)
+  assay_relative_ab <- assay_relative_ab[, ordered_mg_uids] |> set_colnames(se_coldata$uid)
   se_coldata <- se_coldata |> set_rownames(se_coldata$uid)
 
   ordered_taxa <- se_rowdata$taxon_id
@@ -1339,7 +1407,7 @@ tmp |>
 vegan::diversity(SE_mg |> assay("rel_abs"), index = "shannon", MARGIN = 2) |> 
   as_tibble() |> 
   mutate(uid = colnames(SE_mg)) |> 
-  left_join(SE_mg |> colData() |> as_tibble(), by = join_by(uid)) |> 
+  dplyr::left_join(SE_mg |> colData() |> as_tibble(), by = join_by(uid)) |> 
   ggplot() +
   aes(x = control_type, y = value |> exp(), col = sample_type, fill = sample_type) +
   facet_grid(. ~ sample_type, scales = "free", space = "free") +
@@ -1446,7 +1514,7 @@ There are `r nrow(number_of_non_zero_LBP_strains_per_sample |> filter(number_of_
 SE_mg |> 
   as_tibble() |>  
   filter(!is.na(LBP)) |> 
-  left_join(
+  dplyr::left_join(
     number_of_non_zero_LBP_strains_per_sample,
     by = join_by(.sample)
   ) |>
@@ -1529,7 +1597,7 @@ summarized_rel_abs |>
   aes(x = .sample, y = rel_abs, fill = taxa) +
   geom_col() +
   scale_x_discrete("Samples", breaks = NULL) +
-  facet_grid(. ~ sample_type + sample_category, scales = "free", space = "free") +
+  facet_grid(. ~ sample_type + str_wrap(sample_category, 50), scales = "free", space = "free") +
   scale_fill_manual(
     "", 
     values = get_taxa_colors(summarized_rel_abs$taxa |> levels()),
@@ -1573,7 +1641,7 @@ summarized_rel_abs |>
 #| fig-height: 8
 
 summarized_rel_abs |> 
-  filter(sample_type == "Clinical sample", sample_category != "Unexpected participant ID") |> # 
+  filter(sample_type == "Clinical sample") |> # 
   ggplot() +
   aes(x = pid, y = rel_abs, fill = taxa) +
   geom_col() +
@@ -1600,12 +1668,12 @@ summarized_rel_abs |>
 #| fig-height: 8
 
 summarized_rel_abs |> 
-  filter(sample_type == "Clinical sample", sample_category == "Expected sample") |> # 
+  filter(sample_type == "Clinical sample", sample_category %in% c("Expected sample")) |> # 
   ggplot() +
   aes(x = pid, y = rel_abs, fill = taxa) +
   geom_col() +
   scale_x_discrete("Participant") + # , breaks = NULL) +
-  facet_grid(visit_code ~ location + sample_category, scales = "free_x", space = "free_x") +
+  facet_grid(visit_code ~ location, scales = "free_x", space = "free_x") +
   scale_fill_manual(
     "", 
     values = get_taxa_colors(summarized_rel_abs$taxa |> levels()),
@@ -1739,7 +1807,7 @@ pcoa_data <-
     uid = rownames(pcoa$points),
     PCoA = pcoa$points
   ) |> 
-  left_join(
+  dplyr::left_join(
     SE_mg |> colData() |> as_tibble(),
     by = join_by(uid)
   )
@@ -1777,7 +1845,7 @@ pcoa_plot <- function(pcoa_tb, pcoa, color_var, axes = 1:2){
 
 ```{r}
 
-sample_type_colors <- c("gray", "dodgerblue", "black", "purple", "red")
+sample_type_colors <- c("gray","gray85", "dodgerblue", "black", "purple", "red")
 
 pcoa_plot(pcoa_data, pcoa, "combined_sample_type", c(1, 2)) + scale_color_manual(values = sample_type_colors) 
 pcoa_plot(pcoa_data, pcoa, "combined_sample_type", c(3, 4)) + scale_color_manual(values = sample_type_colors) 
@@ -1912,7 +1980,7 @@ pcoa_relab_data <-
     uid = rownames(pcoa_relab$points),
     PCoA = pcoa_relab$points
   ) |> 
-  left_join(
+  dplyr::left_join(
     SE_mg |> colData() |> as_tibble(),
     by = join_by(uid)
   )

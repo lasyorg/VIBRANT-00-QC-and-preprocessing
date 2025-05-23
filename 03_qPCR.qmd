@@ -297,7 +297,7 @@ As noted above, in the 16S qPCR, there is one sample that has 6 replicates:
 
 tmp |> 
   filter(n_replicates == 6) |> 
-  left_join(qpcr |> filter(target == "16S"), by = join_by(vibr_sample_id)) |> 
+  dplyr::left_join(qpcr |> filter(target == "16S"), by = join_by(vibr_sample_id)) |> 
   select(vibr_sample_id, ext_lib_plate_nb, ext_lib_position, pcr_plate_id, data_row, well, cq) |> 
   gt()
 
@@ -429,7 +429,7 @@ SE_mg <-
 
 qpcr <- 
   qpcr |> 
-  left_join(
+  dplyr::left_join(
     SE_mg |>
       colData() |> as.data.frame() |> as_tibble() |> 
       select(
@@ -504,7 +504,7 @@ mg_samples <-
     sample_type, control_type, sample_category
   ) |> 
   distinct() |> 
-  left_join(
+  dplyr::left_join(
     qpcr |> 
       select(qpcr_sample_id, qpcr_sample_type) |> 
       distinct() |> 
@@ -571,7 +571,7 @@ We also add the LBP strain information to the qPCR data.
 
 qpcr <- 
   qpcr |> 
-  left_join(
+  dplyr::left_join(
     SE_mg |>
       rowData() |> as.data.frame() |> as_tibble() |> 
       filter(!is.na(LBP)) |> 
@@ -1372,7 +1372,7 @@ qpcr |>
 qpcr <- 
   qpcr |> 
   select(-any_of(c("min_cq_empties","robust_min_cq_empties", "max_cq_std", "threshold_cq"))) |> 
-  left_join(thresholds, by = join_by(ext_lib_plate_nb, strain_group_qpcr, target)) 
+  dplyr::left_join(thresholds, by = join_by(ext_lib_plate_nb, strain_group_qpcr, target)) 
 
 ```
 
