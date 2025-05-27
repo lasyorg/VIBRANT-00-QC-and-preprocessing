@@ -434,7 +434,7 @@ qpcr <-
       colData() |> as.data.frame() |> as_tibble() |> 
       select(
         swab_barcode,
-        uid, mg_sample_id, 
+        uid, mg_uid, 
         mg_pid, pid, visit_code, location,
         sample_type, control_type, sample_category
       ) |> 
@@ -499,7 +499,7 @@ mg_samples <-
   colData() |> as.data.frame() |> as_tibble() |> 
   select(
     swab_barcode,
-    uid, mg_sample_id, 
+    uid, mg_uid, 
     mg_pid, pid, visit_code, 
     sample_type, control_type, sample_category
   ) |> 
@@ -1532,7 +1532,7 @@ When looking at the longitudinal patterns for randomized participants, we do not
 
 ```{r}
 #| fig-width: 10
-#| fig-height: 11
+#| fig-height: 12
 
 qpcr |> 
   filter(
@@ -1540,7 +1540,7 @@ qpcr |>
     sample_category %in% c("Expected sample"),
     visit_code %in% c(seq(1000, 1900, by = 100), 2120)
     ) |>
-  group_by(pid) |> mutate(n_target_detected = sum(copies_per_swab_adj_median > 0)) |> ungroup() |>
+  group_by(pid) |> mutate(n_target_detected = sum(copies_per_swab_adj_median[!is.na(LBP)] > 0)) |> ungroup() |>
   mutate(pid = pid |> fct_reorder(n_target_detected)) |>
   ggplot() +
   aes(x = pid, y = visit_code, fill = ext_lib_plate_nb |> factor(), alpha = copies_per_swab_adj_median |> log10()) +
@@ -1549,7 +1549,7 @@ qpcr |>
   scale_fill_discrete("Extraction plate number") +
   scale_alpha_continuous(limits = c(0, 10)) +
   theme(
-    axis.text.x = element_blank(),
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
     strip.text.y = element_text(angle = 0),
     legend.position = "bottom"
   )
@@ -1831,11 +1831,12 @@ agg_qpcr_SE <- function(SE_qPCR_raw){
     as_tibble() |> 
     group_by(uid, target) |> 
     summarize(
+      n_non_na = sum(!is.na(copies_per_swab)),
       dilution = mean(dilution, na.rm = TRUE),
-      copies_per_swab_med = median(copies_per_swab),
-      copies_per_swab_mean = mean(copies_per_swab),
-      copies_per_swab_sd = sd(copies_per_swab),
-      copies_per_swab_range = max(copies_per_swab) - min(copies_per_swab),
+      copies_per_swab_med = median(copies_per_swab, na.rm = TRUE),
+      copies_per_swab_mean = mean(copies_per_swab, na.rm = TRUE),
+      copies_per_swab_sd = sd(copies_per_swab, na.rm = TRUE),
+      copies_per_swab_range = max(copies_per_swab, na.rm = TRUE) - min(copies_per_swab, na.rm = TRUE),
       .groups = "drop"
     ) |> 
     mutate(
@@ -1863,6 +1864,12 @@ agg_qpcr_SE <- function(SE_qPCR_raw){
     
    SE <- SummarizedExperiment(
      assays = list(
+       n_non_na = 
+         summarized_qpcr |> 
+         pivot_wider(id_cols = target, names_from = uid, values_from = n_non_na) |> 
+         as.data.frame() |> 
+         column_to_rownames("target") |> 
+         as.matrix(),
         dilution = 
          summarized_qpcr |> 
          pivot_wider(id_cols = target, names_from = uid, values_from = dilution) |> 

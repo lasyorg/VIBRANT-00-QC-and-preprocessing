@@ -58,7 +58,9 @@ rm(mae_files)
 ```
 
 
-# Comparing qPCR and metagenomics
+# Cross-assay QC
+
+## Comparing qPCR and metagenomics
 
 
 ```{r}
@@ -124,7 +126,11 @@ tmp |>
 
 > TODO sensitivity-specificity curves for each LBP
 
-# Comparing temporal profiles (for 10 "random" participants)
+## Metagenomics and 16S rRNA amplicon sequencing
+
+> TODO
+
+# Temporal profiles (for 10 "random" participants)
 
 
 ## Weekly profiles
@@ -141,9 +147,11 @@ weekly_samples_from_randomized_participants <-
   dplyr::inner_join(
     mae@colData |> as.data.frame() |> as_tibble() |> 
       filter(randomized) |> 
-      select(uid, pid, visit_code, randomized, group4),
+      select(uid, pid, visit_code, randomized, arm, visit_type),
     by = join_by(uid)
-  )
+  ) |> 
+  filter(visit_type == "Clinic")
+  
 
 mae_sub <- mae[, weekly_samples_from_randomized_participants$uid]
   
@@ -183,7 +191,7 @@ all_samples_from_randomized_participants <-
   dplyr::inner_join(
     mae@colData |> as.data.frame() |> as_tibble() |> 
       filter(randomized) |> 
-      select(uid, pid, visit_code, randomized, group4),
+      select(uid, pid, visit_code, randomized, arm),
     by = join_by(uid)
   )
 
@@ -236,7 +244,183 @@ map(
 
 
 
+# Primary outcomes
 
+
+## Primary outcome definition
+
+The primary outcome is "colonization with any of the *L. crispatus* strains contained in the LBP by 5 weeks of follow-up as assessed by metagenomic sequencing of the vaginal microbial community with detection of any one of LBP strains at >5% relative abundance or a combination of the strains accounting for >10% relative abundance by metagenomics." 
+
+
+## "LBP colonization" *at* each visit
+
+We compute, at each visit and for each participant, the total relative abundance of all LBP strains or the maximum relative abundance of any LBP strain. 
+
+If the total relative abundance of all LBP strains is larger than 0.1 or the maximum relative abundance of any LBP strain is larger than 0.05, we consider that the LBP achieved colonization *at* that visit.
+
+```{r}
+
+colonization <- 
+  mae[["mg"]] |> 
+  as_tibble() |>
+  filter(sample_type == "Clinical sample") |> 
+  filter(!is.na(LBP)) |> 
+  group_by(.sample) |> 
+  summarize(
+    n = n(),
+    total_LBP_rel_ab_at = sum(rel_abs_bact),
+    max_LBP_rel_ab_at = max(rel_abs_bact),
+    n_detected_strains_at = sum(rel_abs_bact > 0),
+    n_detected_LC106_strains_at = sum(rel_abs_bact[LBP == "LC-106 & LC-115"] > 0),
+    n_detected_LC115_only_strains_at = sum(rel_abs_bact[LBP == "LC-115"] > 0)
+  ) |> 
+  mutate(
+    colonized_at = (total_LBP_rel_ab_at > 0.1) | (max_LBP_rel_ab_at > 0.05)
+  ) 
+
+```
+
+```{r}
+
+colonization <-  
+  colonization |> 
+  dplyr::left_join(
+    mae@colData |> as_tibble() |> 
+      select(uid, pid, visit_code, randomized, arm, location) |> 
+      dplyr::rename(.sample = uid), 
+    by = join_by(.sample)
+  ) |> 
+  arrange(pid, visit_code) 
+
+```
+
+
+
+```{r}
+#| fig-height: 10
+#| fig-width: 10
+
+colonization |> 
+  ggplot() +
+  aes(x = visit_code, y = pid, fill = colonized_at) +
+  geom_tile() +
+  facet_grid(
+    randomized + arm ~ ., 
+    scales = "free_y", space = "free_y", labeller = label_both
+    ) +
+  theme(    
+    strip.text.y = element_text(angle = 0)
+  )
+
+
+```
+
+
+## "LBP colonization" *by* each visit
+
+From the colonization status at each visit, we can compute the colonization status *by* each visit.
+
+A participant is considered to have colonized *by* a visit if they have been colonized at that visit or any previous visit, starting from their post-product visit ("1200" for all groups).
+
+Since we have some missing visits, we impute these as "not colonized"
+
+```{r}
+
+colonization <- 
+  colonization |> 
+  select(-c(arm, randomized, location)) |> 
+  dplyr::full_join(
+    colonization |> select(pid, arm, randomized, location) |> distinct() |> 
+      expand_grid(
+        visit_code = unique(colonization$visit_code) |> sort()
+      ),
+    by = join_by(pid, visit_code)
+  )
+
+```
+
+
+```{r}
+#| fig-height: 10
+#| fig-width: 10
+
+colonization |> 
+  ggplot() +
+  aes(x = visit_code, y = pid, fill = colonized_at) +
+  geom_tile() +
+  facet_grid(
+    randomized + arm ~ ., 
+    scales = "free_y", space = "free_y", labeller = label_both
+    ) +
+  theme(
+    strip.text.y = element_text(angle = 0)
+  )
+
+
+```
+
+
+```{r}
+
+colonization <- 
+  colonization |> 
+  arrange(pid, visit_code) |>
+  mutate(colonized_at = colonized_at |> replace_na(FALSE)) |>
+  group_by(pid) |> 
+  mutate(
+    tmp = ifelse(as.numeric(visit_code) < 1200, FALSE, colonized_at),
+    colonized_by = cummax(tmp) |> as.logical()
+  ) |> 
+  ungroup() |> 
+  select(-tmp)
+  
+```
+
+
+```{r}
+#| fig-height: 10
+#| fig-width: 10
+
+colonization |> 
+  ggplot() +
+  aes(x = visit_code, y = pid, fill = colonized_by) +
+  geom_tile() +
+  annotate(
+    geom = "rect", 
+    xmin = 10.5, xmax = 11.5, ymin = -Inf, ymax = Inf,
+    col = "black", alpha = 0, linewidth = 1
+  ) +
+  facet_grid(
+    randomized + arm ~ ., 
+    scales = "free_y", space = "free_y", labeller = label_both
+  ) +
+  theme(
+    strip.text.y = element_text(angle = 0)
+  )
+
+```
+
+## Adding `primary_outcomes` assay to `MAE`
+
+```{r}
+
+se_primary <-
+  SummarizedExperiment(
+    assays = list(
+      outcome = 
+        colonization |> 
+        # filter(!is.na(pid)) |> 
+        # mutate(.sample = str_c(pid, "_", visit_code)) |> 
+        filter(!is.na(.sample)) |> 
+        select(.sample, colonized_at, colonized_by) |> 
+        as.data.frame() |> 
+        column_to_rownames(".sample") |> t()
+      )
+  )
+
+mae <- c(mae, list(primary_outcomes = se_primary))
+
+```
 
 
 # Saving the `MultiAssayExperiment` objects

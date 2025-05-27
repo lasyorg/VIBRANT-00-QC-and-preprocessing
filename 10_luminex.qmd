@@ -53,7 +53,6 @@ VIBRANT_dropbox_dir <-
 luminex_dir <- 
   str_c(VIBRANT_dropbox_dir, "15_VIBRANT Luminex/VMRC VIBRANT LUMINEX Results_ONGOING/Harmonised Batches")
 
-
 luminex_dir |> str_remove(".*Academia/Projects/") |> str_c("/")
 
 ```
@@ -3045,6 +3044,7 @@ selection |>
 We export data both at the "well-level" (`05_se_luminex_raw_<date>.rds`) and at the "participant x visit" level (`05_se_luminex_agg_<date>.rds`).
 
 ```{r}
+#| cache: false
 
 saveRDS(
   raw, 

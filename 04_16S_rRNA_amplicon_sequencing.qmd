@@ -136,7 +136,7 @@ ASV_stats |> ggplot() + aes(x = f_non_zero) + geom_histogram(bins = 30) +
   
 ```
 
-`r (ASV_stats$n_non_zero == 1) |> mean() |> multiply_by(100) |> round(2)`% of ASVs are present (non-zero counts) in only 1 sample.
+`r (ASV_stats$n_non_zero == 1) |> mean() |> magrittr::multiply_by(100) |> round(2)`% of ASVs are present (non-zero counts) in only 1 sample.
 
 
 ```{r}

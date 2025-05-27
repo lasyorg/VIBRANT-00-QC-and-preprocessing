@@ -30,10 +30,35 @@ plot_data_for_pid <- function(selected_pid, mae_sub){
   
   qPCR_ <-
     mae_selected_pid[["qPCR"]] |> 
-    as_tibble() |> 
+    as_tibble()
+  
+  if (any(qPCR_$copies_per_swab_med[!is.na(qPCR_$LBP)] > 0, na.rm = TRUE)) {
+    qPCR_ <- 
+      qPCR_ |> 
+      bind_rows(
+        qPCR_ |> 
+          filter(!is.na(LBP)) |> 
+          group_by(.sample, uid, pid, visit_code, location) |> 
+          summarise(
+            LBP = NA,
+            copies_per_swab_med = sum(copies_per_swab_med, na.rm = TRUE),
+            taxon_label = "LBP (all)",
+            .feature = "LBP all",
+            .groups = "drop"
+          )
+      )
+  }
+                                
+                                
+    
+  
+  qPCR_ <- 
+    qPCR_ |> 
     arrange(LBP, .feature) |>
     mutate(.feature = .feature |> fct_inorder()) |> 
     dplyr::full_join(all_visits, by = join_by(visit_code))
+  
+
   
   g_mg <- 
     mg_ |> 
@@ -73,13 +98,14 @@ plot_data_for_pid <- function(selected_pid, mae_sub){
   
   g_PCR <- 
     qPCR_ |> 
+    mutate(copies_per_swab_med = ifelse(copies_per_swab_med == 0, NA, copies_per_swab_med)) |> 
     ggplot() +
     aes(x = visit_code, y = copies_per_swab_med, fill = taxon_label) +
-    geom_col() +
+    geom_col(position = "dodge") +
     scale_y_log10("Copies per swabs") +
     facet_grid(
-      ifelse(is.na(.feature) | (.feature == "16S"), "16S rRNA", "LBP strains") |> 
-        factor(levels = c("LBP strains", "16S rRNA")) ~ ., 
+      ifelse(is.na(.feature) | (.feature %in% c("16S", "LBP all")), "Total", "LBP strains") |> 
+        factor(levels = c("LBP strains", "Total")) ~ ., 
       scales = "free_y"
       ) +
     scale_fill_manual(

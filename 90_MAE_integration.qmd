@@ -11,7 +11,7 @@ format:
      toc-depth: 5
      embed-resources: true
 execute:
-  cache: true # true refresh false
+  cache: refresh # true refresh false
   warning: false
 knitr:
   opts_chunk:
@@ -45,11 +45,19 @@ theme_set(theme_light())
 
 crf_data_path <- fs::dir_ls(
   "/Users/laurasymul/OneDrive - UCL/Academia/Research/VIBRANT clinical data UCLouvain/Data processed/"
-) |> sort(decreasing = TRUE) |> str_subset("2025-05-20") 
-
+) |> sort(decreasing = TRUE) |> str_subset("2025-05-26") 
 
 ```
 
+## CRF data (raw and QCed)
+
+```{r}
+
+load(str_c(crf_data_path, "/crf_raw.RData"), verbose = TRUE)
+load(str_c(crf_data_path, "/crf_clean.RData"), verbose = TRUE)
+load(str_c(crf_data_path, "/crf_plates_dictionary.RData"), verbose = TRUE)
+
+```
 
 
 ## `Participants` table
@@ -57,11 +65,7 @@ crf_data_path <- fs::dir_ls(
 ```{r}
 
 load(str_c(crf_data_path, "/participants.RData"), verbose = TRUE)
-
-participants <- 
-  participants |> 
-  mutate(randomized = !is.na(treatment_code)) |> 
-  select(pid, randomized, group4, reason_randomisation, reason_termination, reason_replacement, everything())
+load(str_c(crf_data_path, "/participants_variable_dictionary.RData"), verbose = TRUE)
 
 ```
 
@@ -70,29 +74,6 @@ participants <-
 ```{r}
 
 load(str_c(crf_data_path, "/visits.RData"), verbose = TRUE)
-visits_long <- visits
-rm(visits)
-
-```
-
-```{r}
-#| eval: false
-#| fig-width: 25
-
-visits_long |> 
-  ggplot() +
-  aes(x = study_day, y = pid |> factor(), color = crf_name) +
-  geom_point() +
-  facet_grid(. ~ dfseq, scales = "free", space = "free")
-
-```
-
-```{r}
-
-visits <- 
-  visits_long |> 
-  group_by(pid, dfseq) |> 
-  summarize(study_day = median(study_day), .groups = "drop")
 
 ```
 
@@ -102,42 +83,28 @@ visits <-
 #| fig-width: 25
 
 visits |> 
-  filter(study_day > -100) |> 
   ggplot() +
   aes(x = study_day, y = pid |> factor(), color = dfseq |> factor()) +
   geom_point() 
 
 ```
 
-## `population flags` table
+We define the `uid` (unique identifier):
 
-> TODO
-
-
-## `MAE@colData`: merging these tables to create the cross-assay sample and participant information table
 
 ```{r}
 
-mae_coldata_crf <- 
-  participants |> 
+visits <- 
+  visits |> 
   mutate(
-    location = ifelse(str_detect(pid |> as.character(), "^10"), "US", "SA"),
-    pid = str_c("068", pid),
-  ) |> 
-  select(pid, location, randomized, group4, reason_randomisation, reason_termination, reason_replacement) |>
-  dplyr::left_join(
-    visits |> 
-      mutate( pid = str_c("068", pid)) |> 
-      select(pid, dfseq, study_day) |> 
-      mutate(visit_code = dfseq |> str_pad(width = 4, pad = "0")),
-    by = join_by(pid)
-  ) |> 
-  mutate(
-    uid = str_c(pid, "_", visit_code)
+    uid = str_c(pid, visit_code, sep = "_")
   ) |> 
   select(uid, everything())
 
+
 ```
+
+
 
 
 # Assays: loading the `SummarizedExperiment` objects 
@@ -235,7 +202,7 @@ We will assemble the following tables (`SE` objects):
 assay_list |> gt()
 ```
 
-
+> TODO: add the Flow Cytometry data once available
 
 
 ## `mae_coldata_assays` tables
@@ -291,34 +258,35 @@ mae_coldata_assays <-
 ```
 
 
-## `MAE@colData`: joining the `mae_coldata_crf` and `mae_coldata_assays` tables
+## `MAE@colData`: joining the `visits` and `mae_coldata_assays` tables
+
 
 ```{r}
 
 mae_coldata <- 
+  # we first do a full join of the CRF visits and mae_coldata_assays by uids;
   dplyr::full_join(
-    mae_coldata_crf |> select(uid, pid, visit_code, study_day) |> mutate(in_CRF = TRUE),
-    mae_coldata_assays |> mutate(in_assays = TRUE),
+    visits |> select(-starts_with("specimen_collection")) |> mutate(in_CRF = TRUE),
+    mae_coldata_assays |> mutate(in_assays = TRUE) |> select(in_assays, everything()),
     by = join_by(uid)
   ) |> 
   mutate(
     in_CRF = in_CRF |> replace_na(FALSE),
     in_assays = in_assays |> replace_na(FALSE)
-  ) |> 
+  )
+
+# we add the participant-invariant information from the `participants` table
+mae_coldata <- 
+  mae_coldata |> 
   dplyr::left_join(
-    mae_coldata_crf |> 
-      select(
-        pid, location, randomized, group4, 
-        reason_randomisation, reason_termination, reason_replacement
-        ) |> 
-      distinct(),
+    participants,
     by = join_by(pid)
   )
 
 ```
 
 ```{r}
-#| eval: false
+#| eval: true
 
 mae_coldata |> 
   dplyr::count(in_CRF, randomized, in_assays, sample_type, assays) |> 
@@ -326,14 +294,28 @@ mae_coldata |>
 
 ```
 
-## Creating an assay to document visit attendance, specimen collection, and available data
 
-> TODO: add visit attendance, specimen collection
-> will have the following columns:
+```{r}
 
-- `visit_type` (`clinic` or `home`)
-- `visit_planned` (`planned`, `additional`, `not documented in CRFs`)
-- `visit_attendance` (`attended`, `missed`)
+mae_coldata <- 
+  mae_coldata |> 
+  mutate(
+    study_week = 
+      case_when(
+        visit_code %in% c(seq(1000, 1500, by = 100), "1700", "1900", "2120") ~ 
+          visit_code |> str_sub(2,3) |> str_remove("0") |> as.integer(),
+        TRUE ~ NA
+      )
+  ) |> 
+  relocate(study_week, .after = "study_day")
+
+```
+
+
+
+## Creating an assay to document specimen collection, and available data
+
+
 - `specimen_collection_swab` (`collected`, `not collected`, `unclear`)
 - `specimen_collection_softcup` (`collected`, `not collected`, `unclear`)
 - `specimen_collection_cytobrush` (`collected`, `not collected`, `unclear`)
@@ -343,43 +325,103 @@ mae_coldata |>
 - `luminex`
 - `flow`
 
-The last 5 columns can take the following values:
-
-- `expected` (swab collected and available data), 
-- `unexpected` (swab not collected but available data), 
-- `missing` (swab collected but no available data),
-- `maybe missing` (unclear if swab was collected and no available data),
-- `not collected` (swab not collected), 
-- `additional` (swab collected from a non-randomized participant), 
-- `NA` (not collected, no available data)
-
-
-> For now, we'll only have the last 5 columns and they'll be binary (we have data or not)
-
 ```{r}
 
 sample_and_visit_info_assay <- 
   mae_coldata |> 
-  select(uid, in_CRF, in_assays)
+  select(uid, sample_type, in_CRF, in_assays, randomized) 
 
 sample_and_visit_info_assay <- 
   sample_and_visit_info_assay |> 
-  expand_grid(assay = assay_list$mae_assay_name) |> 
+  dplyr::left_join(
+    visits |> select(uid, starts_with("specimen_collection")),
+    by = join_by(uid)
+  ) 
+
+sample_and_visit_info_assay <-
+  sample_and_visit_info_assay |>
+  expand_grid(assay = assay_list$mae_assay_name) |>
   dplyr::left_join(
     available_samples |>
-      select(uid, assay) |> 
+      select(uid, assay) |>
       mutate(value = TRUE),
     by = join_by(uid, assay)
-  ) |> 
-  mutate(value = value |> replace_na(FALSE)) |> 
-  pivot_wider(names_from = assay, values_from = value) 
+  ) |>
+  mutate(value = value |> replace_na(FALSE)) |>
+  pivot_wider(names_from = assay, values_from = value)
+
+# sample_and_visit_info_assay <- 
+#   sample_and_visit_info_assay |> 
+#   mutate(
+#     mg_category = 
+#       case_when(
+#         !str_detect(sample_type, "Clinical sample") & mg ~ "Not a clinical sample",
+#         is.na(randomized) & mg ~ "???",
+#         !is.na(randomized) & !randomized & mg ~ "Additional sample from non-randomized participants",
+#         !is.na(specimen_collection_swab) & (specimen_collection_swab > 0) & mg ~ "Expected data",
+#         (is.na(specimen_collection_swab) | (specimen_collection_swab == 0)) & mg ~ "Unexpected data",
+#         !is.na(specimen_collection_swab) & (specimen_collection_swab > 0) & !mg ~ "Missing data",
+#         (is.na(specimen_collection_swab) | (specimen_collection_swab == 0)) & !mg ~ "Sample not collected",
+#         TRUE ~ "ERROR"
+#       ),
+#     qPCR_category = 
+#       case_when(
+#         !str_detect(sample_type, "Clinical sample") & qPCR ~ "Not a clinical sample",
+#         is.na(randomized) & qPCR ~ "???",
+#         !is.na(randomized) & !randomized & qPCR ~ "Additional sample from non-randomized participants",
+#         !is.na(specimen_collection_swab) & (specimen_collection_swab > 0) & qPCR ~ "Expected data",
+#         (is.na(specimen_collection_swab) | (specimen_collection_swab == 0)) & qPCR ~ "Unexpected data",
+#         !is.na(specimen_collection_swab) & (specimen_collection_swab > 0) & !qPCR ~ "Missing data",
+#         (is.na(specimen_collection_swab) | (specimen_collection_swab == 0)) & !qPCR ~ "Sample not collected",
+#         TRUE ~ "ERROR"
+#       ),
+#     amplicon_category = 
+#       case_when(
+#         !str_detect(sample_type, "Clinical sample") & amplicon ~ "Not a clinical sample",
+#         is.na(randomized) & amplicon ~ "???",
+#         !is.na(randomized) & !randomized & amplicon ~ "Additional sample from non-randomized participants",
+#         !is.na(specimen_collection_swab) & (specimen_collection_swab > 0) & amplicon ~ "Expected data",
+#         (is.na(specimen_collection_swab) | (specimen_collection_swab == 0)) & amplicon ~ "Unexpected data",
+#         !is.na(specimen_collection_swab) & (specimen_collection_swab > 0) & !amplicon ~ "Missing data",
+#         (is.na(specimen_collection_swab) | (specimen_collection_swab == 0)) & !amplicon ~ "Sample not collected",
+#         TRUE ~ "ERROR"
+#       ),
+#     luminex_category = 
+#       case_when(
+#         !str_detect(sample_type, "Clinical sample") & luminex ~ "Not a clinical sample",
+#         is.na(randomized) & luminex ~ "???",
+#         !is.na(randomized) & !randomized & luminex ~ "Additional sample from non-randomized participants",
+#         !is.na(specimen_collection_softcup) & (specimen_collection_softcup != "not collected") & luminex ~ "Expected data",
+#         (is.na(specimen_collection_softcup) | (specimen_collection_softcup == "not collected")) & luminex ~ "Unexpected data",
+#         !is.na(specimen_collection_softcup) & (specimen_collection_softcup == "collected") & !luminex ~ "Missing data",
+#         (is.na(specimen_collection_softcup) | (specimen_collection_softcup == "not collected")) & !luminex ~ "Sample not collected",
+#         TRUE ~ "ERROR"
+#       )
+#   )
+
+# 
+# The last 5 columns can take the following values:
+# 
+# - `expected` (swab collected and available data), 
+# - `unexpected` (swab not collected but available data), 
+# - `missing` (swab collected but no available data),
+# - `maybe missing` (unclear if swab was collected and no available data),
+# - `not collected` (swab not collected), 
+# - `additional` (swab collected from a non-randomized participant), 
+# - `NA` (not collected, no available data)
+# 
+
+
+```
+
+```{r}
 
 se_sample_and_visit_info_assay <- 
   SummarizedExperiment(
     assays = list(
       sample_and_visit_info = 
         sample_and_visit_info_assay |> 
-        select(-in_assays) |> 
+        select(-c(sample_type, in_CRF, in_assays, randomized)) |> 
         as.data.frame() |> 
         column_to_rownames("uid") |> 
         t()
@@ -389,8 +431,8 @@ se_sample_and_visit_info_assay <-
       mutate(rownames = uid) |> as.data.frame() |> 
       column_to_rownames("rownames")
   )
-
 ```
+
 
 
 
@@ -418,7 +460,13 @@ mae <-
       column_to_rownames("rownames"),
     metadata = list(
       study = "VIBRANT",
-      MAE_creation_date = today()
+      data_source = "actual study data (not simulated)",
+      data_status = "partially QCed",
+      date = today(),
+      colData_dictionary = participants_variable_dictionary,
+      crf_plates_description = crf_plates_dictionary,
+      crf_data_raw = crf_raw,
+      crf_data_clean = crf_clean
     )
   )
 
@@ -443,7 +491,7 @@ mae_sample_map <-
   dplyr::left_join(assay_list |> dplyr::rename(assay = mae_assay_name), by = join_by(assay)) |> 
   dplyr::right_join(
     mae@colData |> as.data.frame() |> as_tibble() |> 
-      select(uid, pid, visit_code, sample_type, location, randomized, group4), 
+      select(uid, pid, visit_code, visit_type, sample_type, location, randomized, arm), 
     by = join_by(uid)
     )
 
@@ -508,15 +556,12 @@ For the weekly visits
 
 mae_sample_map |> 
   filter(!is.na(assay)) |> 
-  filter(visit_code %in% c("0000", seq(1000, 1900, by = 100), "2120")) |> 
+  filter(visit_type == "Clinic") |> 
   ggplot() +
   aes(x = assay_label, y = pid, fill = assay_label) +
   geom_tile() +
   facet_grid(
-    location + 
-      ifelse(randomized, "Randomized", "Not randomized") + 
-      ifelse(group4 == "Yes", "Overlap", "Other arm") ~ 
-      visit_code, 
+    location + ifelse(randomized, "Randomized", "Not randomized")  + arm  ~ visit_code, 
     scales = "free_y", space = "free_y"
     ) + # sample_category
   scale_y_discrete("Participants IDs") + #, breaks = "NULL")  +
@@ -530,6 +575,8 @@ mae_sample_map |>
     )
 
 ```
+
+> There is one US participant with the termination `visit_code` for their 16S data, but it should be changed to `1700`.
 
 
 # Subsetting and saving the `MultiAssayExperiment` objects
