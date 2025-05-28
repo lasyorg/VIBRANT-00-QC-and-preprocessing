@@ -215,6 +215,21 @@ map(
   plot_data_for_pid,
   mae_sub = mae_sub
 )
+
+
+```
+
+
+
+```{r}
+#| fig-width: 15
+#| fig-height: 8
+
+
+  plot_data_for_pid(selected_pid = "068200465", mae_sub = mae_sub)
+  
+
+
 ```
 
 
