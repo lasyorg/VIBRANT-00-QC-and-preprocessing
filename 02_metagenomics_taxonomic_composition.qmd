@@ -45,16 +45,17 @@ theme_set(theme_light())
 
 ```{r}
 
-data_source <- "real"
-data_dir <- get_data_dir(data_source)
-mg_dir <- str_c(data_dir, "00 Raw/02 Metagenomics/")
+data_dir <- get_data_dir()
+mg_dir <- str_c(data_dir, "02 Metagenomics/")
 
 counts <- read_csv(str_c(mg_dir, "MVIBR_kSanityVIRGO2_ReadCounts_20250611.csv"))
 counts_corr <- read_csv(str_c(mg_dir, "MVIBR_kSanityVirgo2_GLcorr_20250611.csv"))
 relabs <- read_csv(str_c(mg_dir, "MVIBR_kSanityVirgo2_relAbund_20250611.csv"))
 technical_metadata <- read_csv(str_c(mg_dir, "VIBRANT_MG_technicalMetaData_20250611.csv"), guess_max = Inf)
-LBP_strain_info <- readxl::read_xlsx(str_c(data_dir, "00 Raw/00 Trial Data/IsolateNumbers.xlsx"))
 VIRGO2_taxonomic_table <- read_csv(str_c(mg_dir, "VIRGO2_taxonomy_key_250429.csv"))
+
+LBP_strain_info <- readxl::read_xlsx(str_c(data_dir, "00 Trial Data/IsolateNumbers.xlsx"))
+
 
 ```
 
@@ -480,42 +481,48 @@ technical_metadata_agg <-
 
 We now match the technical metadata with the expected list of samples from CRF35 (Specimen collection).
 
-
 ```{r}
 
-expected_samples <- 
-  read_csv(
-    str_c(
-      "/Users/laurasymul/Dropbox/Academia/Projects/VIBRANT Study Files/", 
-      "91_VIBRANT_specimen_collection_CRF_data/CRF35_weekly_specimen_collection.csv"
-      )
-    )
+crf_files <- 
+  get_01_output_dir() |> 
+  fs::dir_ls() |> 
+  str_subset("/01_")
 
+visits_file <- 
+  crf_files |> 
+  str_subset("01_visits_2025") |> 
+  sort(decreasing = TRUE) |> 
+  extract(1)
+
+load(visits_file, verbose = TRUE)
+
+participants_file <- 
+  crf_files |> 
+  str_subset("01_participants_2025") |> 
+  sort(decreasing = TRUE) |> 
+  extract(1)
+
+load(participants_file, verbose = TRUE)
+
+crf_file <- 
+  crf_files |> 
+  str_subset("01_crf_clean_") |> 
+  sort(decreasing = TRUE) |>
+  extract(1)
+
+load(crf_file, verbose = TRUE)
 ```
 
-```{r}
 
-expected_samples <- 
-  expected_samples |> 
-  mutate(
-    in_CRF_35 = TRUE,
-    visit_code = visit_code |> as.character() |> str_pad(width = 4, pad = "0", side = "left"), 
-    pid = str_c("068", pid |> as.character()),
-    other_specimen_collected = 
-      case_when(
-        (softcup == "Checked") | (endocervical_cytobrush == "Checked") ~ TRUE,
-        TRUE ~ FALSE
-      )
-  ) 
-
-```
 
 
 ```{r}
 
 matched <- 
   dplyr::full_join(
-    expected_samples |> select(pid, visit_code, in_CRF_35, self_collected_swabs, other_specimen_collected),
+    visits |> 
+      select(pid, visit_code, specimen_collection_swab) |> 
+      mutate(in_CRF = TRUE),
     technical_metadata_agg |> 
       select(pid, visit_code, sample_type, control_type, swab_barcode, mg_pid, no_mg_data) |> 
       mutate(
@@ -525,19 +532,19 @@ matched <-
     by = join_by(pid, visit_code)
   ) |> 
   dplyr::left_join(
-    expected_samples |> 
-      select(pid, location, randomized) |> 
+    participants |> 
+      select(pid, site, randomized) |> 
       distinct() |> 
-      mutate(pid_in_CRF_35 = TRUE),
+      mutate(pid_in_CRF = TRUE),
     by = join_by(pid)
   ) |> 
   mutate(
     randomized = randomized |> replace_na(FALSE),
-    in_CRF_35 = in_CRF_35 |> replace_na(FALSE),
+    in_CRF = in_CRF |> replace_na(FALSE),
     in_mg_manifest = in_mg_manifest |> replace_na(FALSE),
     has_mg_data = has_mg_data |> replace_na(FALSE) ,
-    pid_in_CRF_35 = pid_in_CRF_35 |> replace_na(FALSE),
-    self_collected_swabs = self_collected_swabs |> replace_na(0)
+    pid_in_CRF = pid_in_CRF |> replace_na(FALSE),
+    specimen_collection_swab = specimen_collection_swab |> replace_na(0)
   )
 
 ```
@@ -556,16 +563,16 @@ matched <-
       case_when(
         sample_type == "Clinical sample (other study)" ~ "Clinical sample from another study",
         sample_type != "Clinical sample" ~ "Not a clinical sample",
-        has_mg_data & !pid_in_CRF_35 ~ "Unexpected participant ID",
+        has_mg_data & !pid_in_CRF ~ "Unexpected participant ID",
         has_mg_data & !randomized ~ "Sequenced sample from non-randomized participants",
-        has_mg_data & !in_CRF_35 ~ "Sequenced sample not listed in CRF35",
-        !in_mg_manifest & in_CRF_35 & (self_collected_swabs > 0) & randomized ~ "Sample from a randomized participant not in mg manifest",
-        !has_mg_data & in_CRF_35 & (self_collected_swabs > 0) & randomized ~ "Sample from a randomized participant not sequenced",
-        !in_mg_manifest & in_CRF_35 & (self_collected_swabs > 0) & (!randomized) ~ "Sample from a non-randomized participant not in mg manifest",
-        !has_mg_data & in_CRF_35 & (self_collected_swabs > 0) & (!randomized) ~ "Sample from a non-randomized participant not sequenced",
-        !has_mg_data & in_CRF_35 & (self_collected_swabs == 0) ~ "No swab collected according to CRF35 (and no MG data)",
-        has_mg_data & in_CRF_35 & (self_collected_swabs == 0) ~ "Unexpected sequencing data (no swab collected according to CRF35)",
-        has_mg_data & in_CRF_35 ~ "Expected sample",
+        has_mg_data & !in_CRF ~ "Sequenced sample not listed in CRF35",
+        !in_mg_manifest & in_CRF & (specimen_collection_swab > 0) & randomized ~ "Sample from a randomized participant not in mg manifest",
+        !has_mg_data & in_CRF & (specimen_collection_swab > 0) & randomized ~ "Sample from a randomized participant not sequenced",
+        !in_mg_manifest & in_CRF & (specimen_collection_swab > 0) & (!randomized) ~ "Sample from a non-randomized participant not in mg manifest",
+        !has_mg_data & in_CRF & (specimen_collection_swab > 0) & (!randomized) ~ "Sample from a non-randomized participant not sequenced",
+        !has_mg_data & in_CRF & (specimen_collection_swab == 0) ~ "No swab collected according to CRF35 (and no MG data)",
+        has_mg_data & in_CRF & (specimen_collection_swab == 0) ~ "Unexpected sequencing data (no swab collected according to CRF35)",
+        has_mg_data & in_CRF ~ "Expected sample",
         TRUE ~ "???"
       )
   ) 
@@ -597,10 +604,13 @@ plot_sample_categories <- function(matched){
       pid = pid |> fct_infreq(), 
       randomized = ifelse(randomized, "Randomized", "Not randomized") |> factor() |> fct_rev()
     ) |> 
+    filter(
+      has_mg_data | (specimen_collection_swab > 0)
+    ) |> 
     ggplot() +
     aes(x = pid, y = visit_code, fill = category) +
     geom_tile() +
-    facet_grid(. ~ location + randomized, scales = "free", space = "free") +
+    facet_grid(. ~ site + randomized, scales = "free", space = "free") +
     scale_fill_manual(values = c(
       "Expected sample" = "steelblue1",
       "No swab collected according to CRF35 (and no MG data)" = "gray80",
@@ -611,7 +621,8 @@ plot_sample_categories <- function(matched){
       "Sample from a non-randomized participant not sequenced" = "red4",
       "Sample from a non-randomized participant not in mg manifest" = "black",
       "Sequenced sample from non-randomized participants" = "steelblue3",
-      "Sequenced sample not listed in CRF35" = "orange",
+      "Sequenced sample not listed in CRF35" = "orange2",
+      "Unexpected sequencing data (no swab collected according to CRF35)" = "orange1",
       "Unexpected participant ID" = "purple"
     )) +
     theme(
@@ -638,8 +649,8 @@ plot_sample_categories(matched |> dplyr::filter(randomized)) +
 
 matched |> 
   dplyr::filter(randomized & (category == "Sample from a randomized participant not sequenced")) |> 
-  select(pid, visit_code, self_collected_swabs) |> 
-  arrange(-self_collected_swabs) |> 
+  select(pid, visit_code, specimen_collection_swab) |> 
+  arrange(-specimen_collection_swab) |> 
   gt(caption = "Expected samples (collected swabs according to CRF35) with missing metagenomics data")
 
 ```
@@ -677,7 +688,7 @@ There are also two samples that were not listed in CRF35 but have been sequenced
 ```{r}
 
 matched |> 
-  dplyr::filter(category == "Sequenced sample not listed in CRF35") |> 
+  dplyr::filter(category == "Unexpected sequencing data (no swab collected according to CRF35)") |> 
   gt()
 
 ```
@@ -714,35 +725,6 @@ dictionary <-
 
 ```
 
-
-```{r}
-#| eval: false
-write_csv(
-  matched |> 
-    dplyr::rename(entry_in_CRF35 = in_CRF_35, mg_sequenced = has_mg_data) |> 
-    select(
-      swab_barcode, sample_type, control_type, 
-      ends_with("pid"), location, randomized, visit_code, 
-      entry_in_CRF35, self_collected_swabs, other_specimen_collected, pid_in_CRF_35,
-      mg_sequenced, n_mg_rows, category
-      ) |> 
-    mutate(
-      needs_review = 
-        (
-          category %in% c(
-            "Sample from a randomized participant not sequenced", 
-            "Sequenced sample not listed in CRF35",
-            "Sequenced sample from non-randomized participants (two distinct barcodes for the same participant x visit)"
-            )
-          )
-      ), 
-  file = 
-    str_c(
-      get_output_dir(data_source = data_source),  
-      "02_mg_and_clin_data_match_", today() |> str_remove_all("-"), ".csv"
-    )
-)
-```
 
 
 
@@ -2479,7 +2461,7 @@ We save the `SE` objects to disk
 saveRDS(
   SE_mg, 
   str_c(
-    get_output_dir(data_source = data_source),  
+    get_01_output_dir(),  
     "02_se_mg_", today() |> str_remove_all("-"), ".rds"
     )
   )
@@ -2494,7 +2476,7 @@ We also save the `technical_metadata_agg` object to disk so we can re-use it for
 saveRDS(
   technical_metadata_agg, 
   str_c(
-    get_output_dir(data_source = data_source),  
+    get_01_output_dir(),  
     "02_technical_metadata_agg_", today() |> str_remove_all("-"), ".rds"
     )
   )

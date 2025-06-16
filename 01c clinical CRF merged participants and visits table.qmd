@@ -1,5 +1,5 @@
 ---
-title: "VIBRANT clinical data"
+title: "VIBRANT clinical data - merging CRFs data into wide tables"
 author: Laura Vermeren, Lara Wautier, Céline Bugli, Laura Symul
 date: today
 format: 
@@ -10,7 +10,7 @@ format:
     theme: journal
     embed-resources: true
 execute:
-  cache: false
+  cache: refresh # refresh true false
 project:
   execute-dir: project
 editor: 
@@ -25,6 +25,7 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 ```{r}
 #| warning: false
 #| include: false
+#| cache: false
 
 library(tidyverse)
 library(gt)
@@ -48,7 +49,7 @@ The purpose of this document is to create
 
 ```{r}
 
-data_dir <- get_data_dir() |> str_c("01 Preprocessed and QCed/")
+data_dir <- get_01_output_dir()
 
 crf_clean_file <- data_dir |> fs::dir_ls() |> str_subset("01_crf_clean") |> sort(decreasing = TRUE) |> magrittr::extract(1)
 load(crf_clean_file, verbose = TRUE)
@@ -89,12 +90,13 @@ process_crf_duplicates <- function(crf_clean, participants_crf_name) {
     crf_clean[names(crf_clean) %in% participants_crf_name]
   
   for (crf_name in participants_crf_name) {
+    cat(crf_name, "\n")
     data <- crf_clean[[crf_name]]
     
     dup_pid <- 
       data |> 
-      count(pid) |> 
-      filter(n > 1) |> 
+      dplyr::count(pid) |> 
+      dplyr::filter(n > 1) |> 
       pull(pid)
     
     if(!("study_day" %in% names(data))) {
@@ -138,8 +140,8 @@ for (crf_name in participants_crf_name) {
   
   dup_pid <- 
     data |> 
-    count(pid) |> 
-    filter(n > 1) |> 
+    dplyr::count(pid) |> 
+    dplyr::filter(n > 1) |> 
     pull(pid)
   
   if (length(dup_pid) > 0) {
@@ -162,8 +164,8 @@ participants_crf[["crf1"]] <-
   mutate(site = "MGH")
 
 pid_temp <- participants_crf[["crf1"]] |> 
-  count(pid) |> 
-  filter(n > 1) |> 
+  dplyr::count(pid) |> 
+  dplyr::filter(n > 1) |> 
   pull(pid)
 
 participants_crf[["crf1"]] |> 
@@ -193,12 +195,12 @@ Note : participant 200156 is the only one not to have the shortest value of inco
 # crf101
 
 pid_temp <- participants_crf[["crf101"]] |> 
-  count(pid) |> 
-  filter(n > 1) |> 
+  dplyr::count(pid) |> 
+  dplyr::filter(n > 1) |> 
   pull(pid)
 
 participants_crf[["crf101"]] |> 
-  filter(pid %in% pid_temp)
+  dplyr::filter(pid %in% pid_temp)
 #30 participants with double pid
 
 education_levels <- c("Primary school", "Secondary school", "Tertiary education")
@@ -213,7 +215,7 @@ participants_crf[["crf101"]] <-
   ) |> 
   group_by(pid) |>
   summarise(
-    across(-c(edu, income_sources), ~ first(.x)),
+    across(-c(edu, income_sources), ~ dplyr::first(.x)),
     edu = edu[which.max(match(edu, education_levels))],
 
     income_sources = income_sources[which.max(str_count(income_sources, ",") + 1)],
@@ -244,17 +246,17 @@ We check the number of participants with duplicated pid values in the crf1_101 t
 ```{r}
 
 pid_temp <- participants_crf[["crf1_101"]] |> 
-  count(pid) |> 
-  filter(n > 1) |> 
+  dplyr::count(pid) |> 
+  dplyr::filter(n > 1) |> 
   pull(pid)
 
 participants_crf[["crf1_101"]] |> 
-  filter(pid %in% pid_temp) |> 
+  dplyr::filter(pid %in% pid_temp) |> 
   arrange(pid)
 
 participants_crf[["crf1_101"]] <-
   participants_crf[["crf1_101"]] |>
-  filter(if_any(-c(pid, dfseq, site), ~ !is.na(.))) 
+  dplyr::filter(if_any(-c(pid, dfseq, site, study_day), ~ !is.na(.))) 
 
 #remove crf1 and 101 from the participant_crf
 participants_crf[["crf1"]] <- NULL
@@ -271,12 +273,12 @@ For double entries, if a participant ever reported to worry for any the "worry" 
 # crf2 
 
 pid_temp <- participants_crf[["crf2"]] |> 
-  count(pid) |> 
-  filter(n > 1) |> 
+  dplyr::count(pid) |> 
+  dplyr::filter(n > 1) |> 
   pull(pid)
 
 participants_crf[["crf2"]] |> 
-  filter(pid %in% pid_temp)
+  dplyr::filter(pid %in% pid_temp)
 # 6 participants with double pid
 
 # if worry was "checked" and "uncheked" keep the worry "checked" 
@@ -287,7 +289,7 @@ participants_crf[["crf2"]] <-
   participants_crf[["crf2"]] |>
   group_by(pid) |>
   summarise(
-    across(all_of(other_cols), ~ first(.x)),
+    across(all_of(other_cols), ~ dplyr::first(.x)),
     across(all_of(worry_cols), ~ if ("Checked" %in% .x) "Checked" else "Unchecked"),
     .groups = "drop"
   ) 
@@ -307,12 +309,12 @@ We decide to keep the most recent visit.
 #crf102
 
 pid_temp <- participants_crf[["crf102"]] |> 
-  count(pid) |> 
-  filter(n > 1) |> 
+  dplyr::count(pid) |> 
+  dplyr::filter(n > 1) |> 
   pull(pid)
 
 participants_crf[["crf102"]] |> 
-  filter(pid %in% pid_temp) |> 
+  dplyr::filter(pid %in% pid_temp) |> 
   group_by(pid) |>
   gt(row_group_as_column = TRUE)
 
@@ -343,27 +345,27 @@ We check the number of participants with duplicated pid values in the crf2_102 t
 ```{r}
 
 pid_temp <- participants_crf[["crf2_102"]] |> 
-  count(pid) |> 
-  filter(n > 1) |> 
+  dplyr::count(pid) |> 
+  dplyr::filter(n > 1) |> 
   pull(pid)
 
 participants_crf[["crf2_102"]] |>
-  filter(pid %in% pid_temp) |> 
+  dplyr::filter(pid %in% pid_temp) |> 
   arrange(pid) #|> 
   #View()
 
 participants_crf[["crf2_102"]] <-
   participants_crf[["crf2_102"]] |>
-  filter(if_any(-c(pid, dfseq), ~ !is.na(.))) 
+  dplyr::filter(if_any(-c(pid, dfseq), ~ !is.na(.))) 
 
 crf_temp <- 
   participants_crf[["crf2_102"]] |>
-  filter(pid %in% pid_temp) |>
-  filter(!is.na(monthly_gross_income))
+  dplyr::filter(pid %in% pid_temp) |>
+  dplyr::filter(!is.na(monthly_gross_income))
 
 participants_crf[["crf2_102"]] <-
   participants_crf[["crf2_102"]] |>
-  filter(!(pid %in% crf_temp$pid)) |> 
+  dplyr::filter(!(pid %in% crf_temp$pid)) |> 
   bind_rows(crf_temp)
 
 rm(pid_temp, crf_temp)
@@ -383,13 +385,13 @@ We keep the values of the most recent visit.
 # crf6
 
 pid_temp <- participants_crf[["crf6"]] |> 
-  count(pid) |> 
-  filter(n > 1) |> 
+  dplyr::count(pid) |> 
+  dplyr::filter(n > 1) |> 
   pull(pid)
 pid_temp
 
 participants_crf[["crf6"]] |> 
-  filter(pid %in% pid_temp)
+  dplyr::filter(pid %in% pid_temp)
 #78 participants with double pid
 
 participants_crf[["crf6"]] <- 
@@ -398,7 +400,7 @@ participants_crf[["crf6"]] <-
   arrange(-study_day) |> 
   slice_head(n = 1) |> 
   ungroup() |> 
-  rename(
+  dplyr::rename(
     age_at_consent = age
   )
 
@@ -415,12 +417,12 @@ We keep the values of the most recent visit.
 # crf7
 
 pid_temp <- participants_crf[["crf7"]] |> 
-  count(pid) |> 
-  filter(n > 1) |> 
+  dplyr::count(pid) |> 
+  dplyr::filter(n > 1) |> 
   pull(pid)
 
 participants_crf[["crf7"]] |>
-  filter(pid %in% pid_temp)
+  dplyr::filter(pid %in% pid_temp)
 
 participants_crf[["crf7"]] <-
   participants_crf[["crf7"]] |>
@@ -441,13 +443,13 @@ We keep the values of the most recent visit.
 ```{r}
 
 pid_temp <- participants_crf[["crf8"]] |> 
-  count(pid) |> 
-  filter(n > 1) |> 
+  dplyr::count(pid) |> 
+  dplyr::filter(n > 1) |> 
   pull(pid)
 pid_temp
 
 participants_crf[["crf8"]] |> 
-  filter(pid %in% pid_temp) |> 
+  dplyr::filter(pid %in% pid_temp) |> 
   group_by(pid) |>
   gt(row_group_as_column = TRUE)
 
@@ -472,14 +474,14 @@ Only one participant is duplicated. We decide to keep the most recent observatio
 
 pid_temp <- 
   participants_crf[["crf9"]] |> 
-  count(pid) |> 
-  filter(n > 1) |> 
+  dplyr::count(pid) |> 
+  dplyr::filter(n > 1) |> 
   pull(pid)
 
 pid_temp
 
 participants_crf[["crf9"]] |> 
-  filter(pid %in% pid_temp)
+  dplyr::filter(pid %in% pid_temp)
 
 participants_crf[["crf9"]] <- 
   participants_crf[["crf9"]] |>
@@ -501,13 +503,13 @@ We keep the most recent visit.
 
 pid_temp <- 
   participants_crf[["crf10"]] |> 
-  count(pid) |> 
-  filter(n > 1) |> 
+  dplyr::count(pid) |> 
+  dplyr::filter(n > 1) |> 
   pull(pid)
 pid_temp
 
 participants_crf[["crf10"]] |> 
-  filter(pid %in% pid_temp) |> 
+  dplyr::filter(pid %in% pid_temp) |> 
   group_by(pid) |>
   gt(row_group_as_column = TRUE)
 
@@ -530,13 +532,13 @@ We keep the most recent visit.
 ```{r}
 
 pid_temp <- participants_crf[["crf11"]] |> 
-  count(pid) |> 
-  filter(n > 1) |> 
+  dplyr::count(pid) |> 
+  dplyr::filter(n > 1) |> 
   pull(pid)
 pid_temp
 
 participants_crf[["crf11"]] |> 
-  filter(pid %in% pid_temp)
+  dplyr::filter(pid %in% pid_temp)
 
 participants_crf[["crf11"]] <-
   participants_crf[["crf11"]] |>
@@ -558,13 +560,13 @@ We keep the most recent visit.
 ```{r}
 
 pid_temp <- participants_crf[["crf12"]] |> 
-  count(pid) |> 
-  filter(n > 1) |> 
+  dplyr::count(pid) |> 
+  dplyr::filter(n > 1) |> 
   pull(pid)
 pid_temp
 
 participants_crf[["crf12"]] |> 
-  filter(pid %in% pid_temp)
+  dplyr::filter(pid %in% pid_temp)
 
 participants_crf[["crf12"]] <- 
   participants_crf[["crf12"]] |>
@@ -587,13 +589,13 @@ Only one participant is duplicated. We combine the response for the two variable
 ```{r}
 
 pid_temp <- participants_crf[["crf15"]] |> 
-  count(pid) |> 
-  filter(n > 1) |> 
+  dplyr::count(pid) |> 
+  dplyr::filter(n > 1) |> 
   pull(pid)
 pid_temp
 
 participants_crf[["crf15"]] |> 
-  filter(pid %in% pid_temp)
+  dplyr::filter(pid %in% pid_temp)
 
 participants_crf[["crf15"]] <-
   participants_crf[["crf15"]] |> 
@@ -630,13 +632,13 @@ We rename the variable `prescription_container` to `prescription_container_metro
 ```{r}
 
 pid_temp <- participants_crf[["crf22"]] |> 
-  count(pid) |> 
-  filter(n > 1) |> 
+  dplyr::count(pid) |> 
+  dplyr::filter(n > 1) |> 
   pull(pid)
 pid_temp
 
 participants_crf[["crf22"]] |> 
-  filter(pid %in% pid_temp)
+  dplyr::filter(pid %in% pid_temp)
 
 participants_crf[["crf22"]] <-
   participants_crf[["crf22"]] |>
@@ -644,7 +646,7 @@ participants_crf[["crf22"]] <-
   arrange(-study_day) |>
   slice_head(n = 1) |>
   ungroup() |> 
-  rename(
+  dplyr::rename(
     prescription_container_metronidazole = prescription_container, 
     tablets_remain_metronidazole = tablets_remain,
     #comments_metronidazole = comments
@@ -663,13 +665,13 @@ So we keep the second observation for these participants.
 ```{r}
 
 pid_temp <- participants_crf[["crf23"]] |> 
-  count(pid) |> 
-  filter(n > 1) |> 
+  dplyr::count(pid) |> 
+  dplyr::filter(n > 1) |> 
   pull(pid)
 pid_temp
 
 participants_crf[["crf23"]] |> 
-  filter(pid %in% pid_temp)
+  dplyr::filter(pid %in% pid_temp)
 
 participants_crf[["crf23"]] <-
   participants_crf[["crf23"]] |>
@@ -677,7 +679,7 @@ participants_crf[["crf23"]] <-
   arrange(-study_day) |>
   slice_head(n = 1) |>
   ungroup() |> 
-  rename(
+  dplyr::rename(
     prescription_container_study_product = prescription_container, 
     tablets_remain_study_product = tablets_remain,
     #comments_study_product = comments
@@ -694,13 +696,13 @@ We keep the most recent visit.
 ```{r}
 
 pid_temp <- participants_crf[["crf24"]] |> 
-  count(pid) |> 
-  filter(n > 1) |> 
+  dplyr::count(pid) |> 
+  dplyr::filter(n > 1) |> 
   pull(pid)
 pid_temp
 
 participants_crf[["crf24"]] |> 
-  filter(pid %in% pid_temp)
+  dplyr::filter(pid %in% pid_temp)
 
 participants_crf[["crf24"]] <-
   participants_crf[["crf24"]] |>
@@ -719,12 +721,12 @@ We keep the most recent visit.
 ```{r}
 
 pid_temp <- participants_crf[["crf25"]] |> 
-  count(pid) |> 
-  filter(n > 1) |> 
+  dplyr::count(pid) |> 
+  dplyr::filter(n > 1) |> 
   pull(pid)
 
 participants_crf[["crf25"]] |>
-  filter(pid %in% pid_temp)
+  dplyr::filter(pid %in% pid_temp)
 
 participants_crf[["crf25"]] <-
   participants_crf[["crf25"]] |>
@@ -743,13 +745,13 @@ We keep the most recent visit.
 ```{r}
 
 pid_temp <- participants_crf[["crf28"]] |> 
-  count(pid) |> 
-  filter(n > 1) |> 
+  dplyr::count(pid) |> 
+  dplyr::filter(n > 1) |> 
   pull(pid)
 pid_temp
 
 participants_crf[["crf28"]] |> 
-  filter(pid %in% pid_temp)
+  dplyr::filter(pid %in% pid_temp)
 
 participants_crf[["crf28"]] <-
   participants_crf[["crf28"]] |>
@@ -768,12 +770,12 @@ We keep the first observation for these participants since the second observatio
 ```{r}
 
 pid_temp <- participants_crf[["crf46"]] |> 
-  count(pid) |> 
-  filter(n > 1) |> 
+  dplyr::count(pid) |> 
+  dplyr::filter(n > 1) |> 
   pull(pid)
 
 participants_crf[["crf46"]] |>
-  filter(pid %in% pid_temp)
+  dplyr::filter(pid %in% pid_temp)
 
 participants_crf[["crf46"]] <-
   participants_crf[["crf46"]] |>
@@ -802,9 +804,10 @@ table_p <- map_df(
       return(tibble(crf = participants_crf_name, n_multi_pid = NA_integer_))
     }
 
-    n <- df |> 
-      count(pid) |> 
-      filter(n > 1) |> 
+    n <- 
+      df |> 
+      dplyr::count(pid) |> 
+      dplyr::filter(n > 1) |> 
       nrow()
 
     tibble(crf = participants_crf_name, n_multi_pid = n)
@@ -833,7 +836,7 @@ participant_crfs_merged <-
       } else {df}
     }
   ) |>
-  reduce(full_join, by = join_by(pid))
+  purrr::reduce(full_join, by = join_by(pid))
   
 participant_crfs_merged |> colnames()
 ```
@@ -878,7 +881,7 @@ visits_crf_name <- setdiff(visits_crf_name, no_dfseq)
 # first join crf that have dfseq and study_day
 # visits_crfs_merged <- 
 #   crf_clean[setdiff(visits_crf_name, no_studyday)] |> 
-#   reduce(full_join, by = join_by(uid, pid, visit_code, dfseq, study_day))
+#   purrr::reduce(full_join, by = join_by(uid, pid, visit_code, dfseq, study_day))
 
 visits_crfs_merged <-
   crf_clean[setdiff(visits_crf_name, no_studyday)] |> 
@@ -887,7 +890,7 @@ visits_crfs_merged <-
       df |> select(-any_of(c("uid", "vdate_fixed")))
     }
   ) |>
-  reduce(full_join, by = join_by(pid, visit_code, dfseq, study_day))
+  purrr::reduce(full_join, by = join_by(pid, visit_code, dfseq, study_day))
   
 # Then add crf with no study_day
 
@@ -900,7 +903,7 @@ visits_crfs_merged <-
           df |> select(-any_of(c("uid")))
         }
       ) |>
-      reduce(full_join, by = join_by(pid, visit_code, dfseq)),
+      purrr::reduce(full_join, by = join_by(pid, visit_code, dfseq)),
     by = join_by(pid, visit_code, dfseq)
   )
 
@@ -915,7 +918,7 @@ visits_crfs_merged |> colnames()
 
 ```{r}
 
-dir <- get_data_dir() |> str_c("01 Preprocessed and QCed/")
+dir <- get_01_output_dir()
 
 save(participant_crfs_merged, file = str_c(dir, "01_participant_crfs_merged_", today() |> str_replace_all("-",""), ".Rdata"))
 save(visits_crfs_merged, file = str_c(dir, "01_visits_crfs_merged_", today() |> str_replace_all("-",""), ".Rdata"))

@@ -9,8 +9,8 @@ plot_conc_by_analyte <- function(t, color_by = "value_type"){
     ungroup() |> 
     arrange(median) |>
     mutate(.feature = .feature |> fct_inorder()) |>
-    mutate(to_exclude = ifelse(analyte_to_exclude, "to exclude", "")) |> 
-    filter(!failed_sample) |> 
+    mutate(to_exclude = ifelse(exclude_analyte, "to exclude", "")) |> 
+    filter(!exclude_sample) |> 
     ggplot(aes(x = .feature, y = conc, col = !!sym(color_by))) +
     ggbeeswarm::geom_quasirandom(alpha = 0.5, size = 0.1) +
     scale_y_log10("Concentration") +

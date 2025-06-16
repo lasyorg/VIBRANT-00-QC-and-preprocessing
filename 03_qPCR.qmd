@@ -11,7 +11,7 @@ format:
      toc-depth: 5
      embed-resources: true
 execute:
-  cache: true # true refresh false
+  cache: refresh # true refresh false
   warning: false
 knitr:
   opts_chunk:
@@ -22,6 +22,7 @@ editor: source
 
 ```{r}
 #| warning: false
+#| cache: false
 
 library(tidyverse)
 library(magrittr)
@@ -42,13 +43,12 @@ theme_set(theme_light())
 
 ```{r}
 
-data_source <- "real"
-qpcr_dir <- str_c(get_data_dir(data_source), "00 Raw/03 qPCR/")
+qpcr_dir <- str_c(get_data_dir(), "03 qPCR/")
 file <- "VIBRANT_qPCR_data_merged_250611.csv"
 cat("We load the file", file, " (15 LBP strains)\n\n")
 qpcr_LBP <- read_csv(str_c(qpcr_dir, file))
 
-file <- "VIBRANT_16SqPCR_20250514.csv"
+file <- "VIBRANT_16SqPCR_250616.csv"
 cat("\n\nAnd the file ", file, " (16S)\n\n")
 qpcr_16S <- read_csv(str_c(qpcr_dir, file))
 
@@ -70,19 +70,19 @@ qpcr_LBP |> glimpse()
 
 Since the two files have almost exactly the same columns, we merge them into a single file after some harmonization.
 
-First, we notice that there are some clinical samples that have data for the LBP qPCR, but not for the 16S qPCR.
+Note that there is one sample that has data for the LBP qPCR, but not for the 16S qPCR.
 
 ```{r}
 
 dplyr::full_join(
-  qpcr_16S |> select(VIBR_Sample_ID, gDNA_Plate_ID) |> mutate(has_16S = TRUE) |> distinct(),
-  qpcr_LBP |> select(VIBR_Sample_ID, gDNA_Plate_ID) |> mutate(has_LBP = TRUE) |> distinct()
+  qpcr_16S |> select(VIBR_Sample_ID) |> mutate(has_16S = TRUE) |> distinct(),
+  qpcr_LBP |> select(VIBR_Sample_ID) |> mutate(has_LBP = TRUE) |> distinct()
 ) |>  dplyr::filter(is.na(has_16S) | is.na(has_LBP)) |> 
   dplyr::filter(!is.na(VIBR_Sample_ID), !(VIBR_Sample_ID %in% c("#N/A", "empty"))) |> 
   mutate(index = row_number()) |> 
   select(index, everything()) |> 
   gt(
-    caption = "Clinical samples with data for LBP qPCR but not for 16S qPCR, or vice versa."
+    caption = "Clinical sample with data for LBP qPCR but not for 16S qPCR, or vice versa."
   )
   
 ```
@@ -226,6 +226,7 @@ dictionary |>
 ```
 
 ```{r}
+
 qpcr <- 
   qpcr |> 
   mutate(
@@ -310,6 +311,7 @@ tmp <-
 
 
 ```{r}
+#| eval: false
 
 tmp |> 
   dplyr::filter(n_replicates == 6) |> 
@@ -466,10 +468,10 @@ six_replicates <-
   qpcr |> 
   dplyr::filter(target == "16S") |> 
   group_by(qpcr_sample_id) |> 
-  mutate(n_replicates = n()) |> 
+  mutate(n_replicates = n(), none_on_plate_12 = !any(ext_lib_plate_nb == 12)) |> 
   ungroup() |> 
-  dplyr::filter(n_replicates > 3) |> 
-  select(target, vibr_sample_id, qpcr_sample_id, qpcr_uid, ext_lib_position, ext_lib_plate_nb, ext_lib_plate_id)
+  dplyr::filter(n_replicates > 3, none_on_plate_12) |> 
+  select(target, vibr_sample_id, qpcr_sample_id, qpcr_uid, ext_lib_position, ext_lib_plate_nb, ext_lib_plate_id, n_replicates)
 
 six_replicates |> gt()
 ```
@@ -479,15 +481,17 @@ We see that these 6 replicates have 2 different positions on the extraction libr
 
 ```{r}
 
-data_dir <- get_data_dir(data_source)
-mg_dir <- str_c(data_dir, "00 Raw/02 Metagenomics/")
-technical_metadata <- 
-  readRDS(
-    str_c(
-      get_output_dir(data_source = data_source),  
-      "02_technical_metadata_agg_", today() |> str_remove_all("-"), ".rds"
-    )
-  )
+technical_metadata_file <- 
+  list.files(
+    path = get_01_output_dir(), 
+    pattern = "02_technical_metadata_agg_.*\\.rds$", full.names = TRUE
+  ) |> 
+  sort(decreasing = TRUE) |>
+  extract(1)
+
+technical_metadata <- readRDS(technical_metadata_file)
+
+rm(technical_metadata_file)
 
 # SE_mg <- 
 #   readRDS(
@@ -646,6 +650,34 @@ samples_without_entries_in_mg_manifest |>
 
 ```
 
+In an email from June 16th 2025, Michael indicated that this is a negative biological sample (`Unused swab + C2`).
+
+We fix it manually for data completion:
+
+```{r}
+
+qpcr <- 
+  qpcr |> 
+  mutate(
+    sample_type = 
+      case_when(
+        qpcr_sample_id == "2320838" ~ "Negative control",
+        TRUE ~ sample_type |> as.character()
+      ) |> factor(levels = levels(qpcr$sample_type)),
+    control_type =
+      case_when(
+        qpcr_sample_id == "2320838" ~ "Unused swab + C2",
+        TRUE ~ control_type |> as.character()
+      ) |> factor(levels = levels(qpcr$control_type)),
+    qpcr_sample_type = 
+      case_when(
+        qpcr_sample_id == "2320838" ~ "Control sample",
+        TRUE ~ qpcr_sample_type
+      )
+  )
+
+```
+
 
 For these samples, the current `uid` is missing. We change it to the `qpcr_sample_id` when `NA`.
 
@@ -753,11 +785,6 @@ And there are `r mg_samples |> dplyr::filter(is.na(qpcr_sample_type)) |> nrow()`
 mg_samples |> dplyr::filter(is.na(qpcr_sample_type)) |> gt()
 ```
 
-:::callout-warning
-@Michael: I think these are the "new" samples.
-:::
-
-
 ```{r}
 rm(mg_samples, samples_without_entries_in_mg_manifest, tmp)
 ```
@@ -847,7 +874,7 @@ We also add the LBP strain information to the qPCR data.
 SE_mg <-
   readRDS(
     list.files(
-      path = get_output_dir(data_source = data_source),
+      path = get_01_output_dir(),
       pattern = "02_se_mg_.*\\.rds$", full.names = TRUE
     ) |>
       sort(decreasing = TRUE) |>
@@ -1017,7 +1044,7 @@ qpcr |>
   facet_wrap(. ~ strain_group_qpcr + target, ncol = 9) +
   scale_color_manual(
     "Dilution factor", 
-    values = colorRampPalette(c("dodgerblue1", "gray90"))(4)
+    values = colorRampPalette(c("dodgerblue1", "gray90"))(6)
     )
 
 ```
@@ -1039,7 +1066,7 @@ qpcr |>
   facet_wrap(. ~ strain_group_qpcr + target, ncol = 9) +
   scale_color_manual(
     "Dilution factor", 
-    values = colorRampPalette(c("dodgerblue1", "gray90"))(4)
+    values = colorRampPalette(c("dodgerblue1", "gray90"))(6)
     )
 
 ```
@@ -1069,7 +1096,7 @@ qpcr |>
   geom_point(size = 0.5, alpha = 0.4) +
   facet_wrap(. ~ ext_lib_plate_nb , ncol = 6) 
 ```
-For the 16S target, that number is 500.
+For the 16S target, that number is 500, except for plate 12, where it is 250.
 
 ```{r}
 #| eval: false
@@ -1084,6 +1111,13 @@ qpcr |>
 
 ```
 
+This was actually a mistake and it should be 250 for all plates for the 16S target.
+
+We fix this here:
+
+```{r}
+
+```
 
 
 
@@ -1127,7 +1161,7 @@ qpcr |>
   facet_grid(strain_group_qpcr ~ ext_lib_plate_nb, scales = "free", space = "free") +
   scale_fill_manual(
     "Dilution factor", 
-    values = colorRampPalette(c("dodgerblue1", "gray90"))(4)
+    values = colorRampPalette(c("dodgerblue1", "gray90"))(6)
     ) +
   xlab("Well column") + ylab("Well row") 
 
@@ -1354,11 +1388,8 @@ qpcr |>
   ) 
 
 ```
-:::callout-warning
-I am surprise to see that almost all Mock 1 samples are positive (copies per swabs >>) because, these samples were supposed to be pooled samples from the CAP084 study. I don't think that participants of that study received the LBP. It could also be that I made wrong assumptions when matching the `vibr_sample_id` with the metagenomics manifest data.
-:::
 
-The "negative controls" look better (= more consistent with expectations), except, again, for the first 3 plates of VMRC group 1.
+These look consistent with expectations, except, again, for the first 3 plates of VMRC group 1.
 
 
 ### Standards
@@ -2291,7 +2322,7 @@ make_raw_qpcr_SE <- function(qpcr){
        uid, mg_pid, mg_visit_code,
        qpcr_sample_type,  sample_type, control_type, 
        qpcr_sample_id, vibr_sample_id, replicate_nb, 
-       ext_lib_plate_nb, ext_lib_plate_id
+       ext_lib_plate_nb #, ext_lib_plate_id
        ) |> 
      distinct() |> 
      arrange(qpcr_uid) |> 
@@ -2428,7 +2459,7 @@ agg_qpcr_SE <- function(SE_qPCR_raw){
         group_by(uid) |> 
         summarize(
           ext_lib_plate_nb = str_c(ext_lib_plate_nb |> unique() |> sort(), collapse = ", "),
-          ext_lib_plate_id = str_c(ext_lib_plate_id |> str_replace_na("unknown") |> unique() |> sort(), collapse = ", "),
+          # ext_lib_plate_id = str_c(ext_lib_plate_id |> str_replace_na("unknown") |> unique() |> sort(), collapse = ", "),
           .groups = "drop"
         ),
       by = join_by(uid)
@@ -2524,7 +2555,7 @@ Save the `SE` objects to disk
 saveRDS(
   SE_qPCR_raw, 
   str_c(
-    get_output_dir(data_source = data_source),  
+    get_01_output_dir(),  
     "03_se_pcr_raw_", today() |> str_remove_all("-"), ".rds"
     )
   )
@@ -2533,7 +2564,7 @@ saveRDS(
 saveRDS(
   SE_qPCR_agg, 
   str_c(
-    get_output_dir(data_source = data_source),  
+    get_01_output_dir(),  
     "03_se_pcr_agg_", today() |> str_remove_all("-"), ".rds"
     )
   )

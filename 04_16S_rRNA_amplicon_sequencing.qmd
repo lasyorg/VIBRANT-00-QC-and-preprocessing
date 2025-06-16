@@ -29,6 +29,7 @@ The main purpose of this document is to summarize the counts and relative abunda
 
 ```{r}
 #| warning: false
+#| cache: false
 
 library(tidyverse)
 library(magrittr)
@@ -57,10 +58,9 @@ The data is provided as a `phyloseq` object in an `.rds` file.
 #| cache-lazy: false
 
 
-VIBRANT_dropbox_dir <- get_VIBRANT_Dropbox_dir()
  
 ps <- 
-  readRDS(str_c(VIBRANT_dropbox_dir,"12_VIBRANT 16S/raw_merged_all_pools_ps_20250523.rds"))
+  readRDS(str_c(get_data_dir(),"04 16S rRNA sequencing/raw_merged_all_pools_ps_20250523.rds"))
 
 ps
 
@@ -1124,6 +1124,7 @@ Relatively good agreement between the replicates; for the longitudinal profiles 
 
 
 ```{r}
+#| cache-lazy: false
 
 tmp <- 
   se_16S@colData |> 
@@ -1140,6 +1141,7 @@ se_16S@colData$location <- tmp$location
 ```
 
 ```{r}
+#| cache-lazy: false
 
 n_taxa <- 20
 
@@ -1315,7 +1317,7 @@ se_16S_agg <- check_se(se_16S_agg)
 saveRDS(
   se_16S, 
   str_c(
-    get_output_dir(data_source = data_source),  
+    get_01_output_dir(),  
     "04_se_16S_raw_", today() |> str_remove_all("-"), ".rds"
     )
   )
@@ -1323,7 +1325,7 @@ saveRDS(
 saveRDS(
   se_16S_agg, 
   str_c(
-    get_output_dir(data_source = data_source),  
+    get_01_output_dir(),  
     "04_se_16S_agg_", today() |> str_remove_all("-"), ".rds"
     )
   )

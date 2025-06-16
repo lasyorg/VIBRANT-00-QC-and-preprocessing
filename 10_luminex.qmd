@@ -47,13 +47,10 @@ theme_set(theme_light())
 
 ```{r}
 
-VIBRANT_dropbox_dir <-
-  "/Users/laurasymul/Dropbox/Academia/Projects/VIBRANT Study Files/"
-
 luminex_dir <- 
-  str_c(VIBRANT_dropbox_dir, "15_VIBRANT Luminex/VMRC VIBRANT LUMINEX Results_ONGOING/Harmonised Batches")
+  str_c(get_data_dir(), "05 Luminex/")
 
-luminex_dir |> str_remove(".*Academia/Projects/") |> str_c("/")
+luminex_dir |> str_remove(".*Academia/Projects/") # |> str_c("/")
 
 ```
 
@@ -291,7 +288,7 @@ manifest_file <-
   list.files(
     luminex_dir, 
     full.names = TRUE, 
-    pattern = "^Combined batches_LS_LL_20250507.xlsx"
+    pattern = "^Combined batches_LS_LL_20250507_no_dates.xlsx"
   )
 
 manifest <- 
@@ -311,9 +308,9 @@ rm(manifest_file)
 manifest_col <- 
   c(
     "BATCH", 
-    "LOCATION", "MANIFEST_SAMPLE_VCODE", "PATIENT", "VISIT CODE", "VISIIT", "SAMPLED_DATE",
-    "Weight", "Volume", "ALIQUOT VOLUME...14", "DILUTION/200ul TUBE...15", 
-    "VOLUME ADDED FOR ASSAY...16", "VOLUME AFTER DILUTION...17", "DILUTION OF ORIGINAL SAMPLE", 
+    "LOCATION", "MANIFEST_SAMPLE_VCODE", "PATIENT", "VISIT CODE", "VISIIT", 
+    "Weight", "Volume", "ALIQUOT VOLUME...13", "DILUTION/200ul TUBE...14", 
+    "VOLUME ADDED FOR ASSAY...15", "VOLUME AFTER DILUTION...16", "DILUTION OF ORIGINAL SAMPLE", 
     "Originial volume (total - 500ul)",
     "SHORTHAND TITLE", "ALTERNATE TITLE", "UPDATED HARMONISED TITLE", "PLATE POSITIONS"
     )
@@ -331,10 +328,10 @@ manifest <-
   dplyr::rename(
     visit = visiit,
     participant = patient,
-    aliquot_volume = aliquot_volume_14,
-    dilution_200ul_tube = dilution_200ul_tube_15,
-    volume_added_for_assay = volume_added_for_assay_16,
-    volume_after_dilution = volume_after_dilution_17,
+    aliquot_volume = aliquot_volume_13,
+    dilution_200ul_tube = dilution_200ul_tube_14,
+    volume_added_for_assay = volume_added_for_assay_15,
+    volume_after_dilution = volume_after_dilution_16,
     approx_volume_based_on_aliquot_repos = originial_volume_total_500ul
   )
 
@@ -350,10 +347,10 @@ manifest <-
     # new_rerun = new_rerun |> factor(), # all "New"
     location = location |> factor(),
     visit_code = visit_code |> as.integer(),
-    sampling_date = sampled_date |> lubridate::as_date(format = "%m/%d/%Y"),
+    # sampling_date = sampled_date |> lubridate::as_date(format = "%m/%d/%Y"),
     sample_id = updated_harmonised_title
-  ) |> 
-  select(-c(sampled_date))  
+  ) # |> 
+  #select(-c(sampled_date))  
 
 manifest |> head() |> gt(caption = "Top rows of the manifest data after column selection and renaming.")
 
@@ -428,139 +425,9 @@ colData(raw) |>
   ylab("Participant IDs")
 
 ```
-### Comparison with expected samples based on CRF35
 
 
-
-```{r}
-
-expected_samples <- 
-  read_csv(
-    str_c(VIBRANT_dropbox_dir, 
-          "99_VIBRANT_specimen_collection_CRF_data/CRF35_weekly_specimen_collection.csv")
-    )
-
-```
-
-```{r}
-
-matched <- 
-  full_join(
-    expected_samples |> 
-      mutate(
-        in_CRF_35 = TRUE,
-        visit_code = visit_code |> factor(), 
-        pid = pid |> as.character()
-      ) |> select(-randomized),
-    colData(raw) |> 
-      as.data.frame() |> 
-      as_tibble() |> 
-      select(location, participant, visit_code, visit) |>
-      filter(!is.na(participant), !is.na(visit_code), !str_detect(participant, "XX")) |> 
-      distinct() |> 
-      mutate(
-        has_luminex_data = TRUE,
-        visit_code = visit_code |> factor(), 
-        pid = participant |> str_remove("68")
-        ),
-    by = join_by(location, pid, visit_code)
-  ) |> 
-  left_join(
-    expected_samples |> 
-      select(pid, randomized) |> 
-      distinct() |> 
-      mutate(
-        pid = pid |> as.character(),
-        pid_in_CRF_35 = TRUE
-        ),
-    by = join_by(pid)
-  ) |> 
-  mutate(
-    randomized = randomized |> replace_na(FALSE),
-    has_luminex_data = has_luminex_data |> replace_na(FALSE) ,
-    in_CRF_35 = in_CRF_35 |> replace_na(FALSE),
-    pid_in_CRF_35 = pid_in_CRF_35 |> replace_na(FALSE),
-    has_luminex_data = ifelse(has_luminex_data, "Yes", "No"),
-    in_CRF_35 = ifelse(in_CRF_35, "Yes", "No"),
-    pid_in_CRF_35 = ifelse(pid_in_CRF_35, "Yes", "No"),
-    randomized = ifelse(randomized, "Yes", "No"),
-    softcup_collected = 
-      case_when(
-        (softcup == "Checked") & !is.na(softcup_time_placed) & (softcup_time_placed != "not done") ~ "Yes",
-        (softcup == "Checked") & is.na(softcup_time_placed) ~ "Maybe",
-        (softcup == "Checked") & (softcup_time_placed == "not done") ~ "Maybe",
-        (softcup == "Unchecked") & !is.na(softcup_time_placed) ~ "Maybe",
-        (softcup == "Unchecked") & is.na(softcup_time_placed) ~ "No",
-        (softcup == "not done") ~ "No",
-        is.na(softcup) ~ "Not in CRF35",
-        TRUE ~ "???"
-      ) |> factor(levels = c("Yes", "Maybe", "No", "Not in CRF35", "???"))
-  )
-
-
-```
-
-```{r}
-matched |> 
-  dplyr::count(
-    pid_in_CRF_35,
-    has_luminex_data) |> 
-  gt()
-
-```
-
-
-All Luminex data participant IDs match those from the CRF35 data.
-
-```{r}
-#| fig-height: 9.5
-#| fig-width: 7
-
-matched |> 
-  filter(((randomized == "Yes") & (softcup_collected != "No")) | (has_luminex_data == "Yes")) |> 
-  ggplot() +
-  aes(x = visit_code, y = pid, shape = softcup_collected, col = has_luminex_data) +
-  geom_point() +
-  facet_grid(location + randomized  ~ ., scales = "free", space = "free") +
-  scale_shape_manual(values = c(16, 1, 4, 8)) 
-
-```
-
-There are only 5 participants for whom we are missing one softcup sample, and 3 participants that do not have matching sample ids in the CRF35 data.
-
-
-```{r}
-
-
-matched |> 
-  filter(((randomized == "Yes") & (softcup_collected != "No")) | (has_luminex_data == "Yes")) |> 
-  filter(((has_luminex_data == "No")) | (softcup_collected == "Not in CRF35")) |> #  
-  select(pid, visit_code, softcup_collected, has_luminex_data, location) |>
-  arrange(location, pid) |> 
-  group_by(pid) |> 
-  gt(row_group_as_column = TRUE) 
-
-```
-
-For the 3 participants that had Luminex data not expected according to CRF35, it looks like the visit was miscoded (11 or 1 instead of 10, 1000, or 2120). 
-
-There remains two participants for whom CRF35 claims that softcups were collected but for whom we do not have any data.
-
-```{r}
-
-matched |> 
- dplyr::count(
-   randomized,
-   pid_in_CRF_35,
-   in_CRF_35,
-   softcup_collected,
-   has_luminex_data
- )
-
-```
-
-
-### Harmonization of `pid`, `visit_code`, and creation of the VIBRANT cross-assay `uid`
+## Harmonization of `pid`, `visit_code`, and creation of the VIBRANT cross-assay `uid`
 
 
 ```{r}
@@ -578,6 +445,245 @@ raw <-
 # raw2@colData |> as.data.frame() |> as_tibble() |> mutate(uid2 = sample_id |> str_remove("US_") |> str_remove("SA_")) |> filter(uid2 != uid) |> select(sample_id, uid, uid2)
 
 ```
+
+
+
+## Comparison with expected samples based on CRF35
+
+```{r}
+
+crf_files <- 
+  get_01_output_dir() |> 
+  fs::dir_ls() |> 
+  str_subset("/01_")
+
+visits_file <- 
+  crf_files |> 
+  str_subset("01_visits_2025") |> 
+  sort(decreasing = TRUE) |> 
+  extract(1)
+
+load(visits_file, verbose = TRUE)
+
+
+participants_file <- 
+  crf_files |> 
+  str_subset("01_participants_2025") |> 
+  sort(decreasing = TRUE) |> 
+  extract(1)
+
+load(participants_file, verbose = TRUE)
+
+crf_file <- 
+  crf_files |> 
+  str_subset("01_crf_clean_") |> 
+  sort(decreasing = TRUE) |>
+  extract(1)
+
+load(crf_file, verbose = TRUE)
+
+```
+
+
+```{r}
+
+matched <- 
+  full_join(
+    visits |> 
+      select(pid, visit_code, specimen_collection_softcup) |> 
+      mutate(in_CRF = TRUE),
+    colData(raw) |> 
+      as.data.frame() |> 
+      as_tibble() |> 
+      select(pid, visit_code, visit, weight) |>
+      filter(!is.na(pid), !is.na(visit_code), !str_detect(pid, "XX")) |> 
+      distinct() |> 
+      mutate(has_luminex_data = TRUE),
+    by = join_by(pid, visit_code)
+  ) |> 
+  left_join(
+    participants |> 
+      select(pid, site, randomized) |> 
+      distinct() |> 
+      mutate(
+        pid = pid |> as.character(),
+        pid_in_CRF = TRUE
+        ),
+    by = join_by(pid)
+  ) |> 
+  left_join(
+    crf_clean$crf35 |> 
+      select(pid, visit_code, softcup_collection_duration),
+    by = join_by(pid, visit_code)
+  ) |> 
+  mutate(
+    randomized = randomized |> replace_na(FALSE),
+    has_luminex_data = has_luminex_data |> replace_na(FALSE) ,
+    in_CRF = in_CRF |> replace_na(FALSE),
+    pid_in_CRF = pid_in_CRF |> replace_na(FALSE),
+    specimen_collection_softcup = specimen_collection_softcup |> str_replace_na("not in CRF"),
+    has_luminex_data = ifelse(has_luminex_data, "Yes", "No"),
+    in_CRF = ifelse(in_CRF, "Yes", "No"),
+    pid_in_CRF = ifelse(pid_in_CRF, "Yes", "No"),
+    randomized = ifelse(randomized, "Randomized", "Not randomized")
+  )
+
+
+```
+
+
+```{r}
+
+matched |> dplyr::count(pid_in_CRF, has_luminex_data) |> gt()
+
+```
+
+All Luminex data participant IDs match those from the CRF data.
+
+```{r}
+#| fig-height: 4.5
+#| fig-width: 13
+
+matched |> 
+  filter(
+    ((randomized == "Randomized") & !str_detect(specimen_collection_softcup, "not")) | (has_luminex_data == "Yes")
+    ) |> 
+  ggplot() +
+  aes(y = visit_code, x = pid, shape = specimen_collection_softcup, col = has_luminex_data) +
+  geom_point() +
+  facet_grid(. ~ site + randomized, scales = "free", space = "free") +
+  scale_shape_manual(
+    "Softcup collection (CRF35)",
+    values = c("???" = 5,"collected" =  16, "likely collected" = 8, 
+               "not collected" = 1, "not in CRF" = 4)
+    ) +
+  scale_color_discrete("Has Luminex data") +
+  ylab("Visit code") + xlab("Participant ID") +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+    strip.text.x = element_text(angle = 90)
+  )
+
+```
+
+There are only 5 visits for which we are missing a softcup sample, and 3 visits for which we have "unexpected" Luminex data:
+
+
+```{r}
+
+
+matched |> 
+  filter(((randomized == "Randomized") & !str_detect(specimen_collection_softcup, "not")) | (has_luminex_data == "Yes")) |> 
+  filter(((has_luminex_data == "No")) | (specimen_collection_softcup == "not in CRF")) |> #  
+  select(pid, visit_code, specimen_collection_softcup, has_luminex_data, site) |>
+  arrange(site, pid) |> 
+  group_by(pid) |> 
+  gt(row_group_as_column = TRUE) 
+
+```
+
+For 3 pairs of visits, it looks like this could be a visit miscode (11 or 1 instead of 10, 1000, or 2120). 
+
+Having manually checked the sampling dates for these samples, it seems that
+
+- 068200085 has a missing sample for visit 2120 (no correction needed)
+- 068200087 "0011" visis is indeed a screening visit and this participant has a missing sample for visit 2120 (no correction needed)
+- 068200225 appear to have a visit "mismatch" - "0001" was initially coded as "1" and likely corresponds to V1 = visit code 1000. The sampling dates match that explanation. **We fix the visit code for that participant**
+- 068200247 has a visit "mismatch": both 0001 (expected) and 0000 (found) are screening visits. Since the dates for these visits are the same, we change the visit code to its expected value (0001)  
+- 068200350 has a visit "mismatch": 0010 (expected) and 0011 (found) are both 2nd screening visits. Since the dates for these visits are the same, we change the visit code to its expected value (0010)
+- 068200457 likely did not have any softcup sample collected at 1300 (empty entry in CRF35, thus the "???").
+
+```{r}
+
+raw <- 
+  raw |> 
+  mutate(
+    visit_code = 
+      case_when(
+        pid == "068200225" & visit_code == "0001" ~ "1000",
+        pid == "068200247" & visit_code == "0000" ~ "0001",
+        pid == "068200350" & visit_code == "0011" ~ "0010",
+        TRUE ~ visit_code
+      )
+  )
+
+```
+
+```{r}
+
+matched <- 
+  full_join(
+    visits |> 
+      select(pid, visit_code, specimen_collection_softcup) |> 
+      mutate(in_CRF = TRUE),
+    colData(raw) |> 
+      as.data.frame() |> 
+      as_tibble() |> 
+      select(pid, visit_code, visit, weight) |>
+      filter(!is.na(pid), !is.na(visit_code), !str_detect(pid, "XX")) |> 
+      distinct() |> 
+      mutate(has_luminex_data = TRUE),
+    by = join_by(pid, visit_code)
+  ) |> 
+  left_join(
+    participants |> 
+      select(pid, site, randomized) |> 
+      distinct() |> 
+      mutate(
+        pid = pid |> as.character(),
+        pid_in_CRF = TRUE
+        ),
+    by = join_by(pid)
+  ) |> 
+  left_join(
+    crf_clean$crf35 |> 
+      select(pid, visit_code, softcup_collection_duration),
+    by = join_by(pid, visit_code)
+  ) |> 
+  mutate(
+    randomized = randomized |> replace_na(FALSE),
+    has_luminex_data = has_luminex_data |> replace_na(FALSE) ,
+    in_CRF = in_CRF |> replace_na(FALSE),
+    pid_in_CRF = pid_in_CRF |> replace_na(FALSE),
+    specimen_collection_softcup = specimen_collection_softcup |> str_replace_na("not in CRF"),
+    has_luminex_data = ifelse(has_luminex_data, "Yes", "No"),
+    in_CRF = ifelse(in_CRF, "Yes", "No"),
+    pid_in_CRF = ifelse(pid_in_CRF, "Yes", "No"),
+    randomized = ifelse(randomized, "Randomized", "Not randomized")
+  )
+
+
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 13
+
+matched |> 
+  filter(
+    ((randomized == "Randomized") & (specimen_collection_softcup %in% c("collected", "likely collected"))) | (has_luminex_data == "Yes")
+    ) |> 
+  ggplot() +
+  aes(y = visit_code, x = pid, shape = specimen_collection_softcup, col = has_luminex_data) +
+  geom_point() +
+  facet_grid(. ~ site + randomized, scales = "free", space = "free") +
+  scale_shape_manual(
+    "Softcup collection (CRF35)",
+    values = c("???" = 5,"collected" =  16, "likely collected" = 8, 
+               "not collected" = 1, "not in CRF" = 4)
+    ) +
+  scale_color_discrete("Has Luminex data") +
+  ylab("Visit code") + xlab("Participant ID") +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+    strip.text.x = element_text(angle = 90)
+  ) +
+  ggtitle("with fixed visit codes")
+
+```
+
+There remains only two participants for whom CRF35 claims that softcups were collected but for whom we do not have any data.
 
 
 
@@ -1278,8 +1384,39 @@ raw <- raw |> mutate(dilution_new = ifelse(is.na(dilution_new), 1, dilution_new)
 rm(dilution_related_data, us_weight_data, manifest_file, manifest)
 
 ```
+### Correlation between sample weight and collection duration
+
+```{r}
 
 
+matched <- 
+  colData(raw) |> 
+  as.data.frame() |> 
+  as_tibble() |> 
+  select(pid, location, visit_code, visit, weight) |>
+  filter(!is.na(pid), !is.na(visit_code), !str_detect(pid, "XX")) |> 
+  distinct() |> 
+  left_join(
+    crf_clean$crf35 |> 
+      select(pid, visit_code, softcup_collection_duration),
+    by = join_by(pid, visit_code)
+  ) 
+
+```
+
+```{r}
+#| fig-width: 8
+#| fig-height: 3
+
+matched |> 
+  ggplot() +
+  aes(x = softcup_collection_duration, y = weight, col = location) +
+  facet_grid(. ~ location) +
+  geom_point(alpha = 0.5)
+
+```
+
+It does not look like there is a positive correlation between the two, so this data does not support longer collection duration.
 
 ## Exclusion of failed analytes
 
@@ -1339,22 +1476,67 @@ purrr::walk(
   }
 )
 ```
-:::callout-important
-There is no "Bead count" sheet in the excel file for plate 2 of batch 1
+:::callout-note
+There is no "Bead count" sheet in the excel file for plate 2 of batch 1 - the machine did not export that data. We'll assume that the bead counts were good on that plate.
 :::
 
 ```{r}
- raw |> as_tibble() |> group_by(plate_name, plate_row, plate_col) |> 
-  summarise(total_bead_count = sum(bead_count, na.rm = TRUE), .groups = "drop") |> 
-  filter(total_bead_count > 0, total_bead_count < 1000)
+ raw |> 
+  as_tibble() |> 
+  group_by(plate_name) |> 
+  mutate(all_nas = all(is.na(bead_count))) |> 
+  group_by(plate_name, plate_row, plate_col) |> 
+  summarise(
+    total_bead_count = 
+      case_when(
+        all(all_nas) ~ NA_integer_,
+        TRUE ~ sum(bead_count, na.rm = TRUE) 
+      ),
+    .groups = "drop"
+    ) |> 
+  filter(total_bead_count >= 0, total_bead_count < 1000)
 ```
 
 
 :::callout-caution
-One well appears to have a very low bead count; we will flag this sample as "failed" in the section @sec-filtering below. 
+Two wells (one on batch 1 - plate 6, and one on batch 2 - plate 10) appears to have no or a very low bead count; we will flag these samples as "failed" in the section @sec-filtering below. 
 :::
 
 All other wells have over 1000 total bead counts.
+
+We add the total bead count to the `colData`.
+
+```{r}
+
+tmp <- 
+  raw |> 
+  as_tibble() |> 
+  select(-any_of("total_bead_count")) |>
+  left_join(
+    raw |> 
+      as_tibble() |> 
+      group_by(plate_name, plate_row, plate_col) |> 
+      summarise(
+        total_bead_count = sum(bead_count, na.rm = TRUE), 
+        .groups = "drop"
+        ) |> 
+      mutate(
+        total_bead_count = 
+          case_when(
+            (plate_name == "B1_P02") & (total_bead_count == 0) ~ NA_integer_,
+            TRUE ~ total_bead_count
+          )
+      ),
+    by = join_by(plate_name, plate_row, plate_col)
+  )
+
+raw <- 
+  raw |> 
+  mutate(
+    total_bead_count = tmp$total_bead_count
+  )
+
+```
 
 
 ## Total fluorescence intensity per well
@@ -1516,7 +1698,7 @@ The figure above shows that the fluorescence intensity of S9 and S10 are overlap
 
 ## Standard and sample concentrations
 
-Below, we check the relationship between Fluorescence intensity (FI with background removed), and calculated concentration (in log2 scale) for the samples against the standard curves (for which we show the expected concentrations). 
+Below, we check the relationship between Fluorescence intensity (FI with background removed), and calculated concentration (in log10 scale) for the samples against the standard curves (for which we show the expected concentrations). 
 
 ```{r}
 #| eval: false
@@ -1528,7 +1710,7 @@ raw |>
   filter(sample_type == "Standard") |> 
   ggplot() +
   aes(
-    x = exp_conc |> log2(),
+    x = exp_conc |> log10(),
     y = FI_wo_background |> asinh(),
     col = value_type, shape = value_type
       ) +
@@ -1559,7 +1741,7 @@ purrr::walk(
       filter(sample_type == "Standard", .feature == x) |> 
       ggplot() +
       aes(
-        x = exp_conc |> log2(),
+        x = exp_conc |> log10(),
         y = FI_wo_background |> asinh(),
         col = value_type, shape = value_type
       ) +
@@ -1597,7 +1779,7 @@ purrr::walk(
       filter(sample_type == "Standard", plate_name == x) |> 
       ggplot() +
       aes(
-        x = exp_conc |> log2(),
+        x = exp_conc |> log10(),
         y = FI_wo_background |> asinh(),
         col = value_type, shape = value_type
       ) +
@@ -1670,7 +1852,7 @@ purrr::walk(
       tmp |>
       ggplot() +
       aes(
-        x = unadj_conc |> log2(), 
+        x = unadj_conc |> log10(), 
         y = FI_wo_background |> asinh(),
         col = plate_name
       ) +
@@ -1691,7 +1873,7 @@ purrr::walk(
     g_unadj_conc <- 
       tmp |> 
       ggplot() +
-      aes(x = unadj_conc |> log2(), y = plate_name |> factor() |> fct_rev(), col = plate_name, fill = plate_name) +
+      aes(x = unadj_conc |> log10(), y = plate_name |> factor() |> fct_rev(), col = plate_name, fill = plate_name) +
       geom_boxplot(alpha = 0.5, outlier.size = 0.5) +
       geom_point(data = biol_ctrl, col = "black", size = 1) +
       guides(col = "none", fill = "none") +
@@ -1733,7 +1915,7 @@ It looks like for a few analytes and plates (see list below), the calibration cu
 Besides these, there is no clear plate effect on concentrations.
 
 
-# Filtering {#sec-filtering}
+# Filtering and flagging {#sec-filtering}
 
 ## Fraction of within range analytes and samples
 
@@ -1834,7 +2016,8 @@ analytes_to_exclude <-
   ) |>
   mutate(
     frac_OOR = n_OOR/n_samples,
-    exclude = frac_OOR > 0.2
+    exclude_analyte = frac_OOR > 0.2,
+    exclude_analyte_reason = ifelse(exclude_analyte, "Exclusion recommended (many OOR)", "Trusted concentrations")
   ) |>
   arrange(desc(frac_OOR)) |> 
   mutate(.feature = .feature |> fct_inorder() |> fct_rev())
@@ -1847,14 +2030,12 @@ analytes_to_exclude <-
 
 analytes_to_exclude |> 
   ggplot() +
-  aes(y = .feature, x = frac_OOR, fill = exclude) +
+  aes(y = .feature, x = frac_OOR, fill = exclude_analyte_reason) +
   geom_col() +
   ylab("") +
   scale_fill_manual(
     "", 
-    breaks = c(TRUE, FALSE),
-    values = c("red", "steelblue1"),
-    labels = c("Excluded analyte", "Included analyte")
+    values = c("red", "steelblue1")
   ) +
   scale_x_continuous("Percentage of out-of-range values", labels = scales::percent_format(accuracy = 1)) 
 
@@ -1862,17 +2043,12 @@ analytes_to_exclude |>
 
 ```{r}
 
-# analytes_to_exclude <- analytes_to_exclude |> filter(exclude) |> pull(.feature) |> as.character() |> sort()
-
-# raw <- 
-#   raw |> 
-#   mutate(analyte_to_exclude = (.feature %in% analytes_to_exclude))
-
 tmp <- 
   raw |> 
   as_tibble() |> 
+  select(-any_of(c("prop_OOR_per_analyte", "exclude_analyte", "exclude_analyte_reason"))) |> 
   left_join(
-    analytes_to_exclude |> select(.feature, frac_OOR, exclude),
+    analytes_to_exclude |> select(.feature, frac_OOR, exclude_analyte, exclude_analyte_reason),
     by = join_by(.feature)
   )
 
@@ -1880,7 +2056,8 @@ raw <-
   raw |> 
   mutate(
     prop_OOR_per_analyte = tmp$frac_OOR, 
-    analyte_to_exclude = tmp$exclude
+    exclude_analyte = tmp$exclude_analyte,
+    exclude_analyte_reason = tmp$exclude_analyte_reason
     )
 
 rm(analytes_to_exclude, tmp)
@@ -1888,7 +2065,7 @@ rm(analytes_to_exclude, tmp)
 ```
 
 
-## Failed samples
+## Failed samples?
 
 As displayed above, there are a few samples that had many analytes that were out of range (mostly having many analytes below the LLOQ). 
 
@@ -1899,8 +2076,8 @@ We suspect that these samples are technical "fails" (rather than actual biologic
 failed_samples <- 
   raw |> 
   as_tibble() |> 
-  filter(!analyte_to_exclude, sample_type == "Sample") |> 
-  group_by(.sample, sample_id, participant, visit_code, visit, plate_name) |> 
+  filter(!exclude_analyte, sample_type == "Sample") |> 
+  group_by(.sample, sample_id, participant, visit_code, visit, plate_name, total_bead_count) |> 
   summarize(
     n_OOR = sum(value_type != "Observed concentration"), 
     n_analytes = n(), 
@@ -1915,7 +2092,7 @@ failed_samples <-
 
 ```{r}
 #| fig-width: 12
-#| fig-height: 3
+#| fig-height: 4
 
 
 failed_samples |> 
@@ -1923,14 +2100,14 @@ failed_samples |>
   arrange(min_n_OOR, sample_id, -n_OOR) |> 
   mutate(sample_id = sample_id |> fct_inorder()) |> 
   ggplot() +
-  aes(x = sample_id, y = n_OOR, col = plate_name) + 
+  aes(x = sample_id, y = n_OOR, col = plate_name, size = total_bead_count) + 
   geom_hline(yintercept = c(0, failed_samples$n_analytes |> max()), col = "gray") +
-  geom_point(alpha = 0.5) +
+  geom_point(alpha = 0.5) + 
+  scale_color_discrete(guide = guide_legend(ncol = 3)) +
   theme(axis.text.x = element_blank())
 
 ```
-
-Another likely justification for these extreme OOR values to be technical fail and not low biological signal is that most participants have at most of their samples for which the number of out-of-range analytes is low:
+However, we observe some "participant-effect" (maybe due to the properties of their mucus), as some participants have more  samples with high OOR values than others:
 
 ```{r}
 #| fig-width: 12
@@ -1945,9 +2122,7 @@ failed_samples |>
   geom_point() +
   scale_color_gradient("Number of\nout of range", low = "steelblue1", high = "red") +
   theme(axis.text.x = element_blank()) +
-  ylab("Visit") +
-  guides(size = "none")
-
+  ylab("Visit") 
 
 
 failed_samples |> 
@@ -1958,15 +2133,42 @@ failed_samples |>
   aes(y = visit |> factor() |> fct_rev(), x = participant, col = (n_OOR > 21), size = n_OOR) +
   geom_point() +
   theme(axis.text.x = element_blank()) +
-  ylab("Visit") +
-  guides(size = "none")
+  ylab("Visit")
 
 ```
 
-We still see some "participant-effect" (maybe due to the properties of their mucus), but there a no "failed" samples for which we do not have a replicate.
+```{r}
+
+tmp <- 
+  failed_samples |> 
+  filter(mean_n_OOR_participant > 3) |> 
+  left_join(
+    raw |> as_tibble() |> group_by(participant, .sample) |> 
+      summarize(mean_log_FI = FI |> log10() |> mean(na.rm = TRUE), .groups = "drop"), 
+    by = join_by(participant, .sample)
+  ) 
+
+```
+
+```{r}
+#| fig-width: 8
+#| fig-height: 5
+
+tmp |> 
+  ggplot() +
+  aes(x = mean_log_FI, y = n_OOR, col = participant) +
+  geom_hline(yintercept = 30, col = "red", linetype = 3) +
+  geom_line(aes(group = sample_id), alpha = 0.5) +
+  geom_point(alpha = 0.5) +
+  xlab("Mean log10(FI) across analytes") +
+  ylab("Number of out-of-range analytes") +
+  guides(col = "none") +
+  labs(caption = "Lines connect replicates of the same sample") 
+```
+We see that samples with more than 30 OOR analytes have a low mean FI across analytes and poor agreement between replicates. This suggests that these are "failed" samples.
 
 :::callout-note
-We flag samples with less than 100 total bead count and more than 50% OOR analytes as "failed".
+We flag samples with less than 100 total bead count and more than 30 OOR analytes as "failed".
 :::
 
 ```{r}
@@ -1981,30 +2183,30 @@ tmp <-
   left_join(
     raw |> 
       as_tibble() |> 
-      filter(!analyte_to_exclude) |> 
-      group_by(.sample, sample_type) |> 
+      filter(!exclude_analyte) |> 
+      group_by(.sample, sample_type, total_bead_count) |> 
       summarize(
-        total_bead_count = ifelse(all(is.na(bead_count)), Inf, sum(bead_count, na.rm = TRUE)),
         n_OOR = sum(value_type != "Observed concentration"), n = n(), 
         .groups = "drop"
         ) |> 
       mutate(
-        failed_sample = 
+        exclude_sample_reason = 
           case_when(
-            (sample_type == "Sample") & ((n_OOR/n > 0.5) | (total_bead_count < 100))  ~ TRUE,
-            TRUE ~ FALSE
-          )
+            (sample_type == "Sample") & (total_bead_count < 100) ~ "Technical fail  (less than 100 total beads)",
+            (sample_type == "Sample") & (n_OOR > 30) ~ "Likely technical fail (more than 30 OOR)",
+            TRUE ~ "Trusted sample"
+          ),
+        exclude_sample = exclude_sample_reason != "Trusted sample",
       )
   )
 
-raw$failed_sample <- tmp$failed_sample
-raw$n_OOR <- tmp$n_OOR
-raw$total_bead_count <- tmp$total_bead_count
+raw$exclude_sample <- tmp$exclude_sample
+raw$exclude_sample_reason <- tmp$exclude_sample_reason
+raw$n_OOR_per_sample <- tmp$n_OOR
 rm(tmp, failed_samples)
 
 ```
 
-> TODO: check if any of the failed sample did not have a replicate
 
 
 # Data transformation II
@@ -2052,7 +2254,7 @@ raw |>
   as_tibble() |> 
   filter(sample_type == "Sample") |> 
   ggplot() +
-  aes(x = n_OOR, y = dilution_new) +
+  aes(x = n_OOR_per_sample, y = dilution_new) +
   geom_point(alpha = 0.5) +
   scale_y_log10()
 
@@ -2128,7 +2330,7 @@ As expected, the `log` transformation appears to be the most suitable for stabil
 
 ```{r}
 
-assay(raw, "conc_log2") <- raw |> assay("conc") |> log2()
+assay(raw, "conc_log10") <- raw |> assay("conc") |> log10()
 
 ```
 
@@ -2155,7 +2357,7 @@ raw |>
       )
   ) |> 
   ggplot() +
-  aes(x = plate_name, y = conc_log2, col = sample_type) +
+  aes(x = plate_name, y = conc_log10, col = sample_type) +
   geom_point(size = 1, alpha = 0.5) +
   facet_wrap(.feature ~ ., nrow = 4) +
   theme(
@@ -2163,7 +2365,7 @@ raw |>
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
     ) +
   xlab("Plate nb") +
-  ylab("log2(concentration)")
+  ylab("log10(concentration)")
 
 ```
 
@@ -2177,13 +2379,13 @@ raw |>
   filter((sample_id == "BIOL CTRL") | (sample_type == "Sample")) |> 
   mutate(plate_ctrl = ifelse(sample_id == "BIOL CTRL", plate_nb, NA) |> factor()) |>
   ggplot() +
-  aes(x = plate_nb |> factor(), y = conc_log2, col = plate_ctrl, alpha = is.na(plate_ctrl), shape = (value_type == "Observed concentration")) +
+  aes(x = plate_nb |> factor(), y = conc_log10, col = plate_ctrl, alpha = is.na(plate_ctrl), shape = (value_type == "Observed concentration")) +
   geom_point(size = 1) +
   facet_wrap(. ~ .feature |> str_remove("Hu ") |> str_remove("\\([0-9]*\\)"), nrow = 3) + # , scales = "free"
   scale_x_discrete(breaks = NULL) +
   scale_alpha_manual(values = c(1, 0.1)) +
   xlab("Plate nb") +
-  ylab("log2(concentration)") + 
+  ylab("log10(concentration)") + 
   scale_color_discrete("Plate nb") # + theme(strip.text.x = element_text(angle = 90, hjust = 0)) 
 
 
@@ -2200,7 +2402,7 @@ complete_samples <-
   raw |> 
   as_tibble() |> 
   group_by(.sample) |>
-  summarize(ok = !any(is.na(conc_log2))) |>
+  summarize(ok = !any(is.na(conc_log10))) |>
   mutate(i = row_number()) |>
   filter(ok)
 
@@ -2212,7 +2414,7 @@ complete <- raw[, complete_samples$.sample]
 ```{r}
 
 pca_res <- 
-  prcomp(complete |> assay("conc_log2") |> t(), center = TRUE, scale = TRUE)
+  prcomp(complete |> assay("conc_log10") |> t(), center = TRUE, scale = TRUE)
 
 ```
 
@@ -2411,13 +2613,13 @@ g_12 / (g_23 | g_45) +
 #| fig-height: 6
 #| fig-width: 10
 
-g_12 <- plot_pca_scores(pca_res, complete, axes = 1:2, col_by = "n_OOR") +
+g_12 <- plot_pca_scores(pca_res, complete, axes = 1:2, col_by = "n_OOR_per_sample") +
   scale_color_gradient("Number of out-of-range values", low = "gray90", high = "red")
 
-g_23 <- plot_pca_scores(pca_res, complete, axes = 2:3, col_by = "n_OOR") +
+g_23 <- plot_pca_scores(pca_res, complete, axes = 2:3, col_by = "n_OOR_per_sample") +
   scale_color_gradient("Number of out-of-range values", low = "gray90", high = "red")
 
-g_45 <- plot_pca_scores(pca_res, complete, axes = 4:5, col_by = "n_OOR") +
+g_45 <- plot_pca_scores(pca_res, complete, axes = 4:5, col_by = "n_OOR_per_sample") +
   scale_color_gradient("Number of out-of-range values", low = "gray90", high = "red")
 
 g_12 / (g_23 | g_45) +
@@ -2455,15 +2657,15 @@ Plate effects when only considering samples (no controls or standards) excluding
 #| fig-width: 12
 
 g_12 <- 
-  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", !failed_sample), axes = 1:2, col_by = "plate_name") +
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", !exclude_sample), axes = 1:2, col_by = "plate_name") +
   stat_ellipse()
 
 g_23 <- 
-  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", !failed_sample), axes = 2:3, col_by = "plate_name") +
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", !exclude_sample), axes = 2:3, col_by = "plate_name") +
   stat_ellipse()
 
 g_45 <- 
-  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", !failed_sample), axes = 4:5, col_by = "plate_name") +
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", !exclude_sample), axes = 4:5, col_by = "plate_name") +
   stat_ellipse()
   
 
@@ -2590,7 +2792,7 @@ scores_long <-
 
 scores_long |> 
   filter(sample_type == "Sample", PC <= 6) |>
-  ggplot(aes(x = dilution_new, y = value, col = n_OOR)) +
+  ggplot(aes(x = dilution_new, y = value, col = n_OOR_per_sample)) +
   geom_point(alpha = 0.5, size = 0.5) +
   geom_smooth(method = "lm", formula = "y ~ x") +
   facet_wrap(PC ~ ., scales = "free", labeller = label_both) +
@@ -2627,17 +2829,17 @@ It looks like the correction for the dilution might be little too aggressive (sa
 #| fig-width: 15
 
 g_12 <- 
- plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", n_OOR < 5), axes = 1:2, col_by = "sample_id") +
+ plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", n_OOR_per_sample < 5), axes = 1:2, col_by = "sample_id") +
   geom_path(aes(group = sample_id)) +
   guides(col = "none")
 
 g_23 <- 
-  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample",  n_OOR < 5), axes = 2:3, col_by = "sample_id") +
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample",  n_OOR_per_sample < 5), axes = 2:3, col_by = "sample_id") +
   geom_path(aes(group = sample_id)) +
   guides(col = "none")
 
 g_45 <- 
-  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", n_OOR < 5), axes = 4:5, col_by = "sample_id") +
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", n_OOR_per_sample < 5), axes = 4:5, col_by = "sample_id") +
   geom_path(aes(group = sample_id)) +
   guides(col = "none")
   
@@ -2654,17 +2856,17 @@ g_12 / (g_23 | g_45) +
 #| fig-width: 15
 
 g_12 <- 
- plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", n_OOR < 5), axes = 1:2, col_by = "plate_name") +
+ plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", n_OOR_per_sample < 5), axes = 1:2, col_by = "plate_name") +
   geom_path(aes(group = sample_id)) +
   guides(col = "none")
 
 g_23 <- 
-  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", n_OOR < 5), axes = 2:3, col_by = "plate_name") +
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", n_OOR_per_sample < 5), axes = 2:3, col_by = "plate_name") +
   geom_path(aes(group = sample_id)) +
   guides(col = "none")
 
 g_45 <- 
-  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", n_OOR < 5), axes = 4:5, col_by = "plate_name") +
+  plot_pca_scores(pca_res, complete |> filter(sample_type == "Sample", n_OOR_per_sample < 5), axes = 4:5, col_by = "plate_name") +
   geom_path(aes(group = sample_id)) +
   guides(col = "none")
   
@@ -2685,16 +2887,16 @@ tmp <-
   group_by(sample_id, .feature) |> 
   mutate(n = n()) |> 
   ungroup() |> 
-  filter(n > 1, !is.na(conc_log2))
+  filter(n > 1, !is.na(conc_log10))
 
 tmp <- 
   left_join(
     tmp |> 
-      select(.feature, .sample, sample_id, sample_type, plate_nb, conc_log2) |> 
-      dplyr::rename(.sample_r1 = .sample, plate_nb_r1 = plate_nb, conc_log2_r1 = conc_log2),
+      select(.feature, .sample, sample_id, sample_type, plate_nb, conc_log10) |> 
+      dplyr::rename(.sample_r1 = .sample, plate_nb_r1 = plate_nb, conc_log10_r1 = conc_log10),
     tmp |> 
-      select(.feature, .sample, sample_id, plate_nb, conc_log2) |> 
-      dplyr::rename(.sample_r2 = .sample, plate_nb_r2 = plate_nb, conc_log2_r2 = conc_log2),
+      select(.feature, .sample, sample_id, plate_nb, conc_log10) |> 
+      dplyr::rename(.sample_r2 = .sample, plate_nb_r2 = plate_nb, conc_log10_r2 = conc_log10),
     by = join_by(.feature, sample_id),
     relationship = "many-to-many"
   ) |> 
@@ -2707,10 +2909,10 @@ tmp <-
 tmp <- 
   tmp |> 
   mutate(
-    diff = conc_log2_r1 - conc_log2_r2,
+    diff = conc_log10_r1 - conc_log10_r2,
     abs_diff = abs(diff),
-    mean = (conc_log2_r1 + conc_log2_r2)/2,
-    sd = sqrt(((conc_log2_r1 - mean)^2 + (conc_log2_r2 - mean)^2)),
+    mean = (conc_log10_r1 + conc_log10_r2)/2,
+    sd = sqrt(((conc_log10_r1 - mean)^2 + (conc_log10_r2 - mean)^2)),
     cv = sd/mean,
     replicate_type = ifelse(plate_nb_r1 == plate_nb_r2, "within plate", "across plate")
   )
@@ -2755,12 +2957,12 @@ In addition we define four additional assays:
 
 - `value_type_details` and `value_type`: the concatenation (`value_type_details`) or summary (`value_type`) of the value types of included wells for a given analyte (*e.g.*, "Observed concentration" or "Below LLOQ")
 
-- `sd_log2_obs_conc_imp`: the standard deviation of the log2 of the imputed concentrations across replicates;
+- `sd_log10_obs_conc_imp`: the standard deviation of the log10 of the imputed concentrations across replicates;
 
 
-- `obs_conc_log2`: log2 of the median concentrations;
+- `obs_conc_log10`: log10 of the median concentrations;
 
-- `obs_conc_imp_log2`: log2 of the median imputed concentrations;
+- `obs_conc_imp_log10`: log10 of the median imputed concentrations;
 
 
 
@@ -2781,8 +2983,8 @@ We also rename the analytes to remove the prefix "Hu " and the suffix with the a
 aggregate_se <- function(se){
   
   # we first only keep the analytes that are not excluded
-  excluded_analytes <- se@NAMES[rowData(se)$analyte_to_exclude] # we'll add them to the metadata
-  se <- se[!rowData(se)$analyte_to_exclude, ] 
+  excluded_analytes <- se@NAMES[rowData(se)$exclude_analyte] # we'll add them to the metadata
+  se <- se[!rowData(se)$exclude_analyte, ] 
 
   # we only keep clinical samples
   se <- se[, se$sample_type == "Sample"]
@@ -2800,7 +3002,7 @@ aggregate_se <- function(se){
       mutate(values = !!sym(assay_name)) |> 
       group_by(uid, .feature) |> 
       summarize(
-        values = median(values[!failed_sample], na.rm = TRUE),
+        values = median(values[!exclude_sample], na.rm = TRUE),
         .groups = "drop"
       ) |> 
       pivot_wider(names_from = uid, values_from = values) |> 
@@ -2817,7 +3019,7 @@ aggregate_se <- function(se){
     mutate(
       value_type = 
         case_when(
-          failed_sample ~ "Failed sample",
+          exclude_sample ~ "Failed sample",
           TRUE ~ value_type
         ) |> factor(levels = c(value_types_levels(), "Failed sample"))
       ) |> 
@@ -2832,7 +3034,7 @@ aggregate_se <- function(se){
   value_type_summary_assay <- 
     se |> 
     as_tibble() |> 
-    filter(!failed_sample) |> 
+    filter(!exclude_sample) |> 
     mutate(value_type = value_type |> factor(levels = value_types_levels())) |> 
     arrange(uid, .feature, value_type) |> 
     group_by(uid, .feature) |> 
@@ -2866,13 +3068,13 @@ aggregate_se <- function(se){
     as.data.frame() |> 
     column_to_rownames(".feature")
   
-  sd_log2_conc_assay <- 
+  sd_log10_conc_assay <- 
     se |> 
     as_tibble() |>
     arrange(uid, .feature) |> 
     group_by(uid, .feature) |> 
     summarize(
-      sd = conc_log2[!failed_sample] |> sd(na.rm = TRUE),
+      sd = conc_log10[!exclude_sample] |> sd(na.rm = TRUE),
       .groups = "drop"
     ) |> 
     pivot_wider(names_from = uid, values_from = sd) |>
@@ -2903,9 +3105,9 @@ aggregate_se <- function(se){
     filter(.feature == .feature[1]) |> 
     group_by(uid) |> 
     summarize(
-      n_wells = sum(!failed_sample),
-      wells = str_c(well_id[!failed_sample], collapse = ", "),
-      excl_wells = str_c(well_id[failed_sample], collapse = ", "),
+      n_wells = sum(!exclude_sample),
+      wells = str_c(well_id[!exclude_sample], collapse = ", "),
+      excl_wells = str_c(well_id[exclude_sample], collapse = ", "),
       .groups = "drop"
     ) 
 
@@ -2930,9 +3132,9 @@ aggregate_se <- function(se){
           obs_conc_imp = obs_conc_imp_assay[f, s] |> set_rownames(new_f),
           value_type = value_type_summary_assay[f, s] |> set_rownames(new_f),
           value_types = value_type_assay[f, s] |> set_rownames(new_f),
-          sd_log2_obs_conc_imp = sd_log2_conc_assay[f, s] |> set_rownames(new_f),
-          obs_conc_log2 = obs_conc_assay[f, s] |> log2() |> set_rownames(new_f),
-          obs_conc_imp_log2 = obs_conc_imp_assay[f, s] |> log2() |> set_rownames(new_f)
+          sd_log10_obs_conc_imp = sd_log10_conc_assay[f, s] |> set_rownames(new_f),
+          obs_conc_log10 = obs_conc_assay[f, s] |> log10() |> set_rownames(new_f),
+          obs_conc_imp_log10 = obs_conc_imp_assay[f, s] |> log10() |> set_rownames(new_f)
           ),
       colData = coldata[s,],
       rowData = rowData(se) |> set_rownames(new_f),
@@ -2958,6 +3160,18 @@ aggregate_se <- function(se){
 agg <- aggregate_se(raw)
 
 ```
+
+We check that the failed samples did not lead to the exclusion of actual samples (i.e., that there were always at least one "good" replicate for each sample):
+
+```{r}
+matched <- 
+raw |> colData() |> as_tibble() |> select(uid) |> distinct() |> filter(!is.na(uid)) |> 
+  left_join(agg@colData |> as_tibble() |> select(uid) |> mutate(in_agg = TRUE)) 
+
+matched |> filter(!in_agg | is.na(in_agg)) |> gt("Samples not found in aggregated SE.")
+```
+
+
 
 
 We add a `sample_type` and `control_type` column to the `SE@colData`
@@ -2999,15 +3213,16 @@ selection <-
 
 selection |> 
   ggplot() +
-  aes(x = visit |> factor(), y = obs_conc_imp_log2, col = pid) +
+  aes(x = visit |> factor(), y = obs_conc_imp_log10, col = pid) +
   geom_line(aes(group = pid), alpha = 0.5) +
   geom_point(size = 0.5, alpha = 0.5) +
   facet_grid(.feature ~ location) +
   guides(col = "none") +
-  ylab("log2(concentration)") +
+  ylab("log10(concentration)") +
   xlab("Visit") 
-
 ```
+
+
 
 
 ```{r}
@@ -3017,13 +3232,13 @@ selection |>
 
 selection |> 
   group_by(.feature) |> 
-  mutate(z = scale(obs_conc_imp_log2)) |>
+  mutate(z = scale(obs_conc_imp_log10)) |>
   ungroup() |> 
   ggplot() +
   aes(x = visit |> factor(), y = pid, fill = z) +
   geom_tile() +
   facet_grid(location ~ .feature, scales = "free", space = "free") +
-  scale_fill_gradient2("z-score\nof log2(conc.)", low = "steelblue1", mid = "white", high = "red2") +
+  scale_fill_gradient2("z-score\nof log10(conc.)", low = "steelblue1", mid = "white", high = "red2") +
   ylab("participants") +
   xlab("Visit") 
 
@@ -3040,7 +3255,7 @@ We export data both at the "well-level" (`05_se_luminex_raw_<date>.rds`) and at 
 saveRDS(
   raw, 
   str_c(
-    get_output_dir(data_source = "real"),  
+    get_01_output_dir(),  
     "05_se_luminex_raw_", today() |> str_remove_all("-"), ".rds"
     )
   )
@@ -3048,7 +3263,7 @@ saveRDS(
 saveRDS(
   agg, 
   str_c(
-    get_output_dir(data_source = "real"),  
+    get_01_output_dir(),  
     "05_se_luminex_agg_", today() |> str_remove_all("-"), ".rds"
     )
   )

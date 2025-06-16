@@ -1,5 +1,5 @@
 ---
-title: "VIBRANT clinical data"
+title: "VIBRANT clinical data cleaning and formatting"
 author: Laura Symul, Laura Vermeren, Lara Wautier, Céline Bugli
 date: today
 format: 
@@ -10,7 +10,7 @@ format:
     theme: journal
     embed-resources: true
 execute:
-  cache: false
+  cache: refresh # refresh true false
 project:
   execute-dir: project
 editor: 
@@ -25,6 +25,7 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 ```{r}
 #| warning: false
 #| include: false
+#| cache: false
 
 library(tidyverse)
 library(gt)
@@ -55,13 +56,8 @@ We load the raw CRF data shared by Lara Lewis on May 7th 2025.
 
 ```{r}
 
-# data_dir <- "C:/Users/wautierl/OneDrive - UCL/Documents/Assistanat/SMCS/VIBRANT/VIBRANT data UCLouvain/Data/raw 20240819/" #
-
-# data_dir <- "C:/Users/lvermeren/OneDrive - UCL/VIBRANT clinical data/Data/Data/raw 20250507/" #LV
-
 data_dir <- str_c(get_clinical_data_dir(), "raw 20250507/") # 20250320
-  
-data_dir |> fs::dir_ls(regexp = "RData")
+data_dir |> fs::dir_ls(regexp = "RData") |> basename()
 
 ```
 
@@ -274,6 +270,7 @@ raw_data_list <-
   )
 
 ```
+
 ```{r}
 
 all_visit_dates <- 
@@ -5604,9 +5601,7 @@ crf_plates_dictionary |> gt()
 
 ```{r}
 
-# dir <- "/Users/lvermeren/OneDrive - UCL/VIBRANT clinical data/Data processed/" #LV 
-
-dir <- get_data_dir() |> str_c("01 Preprocessed and QCed/")
+dir <- get_01_output_dir()
 if (!dir.exists(dir)) dir.create(dir)
 
 save(crf_raw, file = str_c(dir, "01_crf_raw_", today() |> str_replace_all("-",""), ".Rdata"))

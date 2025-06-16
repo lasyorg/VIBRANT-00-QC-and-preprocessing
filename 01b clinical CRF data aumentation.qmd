@@ -1,6 +1,6 @@
 ---
-title: "VIBRANT clinical data"
-author: Laura Vermeren, Lara Wautier, Céline Bugli, Laura Symul
+title: "VIBRANT clinical data augmentation"
+author: Laura Vermeren, Laura Symul, Lara Wautier, Céline Bugli
 date: today
 format: 
   html:
@@ -10,7 +10,7 @@ format:
     theme: journal
     embed-resources: true
 execute:
-  cache: false
+  cache: refresh # refresh true false
 project:
   execute-dir: project
 editor: 
@@ -25,6 +25,7 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 ```{r}
 #| warning: false
 #| include: false
+#| cache: false
 
 library(tidyverse)
 library(gt)
@@ -66,7 +67,7 @@ The purpose of this document is to create
 
 ```{r}
 
-data_dir <- get_data_dir() |> str_c("01 Preprocessed and QCed/")
+data_dir <- get_01_output_dir()
 
 crf_clean_file <- data_dir |> fs::dir_ls() |> str_subset("01_crf_clean") |> sort(decreasing = TRUE) |> magrittr::extract(1)
 load(crf_clean_file, verbose = TRUE)
@@ -1106,7 +1107,7 @@ visits_variable_dictionary |> gt()
 
 ```{r}
 
-dir <- get_data_dir() |> str_c("01 Preprocessed and QCed/")
+dir <- get_01_output_dir()
 
 save(participants, file = str_c(dir, "01_participants_", today() |> str_replace_all("-",""), ".Rdata"))
 save(participants_variable_dictionary, file = str_c(dir, "01_participants_variable_dictionary_", today() |> str_replace_all("-",""), ".Rdata")) 

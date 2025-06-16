@@ -21,6 +21,7 @@ editor: source
 
 ```{r}
 #| warning: false
+#| cache: false
 
 library(tidyverse)
 library(magrittr)
@@ -31,7 +32,8 @@ library(tidySummarizedExperiment)
 library(MultiAssayExperiment)
 
 tmp <- fs::dir_map("R scripts/", source)
-
+tmp <- fs::dir_map("../VIBRANT-99-utils/R/", source)
+rm(tmp)
 theme_set(theme_light())
 ```
 
@@ -39,13 +41,9 @@ theme_set(theme_light())
 
 ```{r}
 
-data_source <- "real"
 mae_files <- 
   fs::dir_ls(
-    str_c(
-      get_data_dir(data_source = data_source),  
-      "02 MAEs/"
-    ),
+    get_02_output_dir(),
     regexp = "mae_full_.*\\.rds$"
   ) |> 
   sort(decreasing = TRUE) |>
@@ -966,8 +964,7 @@ We save the "master" MAE (with all assays); but if needed for publication, we ca
 saveRDS(
   mae, 
   str_c(
-    get_data_dir(data_source = data_source),  
-    "03 QCed MAEs/",
+    get_03_output_dir(),  
     "mae_full_", today() |> str_remove_all("-"), ".rds"
   )
 )

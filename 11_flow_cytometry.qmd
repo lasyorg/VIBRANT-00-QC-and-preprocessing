@@ -21,6 +21,7 @@ editor: source
 
 ```{r}
 #| warning: false
+#| cache: false
 
 library(tidyverse)
 library(magrittr)
@@ -48,12 +49,11 @@ theme_set(theme_light())
 
 ```{r}
 
-flow_dir <- str_c(get_VIBRANT_Dropbox_dir(), "11_VIBRANT_Flow/")
+flow_dir <- str_c(get_data_dir(), "06 Flow cytometry/")
 output_dir <- 
   str_c(
-    # get_VIBRANT_Dropbox_dir(), "90_VIBRANT_consolidated_data/", 
-    get_data_dir(),
-    "01 Preprocessed and QCed/06 Flow cytometry tmp files/"
+    get_01_output_dir(),
+    "06 Flow cytometry tmp files/"
     )
 
 if (!dir.exists(output_dir)){
@@ -61,6 +61,11 @@ if (!dir.exists(output_dir)){
 }
 
 ```
+
+:::callout-important
+The extraction functions will need to be modified to extract the number of total immune cells and compute the percentages of children populations out of total immune cells.
+This will be done later.
+:::
 
 
 # MGH Flow data
@@ -769,10 +774,27 @@ In this section, we check the agreement between the expected data (based on data
 
 # Load the CRF data
 
-load("/Users/laurasymul/OneDrive - UCL/Academia/Research/VIBRANT clinical data UCLouvain/Data processed/2025-05-29/crf_clean.Rdata", verbose = TRUE)
+crf_file <- 
+  list.files(
+    path = get_01_output_dir(), 
+    pattern = "01_crf_clean", 
+    full.names = TRUE
+  ) |> 
+  sort(decreasing = TRUE) |> 
+  magrittr::extract(1)
+  
+load(crf_file, verbose = TRUE)
 
-
-load("/Users/laurasymul/OneDrive - UCL/Academia/Research/VIBRANT clinical data UCLouvain/Data processed/2025-05-29/crf_plates_dictionary.Rdata", verbose = TRUE)
+crf_dict_file <- 
+  list.files(
+    path = get_01_output_dir(), 
+    pattern = "01_crf_plates_dictionary", 
+    full.names = TRUE
+  ) |> 
+  sort(decreasing = TRUE) |> 
+  magrittr::extract(1)
+  
+load(crf_dict_file, verbose = TRUE)
 
 crf35 <- 
   crf_clean$crf35 |> 

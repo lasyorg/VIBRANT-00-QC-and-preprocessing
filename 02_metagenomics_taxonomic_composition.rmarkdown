@@ -1,0 +1,2507 @@
+---
+title: "kSanity-VIRGO metagenomics counts QC"
+author: Laura Symul, Laura Vermeren, Michael France
+date: today
+format: 
+   html:
+     page-layout: full
+     code-fold: true
+     toc: true
+     toc-location: left
+     toc-depth: 5
+     embed-resources: true
+execute:
+  cache: refresh # true refresh false
+  warning: false
+knitr:
+  opts_chunk:
+    out.width: "100%"
+editor: source
+---
+
+
+```{r}
+#| warning: false
+
+library(tidyverse)
+library(magrittr)
+library(gt)
+library(patchwork)
+library(SummarizedExperiment)
+library(tidySummarizedExperiment)
+library(labelled)
+library(vegan)
+library(RColorBrewer)
+
+tmp <- fs::dir_map("R scripts/", source)
+tmp <- fs::dir_map("../VIBRANT-99-utils/R/", source)
+rm(tmp)
+
+theme_set(theme_light())
+```
+
+
+## Loading the data
+
+```{r}
+
+data_dir <- get_data_dir()
+mg_dir <- str_c(data_dir, "02 Metagenomics/")
+
+counts <- read_csv(str_c(mg_dir, "MVIBR_kSanityVIRGO2_ReadCounts_20250611.csv"))
+counts_corr <- read_csv(str_c(mg_dir, "MVIBR_kSanityVirgo2_GLcorr_20250611.csv"))
+relabs <- read_csv(str_c(mg_dir, "MVIBR_kSanityVirgo2_relAbund_20250611.csv"))
+technical_metadata <- read_csv(str_c(mg_dir, "VIBRANT_MG_technicalMetaData_20250611.csv"), guess_max = Inf)
+VIRGO2_taxonomic_table <- read_csv(str_c(mg_dir, "VIRGO2_taxonomy_key_250429.csv"))
+
+LBP_strain_info <- readxl::read_xlsx(str_c(data_dir, "00 Trial Data/IsolateNumbers.xlsx"))
+
+
+```
+
+We load the following tables, all provided by Michael France:
+
+- `technical_metadata` technical metadata (dimensions: `r dim(technical_metadata) |> paste0(collapse = " samples x ") |> paste0(" columns")`)
+
+
+- `counts` raw counts per LBP strain and taxa (dimensions: `r dim(counts) |> paste0(collapse = " samples x ") |> paste0(" columns")`)
+- `counts_corr` counts per LBP strain and taxa corrected by gene length (dimensions: `r dim(counts_corr) |> paste0(collapse = " samples x ") |> paste0(" columns")`)
+- `relabs` relative abundances per LBP strain and taxa, computed by M. France from `counts_corr` (dimensions: `r dim(relabs) |> paste0(collapse = " samples x ") |> paste0(" columns")`)
+- `VIRGO2_taxonomic_table` taxonomic table for the taxa as defined in VIRGO2 (dimensions: `r dim(VIRGO2_taxonomic_table) |> paste0(collapse = " taxa x ") |> paste0(" columns")`)
+
+
+## Manifest QC
+
+In this section, we check, harmonize, and transform the manifest and technical metadata provided by Michael France.
+
+```{r}
+technical_metadata_original <- technical_metadata
+```
+
+
+### Column name cleaning and description
+
+The `technical_metadata` table contains the following columns:
+
+```{r}
+technical_metadata |> glimpse()
+```
+
+```{r}
+#| eval: false
+# checks
+all(technical_metadata$UID == str_c("MG_", technical_metadata$SampleNumber), na.rm = TRUE)
+technical_metadata |> dplyr::filter(UID != str_c("MG_", SampleNumber))
+
+```
+
+
+```{r}
+
+dictionary <- 
+  tibble(original_name = colnames(technical_metadata)) |> 
+  mutate(
+    description = 
+      case_when(
+        (original_name == "UID") ~ '"MG_" followed by the `SampleNumber`',
+        (original_name == "PoorQualityMGData") ~ "Whether the sample has poor quality metagenomics data.", 
+        (original_name == "NoMGData") ~ "Whether the sample has no metagenomics data.",
+        (original_name == "SampleNumber") ~ 'Vaginal swab barcode for metagenomics and qPCR',
+        (original_name == "PID") ~ 'Participant ID as provided in the metagenomics manifest',
+        (original_name == "VisitCode") ~ 'Visit code (double)',
+        (original_name == "VisitCodeFlagged") ~ '1 if Michael flagged the visit code as unexpected',
+        (original_name == "SampleType") ~ 'Sample type (e.g., Clinical sample, Control, etc.)',
+        (original_name == "Ext_Lib_Plate") ~ 'Extraction library plate number',
+        (original_name == "Ext_Lib_Plate_ID") ~ 'Extraction library plate ID',
+        (original_name == "Ext_Lib_Position") ~ 'Well position of sample on the extraction library plate',
+        (original_name == "SequencingRun") ~ 'Sequencing run ID',
+        (original_name == "DateSequenced") ~ 'Sequencing date',
+        (original_name == "Lane") ~ 'Sequencing lane',
+        (original_name == "Sample") ~ 'Sequencing sample ID',
+        (original_name == "Library Pool") ~ 'Library pool',
+        (original_name == "Library") ~ 'Pooled library ID',
+        (original_name == "FragmentSize") ~ 'Size of fragment',
+        (original_name == "IndexSet") ~ 'Index set ID',
+        (original_name == "Index 1") ~ 'Index 1',
+        (original_name == "Index 2") ~ 'Index 2',
+        (original_name == "BioinformaticsProcessingBatch") ~ 'Bioinformatics processing batch number',
+        (original_name == "Selected4re-extraction") ~ 'Whether the sample had been selected for re-extraction by Michael (poor signal samples and a few random good signal samples).',
+        (original_name == "Re-extracted_data_used") ~ 'Whether the re-extracted data was used for the sample.',
+        (original_name == "LibrarySequencedTwice") ~ 'Whether a sample has been sequenced twice (to increase coverage).',
+        (original_name == "Notes") ~ 'Notes from Michael France',
+        TRUE ~ "????"
+      ),
+    print_label = 
+      case_when(
+        (original_name == "UID") ~ 'Metagenomics unique sample identifier',
+        (original_name == "PoorQualityMGData") ~ "Poor quality MG data", 
+        (original_name == "NoMGData") ~ "No MG data",
+        (original_name == "SampleNumber") ~ 'Vaginal swab barcode',
+        (original_name == "PID") ~ 'Participant ID',
+        (original_name == "VisitCode") ~ 'Visit code',
+        (original_name == "VisitCodeFlagged") ~ 'Unexpected visit code',
+        (original_name == "SampleType") ~ 'Sample type',
+        (original_name == "Ext_Lib_Plate") ~ 'Extraction library plate nb',
+        (original_name == "Ext_Lib_Plate_ID") ~ 'Extraction library plate ID',
+        (original_name == "Ext_Lib_Position") ~ 'Well position of sample on the extraction library plate',
+        (original_name == "SequencingRun") ~ 'Sequencing run ID',
+        (original_name == "DateSequenced") ~ 'Sequencing date',
+        (original_name == "Lane") ~ 'Sequencing lane',
+        (original_name == "Sample") ~ 'Sequencing sample ID',
+        (original_name == "Library Pool") ~ 'Library pool',
+        (original_name == "Library") ~ 'Pooled library ID',
+        (original_name == "FragmentSize") ~ 'Size of fragment',
+        (original_name == "IndexSet") ~ 'Index set ID',
+        (original_name == "Index 1") ~ 'Index 1',
+        (original_name == "Index 2") ~ 'Index 2',
+        (original_name == "BioinformaticsProcessingBatch") ~ 'Bioinformatics processing batch nb',
+        (original_name == "Selected4re-extraction") ~ 'Selected for re-extraction',
+        (original_name == "Re-extracted_data_used") ~ 'Re-extracted data was used',
+        (original_name == "LibrarySequencedTwice") ~ 'Sequenced twice',
+        (original_name == "Notes") ~ 'Notes',
+        TRUE ~ "????"
+      )
+  )
+
+
+```
+
+We rename and harmonize the column names of the technical metadata.
+
+```{r}
+
+technical_metadata <- 
+  technical_metadata |> 
+  janitor::clean_names() |>
+  dplyr::rename(
+    mg_uid = uid,
+    mg_pid = pid,
+    mg_visit_code = visit_code,
+    mg_sample_type = sample_type,
+    swab_barcode = sample_number,
+    ext_lib_plate_nb = ext_lib_plate,
+    sequencing_sample_id = sample,
+    sequencing_lane = lane,
+    sequencing_date = date_sequenced,
+    selected_for_re_extraction = selected4re_extraction
+  ) 
+
+```
+
+```{r}
+
+dictionary <- 
+  dictionary |>  
+  mutate(name = colnames(technical_metadata)) |> 
+  select(name, original_name, description, print_label)
+
+```
+
+
+```{r}
+
+dictionary |> 
+  select(-print_label) |> 
+  gt() |> 
+  cols_label(
+    name = "New column name",
+    original_name = "Original column name",
+    description = "Description"
+  ) 
+
+```
+
+
+:::callout-note
+@Michael: let us know if you think that the descriptions are accurate or if some should be corrected or could be more precise :)
+:::
+
+We also make some basic column type transformations (to logical, characters, numeric, etc.)
+
+```{r}
+
+technical_metadata <- 
+  technical_metadata |> 
+  mutate(
+    poor_quality_mg_data = (poor_quality_mg_data == 1),
+    no_mg_data = (no_mg_data == 1),
+    visit_code_flagged = (visit_code_flagged == 1),
+    sequencing_date = lubridate::as_date(sequencing_date |> as.character(), format = "%y%m%d"),
+    selected_for_re_extraction = (selected_for_re_extraction == 1) |> replace_na(FALSE),
+    re_extracted_data_used = (re_extracted_data_used == 1) |> replace_na(FALSE),
+    library_sequenced_twice = (library_sequenced_twice == 1) |> replace_na(FALSE),
+  )
+
+```
+
+
+### FIXES to visit codes based on feedback from the CAPRISA team
+
+Based on data received from Nireshni Mitchev on May 27th 2025, we fix the visit codes for one sample.
+
+
+```{r}
+
+technical_metadata <- 
+  technical_metadata |> 
+  mutate(
+    mg_visit_code = 
+      case_when(
+        (swab_barcode == "2271051") ~ "10",
+        # (swab_barcode == "2280392") ~ 10,
+        TRUE ~ mg_visit_code
+      )
+  )
+
+```
+
+
+
+### Sample and control type harmonization
+
+```{r}
+
+technical_metadata <- 
+  technical_metadata |> 
+  mutate(
+    sample_type = mg_sample_type |> str_replace("lS", "l s") |> str_replace("b\\+C", "b \\+ C"),
+    control_type = 
+      case_when(
+        sample_type %in% c("Clinical sample", "Unknown") ~ "",
+        TRUE ~ sample_type
+      ) |> factor(),
+    sample_type = 
+      case_when(
+        str_detect(sample_type, "Unknown") | str_detect(mg_pid, "^068.*[xX]$") ~ "Test sample",
+        str_detect(sample_type, "Clinical") ~ "Clinical sample",
+        str_detect(sample_type, "Mock") ~ "Positive control",
+        TRUE ~ "Negative control"
+      ) |> 
+      fct_infreq()
+  ) |> 
+  relocate(sample_type, control_type, .after = mg_sample_type) 
+
+technical_metadata |> dplyr::count(sample_type, mg_sample_type, control_type) |> gt()
+
+```
+
+```{r}
+
+dictionary <- 
+  dictionary |> 
+  bind_rows(
+    tibble(
+      name = c("sample_type", "control_type"),
+      description = c("Sample type (harmonized)", "Control type (Mock 1, Mock 2, etc.)"),
+      print_label = c("Sample type", "Control type")
+    )
+  ) |> 
+  distinct()
+
+```
+
+
+### Participant ID harmonization
+
+In the technical metadata, the participant ID is provided in three different formats. 
+
+We harmonize them to match the pattern `068[12]0[0-9]{4}` (*e.g.*, "068101234").
+
+```{r}
+
+technical_metadata <- 
+  technical_metadata |> 
+  mutate(
+      pid = 
+        case_when(
+          str_detect(mg_pid, "068-") ~ mg_pid |> str_remove_all("-"),
+          str_detect(mg_pid, "^68") ~ str_c("0", mg_pid),
+          TRUE ~ mg_pid
+        )
+    ) |> 
+    relocate(pid, .before = mg_pid)
+
+```
+
+```{r}
+#| eval: false
+technical_metadata |> 
+  mutate(pid_length = str_length(pid)) |> 
+  dplyr::filter(pid_length != 9) |> 
+  View()
+
+```
+
+There are a few samples from a participant from a different study ("CAP098"):
+
+```{r}
+
+technical_metadata |> 
+  mutate(pid_length = str_length(pid)) |> 
+  dplyr::filter(pid_length != 9, sample_type == "Clinical sample") |> 
+  select(mg_uid, swab_barcode, pid, mg_pid, mg_visit_code, ext_lib_plate_nb) |> 
+  gt()
+
+```
+
+We modify the `sample_type` of these samples to "Clinical sample (other study)".
+
+```{r}
+
+technical_metadata <- 
+  technical_metadata |> 
+  mutate(
+    sample_type = 
+      ifelse(
+        str_detect(pid, "^98"), 
+        "Clinical sample (other study)", 
+        sample_type |> as.character()
+        ) |> factor()
+    ) 
+
+```
+
+Visit codes are transformed to the desired format (*i.e.,* a 4 digit character string):
+
+```{r}
+
+technical_metadata <-
+  technical_metadata |> 
+  mutate(
+    visit_code = 
+      case_when(
+        mg_visit_code == "V5" ~ "1400",
+        mg_visit_code == "V6" ~ "1500",
+        TRUE ~ mg_visit_code |> as.character() |> str_pad(width = 4, pad = "0")
+      )
+    ) |> 
+  relocate(visit_code, .before = mg_visit_code)
+
+```
+
+
+
+```{r}
+dictionary <- 
+  dictionary |> 
+  bind_rows(
+    tibble(
+      name = c("pid", "visit_code"),
+      description = c("Harmonized participant ID", "Harmonized visit code"),
+      print_label = c("Participant ID", "Visit code")
+    )
+  ) |> 
+  distinct()
+```
+
+
+
+### Samples sequenced twice
+
+```{r}
+
+samples_sequenced_twice <- 
+  technical_metadata |> 
+  group_by(mg_uid) |> 
+  summarize(n_rows = n(), library_sequenced_twice = sum(library_sequenced_twice, na.rm = TRUE)) |> 
+  arrange(-n_rows)
+
+# samples_sequenced_twice |> dplyr::count(n_rows, library_sequenced_twice)
+
+samples_sequenced_twice <- 
+  samples_sequenced_twice |> 
+  dplyr::filter(n_rows > 1) 
+
+# sum(technical_metadata$library_sequenced_twice, na.rm = TRUE) == nrow(samples_sequenced_twice)
+
+
+```
+
+`r nrow(samples_sequenced_twice)` samples have been sequenced twice to increase the coverage. The technical metadata contains a column `library_sequenced_twice` (prev. `LibrarySequencedTwice`) that indicates whether a sample has been sequenced twice. Since the data is merge after sequencing and **before** bioinformatics processing (VIRGO2 and kSANITY), we need to merge the technical metadata for these samples so they match the `counts`, `counts_corr` and `relabs` data.
+
+
+```{r}
+#| eval: false
+
+samples_sequenced_twice |> 
+  gt(caption = "Samples that have been sequenced twice") 
+
+```
+
+```{r}
+rm(samples_sequenced_twice)
+```
+
+Since metagenomic reads from re-sequenced samples have either been merged or discarded, we aggregate the technical metadata such that we only have one row per sample (`mg_uid` or `uid`).
+
+```{r}
+
+# we first identify columns that may contain different information for re-sequenced genes
+# (we expect sequencing-related columns)
+
+cols_to_aggregate <-
+  technical_metadata |> 
+  group_by(mg_uid) |> 
+  arrange(sequencing_date) |> 
+  summarise(
+    across(everything(), ~ unique(.) |> length())
+  ) |> 
+  select(-mg_uid) |>
+  summarise(across(everything(), ~ sum(. > 1))) |> 
+  pivot_longer(cols = everything(), names_to = "column", values_to = "needs_aggregation") |> 
+  dplyr::filter(needs_aggregation > 0) |> 
+  pull(column)
+
+# We aggregate these columns
+
+technical_metadata_agg <- 
+  technical_metadata |> 
+  select(mg_uid, all_of(cols_to_aggregate)) |> 
+  group_by(mg_uid) |> 
+  arrange(sequencing_date) |> 
+  summarise(
+    latest_sequencing_date = max(sequencing_date),
+    across(all_of(cols_to_aggregate), ~ unique(.) |> na.omit() |> str_c(collapse = "; "))
+  ) |> 
+  mutate(library_sequenced_twice = str_detect(library_sequenced_twice, "TRUE")) 
+
+# Then merge with the unique values for the other columns
+
+technical_metadata_agg <- 
+  technical_metadata |> 
+  select(-all_of(cols_to_aggregate)) |>
+  distinct() |> 
+  dplyr::left_join(technical_metadata_agg, by = join_by(mg_uid))
+  
+```
+
+
+
+### Matching the sequenced samples with the expected list of samples (CRF35)
+
+We now match the technical metadata with the expected list of samples from CRF35 (Specimen collection).
+
+```{r}
+
+crf_files <- 
+  get_01_output_dir() |> 
+  fs::dir_ls() |> 
+  str_subset("/01_")
+
+visits_file <- 
+  crf_files |> 
+  str_subset("01_visits_2025") |> 
+  sort(decreasing = TRUE) |> 
+  extract(1)
+
+load(visits_file, verbose = TRUE)
+
+participants_file <- 
+  crf_files |> 
+  str_subset("01_participants_2025") |> 
+  sort(decreasing = TRUE) |> 
+  extract(1)
+
+load(participants_file, verbose = TRUE)
+
+crf_file <- 
+  crf_files |> 
+  str_subset("01_crf_clean_") |> 
+  sort(decreasing = TRUE) |>
+  extract(1)
+
+load(crf_file, verbose = TRUE)
+```
+
+
+
+
+```{r}
+
+matched <- 
+  dplyr::full_join(
+    visits |> 
+      select(pid, visit_code, specimen_collection_swab) |> 
+      mutate(in_CRF = TRUE),
+    technical_metadata_agg |> 
+      select(pid, visit_code, sample_type, control_type, swab_barcode, mg_pid, no_mg_data) |> 
+      mutate(
+        in_mg_manifest = TRUE,
+        has_mg_data = (no_mg_data != 1)
+        ),
+    by = join_by(pid, visit_code)
+  ) |> 
+  dplyr::left_join(
+    participants |> 
+      select(pid, site, randomized) |> 
+      distinct() |> 
+      mutate(pid_in_CRF = TRUE),
+    by = join_by(pid)
+  ) |> 
+  mutate(
+    randomized = randomized |> replace_na(FALSE),
+    in_CRF = in_CRF |> replace_na(FALSE),
+    in_mg_manifest = in_mg_manifest |> replace_na(FALSE),
+    has_mg_data = has_mg_data |> replace_na(FALSE) ,
+    pid_in_CRF = pid_in_CRF |> replace_na(FALSE),
+    specimen_collection_swab = specimen_collection_swab |> replace_na(0)
+  )
+
+```
+
+
+
+```{r}
+
+matched <- 
+  matched |> 
+  group_by(pid, visit_code) |> 
+  mutate(n_mg_rows = n()) |>
+  ungroup() |> 
+  mutate(
+    category = 
+      case_when(
+        sample_type == "Clinical sample (other study)" ~ "Clinical sample from another study",
+        sample_type != "Clinical sample" ~ "Not a clinical sample",
+        has_mg_data & !pid_in_CRF ~ "Unexpected participant ID",
+        has_mg_data & !randomized ~ "Sequenced sample from non-randomized participants",
+        has_mg_data & !in_CRF ~ "Sequenced sample not listed in CRF35",
+        !in_mg_manifest & in_CRF & (specimen_collection_swab > 0) & randomized ~ "Sample from a randomized participant not in mg manifest",
+        !has_mg_data & in_CRF & (specimen_collection_swab > 0) & randomized ~ "Sample from a randomized participant not sequenced",
+        !in_mg_manifest & in_CRF & (specimen_collection_swab > 0) & (!randomized) ~ "Sample from a non-randomized participant not in mg manifest",
+        !has_mg_data & in_CRF & (specimen_collection_swab > 0) & (!randomized) ~ "Sample from a non-randomized participant not sequenced",
+        !has_mg_data & in_CRF & (specimen_collection_swab == 0) ~ "No swab collected according to CRF35 (and no MG data)",
+        has_mg_data & in_CRF & (specimen_collection_swab == 0) ~ "Unexpected sequencing data (no swab collected according to CRF35)",
+        has_mg_data & in_CRF ~ "Expected sample",
+        TRUE ~ "???"
+      )
+  ) 
+
+```
+
+```{r}
+
+matched |> 
+  mutate(randomized = ifelse(randomized, "Randomized", "Not randomized")) |> 
+  dplyr::count(randomized, has_mg_data, category, name = "n samples") |> 
+  arrange(randomized, has_mg_data, -`n samples`) |> 
+  dplyr::rename(
+    `Sample category` = category,
+    `Randomized` = randomized,
+  ) |>
+  group_by(Randomized) |> 
+  gt(row_group_as_column = TRUE) 
+
+```
+
+
+```{r}
+
+plot_sample_categories <- function(matched){
+  
+  matched |> 
+    mutate(
+      pid = pid |> fct_infreq(), 
+      randomized = ifelse(randomized, "Randomized", "Not randomized") |> factor() |> fct_rev()
+    ) |> 
+    filter(
+      has_mg_data | (specimen_collection_swab > 0)
+    ) |> 
+    ggplot() +
+    aes(x = pid, y = visit_code, fill = category) +
+    geom_tile() +
+    facet_grid(. ~ site + randomized, scales = "free", space = "free") +
+    scale_fill_manual(values = c(
+      "Expected sample" = "steelblue1",
+      "No swab collected according to CRF35 (and no MG data)" = "gray80",
+      "Not a clinical sample" = "gray60",
+      "Clinical sample from another study" = "gray40",
+      "Sample from a randomized participant not sequenced" = "red",
+      "Sample from a randomized participant not in mg manifest" = "red3",
+      "Sample from a non-randomized participant not sequenced" = "red4",
+      "Sample from a non-randomized participant not in mg manifest" = "black",
+      "Sequenced sample from non-randomized participants" = "steelblue3",
+      "Sequenced sample not listed in CRF35" = "orange2",
+      "Unexpected sequencing data (no swab collected according to CRF35)" = "orange1",
+      "Unexpected participant ID" = "purple"
+    )) +
+    theme(
+      axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
+    )
+  
+}
+
+```
+
+
+```{r}
+#| fig-width: 15
+#| fig-height: 5
+
+plot_sample_categories(matched) + ggtitle("Combined rows from the MG manifest and CRF35 data")
+plot_sample_categories(matched |> dplyr::filter(randomized)) + 
+  ggtitle('Randomized participants')
+
+```
+
+```{r}
+#| eval: false
+
+matched |> 
+  dplyr::filter(randomized & (category == "Sample from a randomized participant not sequenced")) |> 
+  select(pid, visit_code, specimen_collection_swab) |> 
+  arrange(-specimen_collection_swab) |> 
+  gt(caption = "Expected samples (collected swabs according to CRF35) with missing metagenomics data")
+
+```
+
+
+
+```{r}
+#| eval: false
+
+## SOLVED
+
+# In addition to the samples that have not been sequenced, there is one "participant x visit" that has been sequenced twice. 
+
+# This is likely a `pid` or `visit_code` mistake because that entry is not listed in CRF35.
+
+matched <- 
+  matched |> 
+  mutate(
+    category = 
+      case_when(
+        (sample_type == "Clinical sample") & (n_mg_rows > 1) ~ str_c(category, " (two distinct barcodes for the same participant x visit)"),
+        TRUE ~ category
+      )
+    ) 
+
+matched |>
+  dplyr::filter((sample_type == "Clinical sample"), n_mg_rows > 1) |> 
+  gt()
+
+```
+
+
+There are also two samples that were not listed in CRF35 but have been sequenced - these are likely daily swabs that were sent by mistake to the Ravel lab.
+
+```{r}
+
+matched |> 
+  dplyr::filter(category == "Unexpected sequencing data (no swab collected according to CRF35)") |> 
+  gt()
+
+```
+
+
+We add a column to the manifest data with the sample categories defined above.
+
+```{r}
+
+technical_metadata_agg <- 
+  technical_metadata_agg |> 
+  dplyr::left_join(
+    matched |> select(pid, visit_code, category) |> distinct() |> 
+      dplyr::rename(sample_category = category)
+  )
+
+technical_metadata_agg |> dplyr::count(sample_category) |> gt(caption = "Sample categories of the sequenced samples")
+  
+
+```
+
+```{r}
+
+dictionary <- 
+  dictionary |> 
+  bind_rows(
+    tibble(
+      name = "sample_category",
+      description = "Sample classification based on the data about collected specimen as documented in CRF35.",
+      print_label = c("Sample category")
+    )
+  ) |> 
+  distinct()
+
+```
+
+
+
+
+### Defining the unique cross-assay identifier
+
+The unique cross-assay identifier (`uid`) is
+
+- the concatenation of `pid` and `visit_code` for the "expected" clinical samples. 
+- the `swab_barcode` for the non-clinical samples and the "unexpected" clinical samples. 
+
+
+```{r}
+
+technical_metadata_agg <- 
+  technical_metadata_agg |> 
+  group_by(pid, visit_code) |> mutate(i = row_number()) |> ungroup() |> 
+  mutate(
+    uid = 
+      case_when(
+        str_detect(sample_type, "Clinical sample") & (i > 1) ~ str_c(pid, "_", visit_code, "_", i),
+        str_detect(sample_type, "Clinical sample") ~ str_c(pid, "_", visit_code),
+        !(is.na(swab_barcode) | (swab_barcode == ""))  ~ swab_barcode,
+        TRUE ~ mg_uid |> str_remove("MG_")
+      ),
+  ) |> 
+  relocate(uid, .before = mg_uid) |> 
+  select(-i)
+
+```
+
+```{r}
+dictionary <- 
+  dictionary |> 
+  bind_rows(
+    tibble(
+      name = "uid",
+      description = "Unique sample identifier - common ID across VIBRANT assays.",
+      print_label = c("Sample ID")
+    )
+  ) |> 
+  distinct()
+```
+
+
+
+
+## Creating a `SummarizedExperiment` object from these tables
+
+The `SummarizedExperiment` object will contain the following assays:
+
+- `count`
+- `count_corr`
+- `rel_ab`
+
+
+We note some negative (although extremely small) values in the `count`, `count_corr`, and `rel_ab` assays (all for native *L. crispatus*, I assume it being an artifact from kSANITY). We will set these to 0.
+
+
+The SE `colData` will contain the technical metadata, the total number of reads for each sample, along with the metagenomics-based CST, subCST, and VALENCIA's assignment scores. For samples that have been sequenced twice, we will merge the sequencing and processing information from both sequencing runs.
+
+The SE `rowData` will contain the VIRGO2 taxonomic table, augmented with the LBP strain information.
+
+
+The LBP strain information is loaded as `LBP_strain_info` from the VIBRANT Dropbox file that contains information on the LBP strains
+
+Since the names of the strains do not match exactly those used by Michael, we modify them to match those provided by Michael.
+
+```{r}
+
+LBP_strain_info <- 
+  LBP_strain_info |> 
+  mutate(
+    strain_id = `VMRC ID`, 
+    LBP = ifelse(is.na(LC106), "LC-115", "LC-106 & LC-115") |> factor(), 
+    strain_origin = `Geographic source` |> factor()
+  ) |>
+  dplyr::rename(Biose_ID = `Biose ID`) |> #VMRC_ID = `VMRC ID` 
+  dplyr::select(strain_id, LBP, strain_origin, Biose_ID) |> 
+  arrange(strain_origin, LBP) |> 
+  mutate(strain_id = strain_id |> fct_inorder()) |> 
+  dplyr::select(strain_id, LBP, strain_origin, contains("ID")) |> 
+  mutate(
+    strain_id_mg = sub("_.*", "", strain_id),
+    strain_id_mg = 
+      case_when(
+        strain_id_mg == "CC0028A1" ~ "C0028A1", 
+        TRUE ~ strain_id_mg
+      )
+  )
+
+LBP_strain_info |>   
+  set_variable_labels(
+    strain_id = "Strain ID", 
+    strain_id_mg = "Strain ID (as in metagenomics data)",
+    strain_origin = "Strain origin", 
+    Biose_ID = "Biose ID"
+  ) |> 
+  gt(caption = "LBP strain information") |> 
+  tab_style(style = cell_text(weight = "bold"),
+            locations = cells_column_labels())
+
+```
+
+
+We also add the manifest column dictionary to the `@metadata` slot of the `SE` object.
+
+```{r}
+
+mg_to_SE <- function(counts, counts_corr, relabs, technical_metadata_agg, dictionary, VIRGO2_taxonomic_table, LBP_strain_info) {
+  
+  ## ASSAYS
+  assay_count <- 
+    counts |> 
+    mutate(mg_uid = sampleID) |> 
+    dplyr::select(-c(sampleID, CST, subCST, score)) |> 
+    as.data.frame() |> 
+    column_to_rownames("mg_uid") |> 
+    drop_na() |> 
+    t() |> 
+    pmax(0)
+  
+  assay_count_corr <- 
+    counts_corr |> 
+    mutate(mg_uid = sampleID) |> 
+    dplyr::select(-c(sampleID, CST, subCST, score)) |> 
+    as.data.frame() |> 
+    column_to_rownames("mg_uid") |>
+    t() |> 
+    pmax(0)
+  
+  assay_relative_ab <- 
+    relabs |> 
+    mutate(mg_uid = sampleID) |> 
+    dplyr::select(-c(sampleID, CST, subCST, score)) |> 
+    as.data.frame() |> 
+    column_to_rownames("mg_uid") |>
+    t() |> 
+    pmax(0)
+    
+  
+  ## colData 
+  
+  # We build the SE colData from the the technical metadata
+  # to which we add the total number of non-human reads
+  # and the cst related data
+  se_coldata <- 
+    technical_metadata_agg |> 
+    dplyr::left_join(
+      counts |> 
+        mutate(mg_uid = sampleID) |> 
+        select(mg_uid, CST, subCST, score) |>
+        dplyr::rename(
+          cst = CST,
+          sub_cst = subCST,
+          valencia_score = score
+        ) |> 
+        mutate(
+          total_non_human_reads = 
+            rowSums(counts |> select(-c(sampleID, CST, subCST, score)))
+        ), 
+      by = join_by(mg_uid)
+    ) |> 
+    select(
+      uid, mg_uid, sample_type, control_type, 
+      total_non_human_reads, poor_quality_mg_data, 
+      cst, sub_cst, valencia_score, 
+      everything()
+      ) |> 
+    arrange(sample_type, uid) |> 
+    dplyr::filter(!is.na(total_non_human_reads))
+  
+  if (any(se_coldata$no_mg_data)) 
+    warning(
+      "Some samples have no metagenomics data (no_mg_data == TRUE); this should NOT be the case."
+    )
+  se_coldata <- se_coldata |> select(-no_mg_data) 
+  
+  dictionary <- 
+    dictionary |> 
+    bind_rows(
+      tibble(name = "total_non_human_reads", description = "Total `counts` per sample"),
+      tibble(name = "cst", original_name = "CST", description = "VALENCIA CST based on metagenomic taxonomic composition"),
+      tibble(name = "sub_cst", original_name = "subCST", description = "VALENCIA sub-CST based on metagenomic taxonomic composition"),
+      tibble(name = "valencia_score", original_name = "score", description = "VALENCIA assignment score based on metagenomic taxonomic composition")
+    ) 
+  
+  dictionary <- 
+    tibble(name = colnames(se_coldata)) |> 
+    dplyr::left_join(dictionary, by = join_by(name)) |> 
+    mutate(table = "colData")
+  
+  se_coldata <- se_coldata |> as.data.frame()
+  
+  ## rowData
+  se_rowdata <- 
+    tibble(
+      taxon_id = 
+        counts |> 
+        dplyr::select(-c(sampleID, CST, subCST, score)) |>
+        colnames()
+    ) |> 
+    dplyr::left_join(
+      VIRGO2_taxonomic_table |> 
+        mutate(
+          taxon_id = Taxa,
+          last_available_taxonomic_level = 
+            Full_taxonomy |> str_remove_all(".*;") |> str_remove_all("_.*")
+        ) |> 
+        relocate(Full_taxonomy, .after = Species) |> 
+        dplyr::rename(taxon_category = Category),
+      by = join_by(taxon_id)
+    ) |> 
+    dplyr::left_join(
+      LBP_strain_info |> 
+        dplyr::rename(taxon_id = strain_id_mg),
+      by = join_by(taxon_id)
+    ) |> 
+    mutate(
+      taxon_label = 
+        ifelse(!is.na(LBP), "LBP strain ", "") |> 
+        str_c(taxon_id |> str_replace_all("_", " ")) |> 
+        str_c(
+          ifelse(
+            last_available_taxonomic_level %in% c("g","f"), 
+            str_c(" (", last_available_taxonomic_level, ")"), ""
+          )
+        ) |> 
+        str_c(
+          ifelse(taxon_id == "Lactobacillus_crispatus", " (undifferentiated)", "")
+        ) |> 
+        str_c(
+          ifelse(taxon_id == "Pichia_kudriavzevii", " (prev. Candida krusei)", "")
+        ) |> 
+        str_c(
+          ifelse(taxon_id == "UBA629_sp005465875", " (BVAB1 / Ca. Lachnocurva v.)", "")
+        )
+    ) |> 
+    relocate(taxon_label, .after = taxon_id) |>
+    janitor::clean_names() |>
+    dplyr::rename(LBP = lbp) |> 
+    as.data.frame() |> 
+    select(-taxa) |> 
+    mutate(
+      taxon_category = taxon_category |> str_replace("HumanVirus", "Human virus")
+    )
+  
+  dictionary <- 
+    dictionary |> 
+    bind_rows(
+      tibble(
+        name = colnames(se_rowdata)
+      ) |> 
+        mutate(
+          description = 
+            case_when(
+              name == "taxon_id" ~ "Taxon ID (as in the VIRGO2 taxonomic table)",
+              name == "taxon_label" ~ "Taxon label (human-readable)",
+              name == "taxon_category" ~ "Taxon category (Bacteria, protist, etc.)",
+              name == "domain" ~ "Domain",
+              name == "phylum" ~ "Phylum",
+              name == "class" ~ "Class",
+              name == "order" ~ "Order",
+              name == "family" ~ "Family",
+              name == "genus" ~ "Genus",
+              name == "species" ~ "Species",
+              name == "full_taxonomy" ~ "Full taxonomic classification (concatenated)",
+              name == "last_available_taxonomic_level" ~ "Last available taxonomic level",
+              name == "strain_id" ~ "LBP strain ID",
+              name == "LBP" ~ "The LBP product(s) in which this strain was included.",
+              name == "strain_origin" ~ "LBP strain origin (US or SA)",
+              name == "biose_id" ~ "LBP strain ID used by Biose",
+              TRUE ~ "???"
+            ),
+          print_label = 
+            case_when(
+              name == "taxon_id" ~ "Taxon ID",
+              name == "taxon_label" ~ "Taxon",
+              name == "taxon_category" ~ "Category",
+              name == "full_taxonomy" ~ "Taxonomy",
+              name == "LBP" ~ "LBP",
+              name == "strain_origin" ~ "Strain origin",
+              name == "biose_id" ~ "Biose ID",
+              TRUE ~ description
+            ),
+          table = "rowData"
+        )
+    )
+    
+  # Harmonization of the order of samples and feature
+  
+  ordered_mg_uids <- se_coldata$mg_uid
+  assay_count <- assay_count[, ordered_mg_uids] |> set_colnames(se_coldata$uid)
+  assay_count_corr <- assay_count_corr[, ordered_mg_uids] |> set_colnames(se_coldata$uid)
+  assay_relative_ab <- assay_relative_ab[, ordered_mg_uids] |> set_colnames(se_coldata$uid)
+  se_coldata <- se_coldata |> set_rownames(se_coldata$uid)
+
+  ordered_taxa <- se_rowdata$taxon_id
+  assay_count <- assay_count[ordered_taxa, ]
+  assay_count_corr <- assay_count_corr[ordered_taxa, ]
+  assay_relative_ab <- assay_relative_ab[ordered_taxa, ]
+  
+  SummarizedExperiment::SummarizedExperiment(
+    assays = list(count = assay_count, count_corr = assay_count_corr, rel_ab = assay_relative_ab),
+    rowData = se_rowdata,
+    colData = se_coldata,
+    metadata = list(
+      name = "VIBRANT metagenomics taxonomic counts and relative abundances",
+      date = today(),
+      dictionary = dictionary
+    )
+  )
+}
+
+```
+
+```{r}
+
+SE_mg <- 
+  mg_to_SE(
+    counts = counts, counts_corr = counts_corr, relabs = relabs, 
+    technical_metadata_agg = technical_metadata_agg, dictionary = dictionary,
+    VIRGO2_taxonomic_table = VIRGO2_taxonomic_table, LBP_strain_info = LBP_strain_info
+    )
+
+```
+
+
+```{r}
+
+SE_mg <- 
+  SE_mg |> 
+  mutate(
+    location = 
+      case_when(
+        str_detect(pid, "06810") ~ "US",
+        str_detect(pid, "06820") ~ "SA",
+        TRUE ~ NA_character_
+      )
+  )
+
+```
+
+
+```{r}
+SE_mg
+```
+
+
+## Exploratory & QC analyses
+
+### Total number of counts/relative abundances per sample
+
+**Total number of non-human reads per sample**
+
+```{r}
+
+get_var_print_label <- function(SE, var = "poor_quality_mg_data"){
+  var_label <- 
+    SE@metadata$dictionary |> 
+    dplyr::filter(name == var) |> 
+    pull(print_label)
+  
+  if (is.na(var_label)) var_label <- var |> str_replace_all("_", " ") |> str_to_sentence()
+  
+  var_label
+}
+
+```
+
+
+```{r}
+
+plot_total_non_human_reads <- function(SE_mg, color_by = "poor_quality_mg_data"){
+  
+  if (is.logical(SE_mg@colData[, color_by])) {
+    color_breaks = c(FALSE, TRUE)
+    color_values = c("steelblue2", "red2")
+    color_labels = c("No", "Yes")
+  }
+  else {
+    color_breaks = SE_mg@colData[, color_by] |> unique()
+    color_values = RColorBrewer::brewer.pal(n = length(color_breaks), name = "Set2")
+    color_labels = color_breaks
+  }
+  
+  SE_mg |> 
+    colData() |> 
+    as_tibble() |>
+    ggplot() +
+    aes(x = total_non_human_reads, fill = !!sym(color_by)) +
+    geom_vline(xintercept = 500000, linetype = "dashed", color = "black") +
+    geom_histogram(bins = 50) +
+    scale_x_log10() + 
+    scale_fill_manual(get_var_print_label(SE_mg, var = color_by), breaks = color_breaks, values = color_values, labels = color_labels) +
+    facet_grid(sample_type ~ ., scale = "free") +
+    labs(
+      x = "Total number of non-human reads per sample", 
+      y = "Number of samples",
+      caption = "Samples with less than 500,000 non-human reads (dashed line) should be considered with caution."
+    ) +
+    theme(
+      strip.text.y = element_text(angle = 0)
+    )
+}
+
+```
+
+```{r}
+SE_mg <- 
+  SE_mg |> 
+  mutate(
+     reextraction_status = 
+      case_when(
+        selected_for_re_extraction & re_extracted_data_used ~ "Re-extracted data used",
+        selected_for_re_extraction & !re_extracted_data_used ~ "Re-extracted data not used",
+        !selected_for_re_extraction ~ "Not re-extracted",
+        TRUE ~ "???"
+      )
+  )
+
+SE_mg@metadata$dictionary <- 
+  SE_mg@metadata$dictionary |> 
+  bind_rows(
+    tibble(
+      name = "reextraction_status",
+      description = "Re-extraction status of the sample (if selected for re-extraction, whether the re-extracted data was used or not).",
+      print_label = "Re-extraction status"
+    )
+  ) |> 
+  distinct()
+```
+
+
+```{r}
+#| fig-width: 10
+#| fig-height: 5
+
+
+plot_total_non_human_reads(SE_mg, color_by = "poor_quality_mg_data")
+plot_total_non_human_reads(SE_mg, color_by = "selected_for_re_extraction")
+plot_total_non_human_reads(SE_mg, color_by = "reextraction_status")
+plot_total_non_human_reads(SE_mg, color_by = "library_sequenced_twice")
+
+
+```
+
+
+
+```{r}
+
+SE_mg |> 
+  colData() |> 
+  as_tibble()  |> 
+  arrange(total_non_human_reads) |> 
+  mutate(index = row_number()) |>
+  select(index, uid, poor_quality_mg_data, total_non_human_reads, sample_type, control_type, library_sequenced_twice, selected_for_re_extraction, sub_cst) |> 
+  dplyr::filter(total_non_human_reads < 1e6) |>
+  gt(caption = "Samples with less than 1 million non-human reads") 
+
+```
+
+
+```{r}
+#| fig-width: 10
+#| fig-height: 6
+
+plot_total_non_human_reads(SE_mg, color_by = "selected_for_re_extraction") +
+  facet_grid(visit_code ~ ., scale = "free")
+
+```
+
+
+**Total relative abundances per sample**
+
+We check that the relative abundances sum to 1 for each sample.
+
+```{r}
+#| fig-height: 3
+#| fig-width: 10
+
+tol <- 1e-5
+
+SE_mg |> 
+  as_tibble() |> 
+  group_by(.sample) |>
+  summarise(total_rel_ab = sum(rel_ab)) |> 
+  ggplot(aes(x = total_rel_ab)) +
+  geom_histogram(binwidth = tol) + 
+  labs(x = "Total relative abundances per sample", 
+       y = "Number of samples") +
+  scale_x_continuous(limits = 1 + c(-1, 1) * 5 * tol) 
+
+rm(tol)
+
+```
+
+
+
+```{r}
+
+# We check the relative abundances computation (should be `count_corr/sum(count_corr)`).
+
+tmp <- 
+  SE_mg |> 
+  as_tibble() |> 
+  group_by(.sample) |>
+  mutate(rel_ab_check = count_corr/sum(count_corr)) |> 
+  ungroup() 
+
+if (max(tmp$rel_ab_check - tmp$rel_ab, na.rm = TRUE) > 0.01) warning("!! Relative abundances do not match the computed values !!")
+
+```
+
+
+
+
+### Non-bacterial DNA
+
+There are some non-bacterial taxa in the dataset:
+
+```{r}
+
+SE_mg |> 
+  as_tibble() |> 
+  dplyr::filter(taxon_category != "Bacteria") |> 
+  group_by(.sample, taxon_category) |> 
+  summarize(rel_ab = sum(rel_ab), .groups = "drop") |> 
+  ggplot() +
+  aes(x = rel_ab, fill = taxon_category) +
+  geom_histogram(binwidth = 0.001) +
+  facet_wrap(~ taxon_category, scales = "free") +
+  scale_x_continuous("Total relative abundance per sample for that group", labels = scales::percent_format()) +
+  ylab("Number of samples") +
+  guides(fill = "none")
+  
+  
+SE_mg |> 
+  as_tibble() |> 
+  dplyr::filter(taxon_category != "Bacteria") |> 
+  group_by(.sample) |>
+  mutate(total_rel_ab = sum(rel_ab)) |>
+  ungroup() |> 
+  arrange(-total_rel_ab, -rel_ab) |> 
+  mutate(
+    .sample = .sample |> fct_inorder(),
+    taxon_label = taxon_label |> fct_inorder()
+  ) |> 
+  dplyr::filter(as.numeric(.sample) <= 20) |>
+  ggplot() +
+  aes(x = rel_ab, y = .sample |> fct_rev(), fill = taxon_category) +
+  geom_col() +
+  scale_x_continuous("Relative abundance", labels = scales::percent_format()) +
+  ylab("Top 20 samples with most non-bacterial relative abundances") 
+
+
+SE_mg |> 
+  as_tibble() |> 
+  dplyr::filter(taxon_category != "Bacteria") |> 
+  group_by(taxon_label) |>
+  mutate(total_rel_ab = sum(rel_ab), max_rel_ab = max(rel_ab)) |>
+  ungroup() |> 
+  arrange(-total_rel_ab, -rel_ab) |> 
+  mutate(
+    .sample = .sample |> fct_inorder(),
+    taxon_label = taxon_label |> fct_inorder()
+  ) |> 
+  dplyr::filter(as.numeric(taxon_label) <= 20, max_rel_ab > 0.001) |>
+  ggplot() +
+  aes(x = rel_ab, y = taxon_label |> fct_rev(), color = taxon_category, shape = poor_quality_mg_data) +
+  geom_point(alpha = 0.3, size = 2) +
+  scale_x_continuous("Relative abundance", labels = scales::percent_format()) +
+  ylab("Top non-bacterial organisms") +
+  theme(strip.text.y = element_text(angle = 0)) +
+  labs(caption = "Each dot is a sample.", color = "Category", shape = "Poor quality MG data")
+  
+  
+
+```
+
+Consequently, we create a new assay which contains the relative abundances of the bacteria only. 
+
+```{r}
+
+SE_mg <- 
+  SE_mg |>
+  mutate(
+    rel_ab_bact = rel_ab * (!is.na(taxon_category) & (taxon_category == "Bacteria"))
+  )
+
+assay(SE_mg, "rel_ab_bact") <- t(t(assay(SE_mg, "rel_ab_bact"))/colSums(assay(SE_mg, "rel_ab_bact")))
+
+```
+
+### "MultiGenera" content 
+
+Some VIRGO2 genes cannot be assigned to a single taxon, and are thus assigned to the "MultiGenera" taxon.
+
+When building the taxonomic composition tables, the counts/relative abundances of these genes are agglomerated into a single "MultiGenera" taxon.
+
+The distribution of the relative abundances of this "MultiGenera" taxon is shown below.
+
+```{r}
+#| fig-width: 8
+#| fig-height: 3
+
+SE_mg |> 
+  as_tibble() |> 
+  dplyr::filter(.feature == "MultiGenera") |> 
+  ggplot(aes(x = rel_ab)) +
+  geom_histogram(binwidth = 0.005) +
+  labs(x = 'Relative abundance of "MultiGenera" per sample', 
+       y = "Number of samples") +
+  scale_x_continuous(labels = scales::percent_format())
+
+
+```
+:::callout-important
+For downstream analyses, we make the assumption that all taxa present in the samples equally contributes to these MultiGenera genes. Consequently, we estimate the relative abundance of each taxa in a sample solely from the genes uniquely assigned to these taxa (*i.e.*, excluding the MultiGenera contribution). 
+
+This assumption may not always hold and the uncertainty on the relative abundances will be higher in samples with higher proportions of MultiGenera genes.
+::: 
+
+We re-name the `rel_ab` assay to `rel_ab_all` to reflect that it contains the relative abundances of every "detected/assigned" micro-organisms and create a new assay (`rel_ab`) that contains the relative abundances of the bacteria only, excluding the MultiGenera contribution.
+
+```{r}
+# we rename the `rel_ab` assay to `rel_ab_all`
+SE_mg <- SE_mg |> mutate(rel_ab_all = rel_ab) 
+assays(SE_mg) <- assays(SE_mg)[names(assays(SE_mg)) != "rel_ab"]
+```
+
+```{r}
+# we create a new assay `rel_ab` that contains the relative abundances of the non-MultiGenera bacteria only
+SE_mg <- SE_mg |> mutate(rel_ab = rel_ab_bact * (.feature != "MultiGenera"))
+assay(SE_mg, "rel_ab") <- t(t(assay(SE_mg, "rel_ab"))/colSums(assay(SE_mg, "rel_ab")))
+```
+
+```{r}
+# we re-order the assays
+assays(SE_mg) <- assays(SE_mg)[c("count", "count_corr",  "rel_ab_all", "rel_ab_bact", "rel_ab")]
+```
+
+And since the MultiGenera relative abundance is informative for quantifying uncertainty in samples (just like the total non-human reads), we add it to the `colData` of the `SE_mg` object.)
+
+```{r}
+
+SE_mg$rel_ab_multi_genera <- 
+  SE_mg |> 
+  colData() |> 
+  as_tibble() |> 
+  mutate(.sample = uid) |> 
+  select(.sample) |> 
+  dplyr::left_join(
+    SE_mg |> 
+      as_tibble() |> 
+      dplyr::filter(.feature == "MultiGenera") |> 
+      select(.feature, .sample, rel_ab_bact) |> 
+      mutate(
+        rel_ab_multi_genera = rel_ab_bact
+      ) |> 
+      select(.sample, rel_ab_multi_genera),
+    by = join_by(.sample)
+  ) |> 
+  pull(rel_ab_multi_genera)
+
+colData(SE_mg) <- 
+  colData(SE_mg) |> 
+  as.data.frame() |> 
+  relocate(
+    rel_ab_multi_genera, .after = total_non_human_reads
+  ) |> 
+  DataFrame()
+
+SE_mg@metadata$dictionary <-
+  SE_mg@metadata$dictionary |> 
+  bind_rows(
+    tibble(
+      name = "rel_ab_multi_genera",
+      description = "Total relative abundance of MultiGenera genes in the sample (as a fraction of the total bacterial reads).",
+      print_label = "MultiGenera rel. ab."
+    )
+  ) |> 
+  distinct()
+
+```
+
+
+### Control samples
+
+There are 4 categories of control samples:
+
+
+```{r}
+
+SE_mg |> 
+  colData() |> 
+  as_tibble() |> 
+  dplyr::filter(!str_detect(sample_type, "Clinical sample")) |>
+  select(control_type, uid, ext_lib_plate_nb) |> 
+  group_by(control_type) |> 
+  arrange(control_type, ext_lib_plate_nb) |>
+  gt(caption = "Control samples", row_group_as_column = TRUE) 
+
+```
+
+
+These control samples have been created such that
+
+- **Mock 1**: pooled patient samples from CAP084 swabs
+
+    + 50 non-BV
+        - VMRC 15 *L. crispatus* isolates
+        - 12 *L. crispatus* dominant samples
+        - 23 *L. iners* dominant samples
+        
+    + 50 BV
+        - 24 *G. vaginalis* dominant samples
+        - BV bacteria, not *G. vaginalis* dominant
+ 
+- **Mock 2**: Pooled pure isolates (equal volumes of pure isolates at OD 0.1)
+
+    + VMRC 15 *L. crispatus* isolates
+    + *G. vaginalis* ATCC
+    + *A. vaginae* ATCC
+    + *P. bivia* ATCC
+    + *L. crispatus* ATCC
+    + *L. gasseri* ATCC
+    + *S. agalactiae* ATCC
+    + *L. jensenii* ATCC
+    + *F. magna* 
+
+
+Taxonomic composition of these control samples:
+
+```{r}
+
+control_types <- SE_mg$control_type[!is.na(SE_mg$control_type) & (SE_mg$control_type != "")] |> unique() |> sort()
+
+```
+
+```{r}
+#| fig-width: 15
+#| fig-height: 6
+
+map(
+  control_types,
+  ~ {
+    tmp <- 
+      SE_mg |> 
+      as_tibble() |> 
+      dplyr::filter(control_type == .x) |> 
+      dplyr::filter(rel_ab > 0) 
+    top_taxa <- 
+      tmp |> 
+      group_by(taxon_label) |> 
+      summarise(total_re_lab = sum(rel_ab)) |> 
+      arrange(desc(total_re_lab)) |> 
+      slice_head(n = 25) |> 
+      pull(taxon_label) |> sort()
+    
+    all_taxa <- tmp$taxon_label |> unique() |> sort()
+    
+    tmp <- 
+      tmp |> 
+      mutate(
+        sample_label = str_c(.sample, ifelse(selected_for_re_extraction, " (re-x)", ""))
+      ) 
+    
+    tmp |> 
+      ggplot() +
+      aes(x = sample_label) +
+      facet_grid(. ~ str_c("Plate ", ext_lib_plate_nb), scales = "free", space = "free") +
+      geom_col(aes(y = rel_ab, fill = taxon_label), color = "black", linewidth = 0.1) +
+      geom_point(
+        data = 
+          tmp |> 
+          select(sample_label, ext_lib_plate_nb, total_non_human_reads, rel_ab_multi_genera, poor_quality_mg_data) |> 
+          distinct(), 
+        aes(y = 1.1, size = log10(total_non_human_reads), alpha = rel_ab_multi_genera)
+      ) +
+      scale_x_discrete("Samples") +
+      scale_y_continuous("Rel. ab.", breaks = seq(0, 1, by = 1/4), minor_breaks = seq(0, 1, by = 0.05)) +
+      scale_fill_manual(
+        "Top taxa", limits = top_taxa, breaks = all_taxa, values = get_taxa_colors(all_taxa), #, limits = all_taxa, values = get_taxa_colors(all_taxa),
+        guide = guide_legend(ncol = 3)
+        ) + 
+      scale_alpha_continuous(
+        "Relative abundance of MultiGenera genes",
+        range = c(1, 0), limits = c(0, 0.4),
+        guide = guide_legend(direction = "horizontal")
+      ) +
+      scale_size_continuous(
+        "Log10 of total non-human reads",
+        range = c(0.5, 5), limits = c(3, 9),
+        guide = guide_legend(direction = "horizontal")
+      ) +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+      labs(title = str_c("Control samples : ", .x))
+  }
+)
+
+```
+
+
+
+#### Mock 1
+
+
+For Mock 1 samples, the relative abundances are not very replicable across plates, but that seems to correlate with lower total number of non-human reads.
+
+We check below if detection (presence/absence) is better and better correlate within Mocks than across Mocks.
+
+
+```{r}
+
+tmp <- 
+  SE_mg |> 
+  as_tibble() |> 
+  dplyr::filter(str_detect(control_type, "Mock")) |> 
+  mutate(present = (rel_ab > 1/1000)) |> 
+  group_by(control_type, taxon_label) |>
+  mutate(tot_prop = sum(rel_ab)) |> 
+  ungroup() |> 
+  arrange(control_type, -tot_prop) |> 
+  mutate(taxon_label = taxon_label |> fct_inorder()) 
+
+```
+
+```{r}
+#| fig-width: 10
+#| fig-height: 4
+
+tmp |> 
+  ggplot() +
+  aes(x = taxon_label, y = .sample, fill = rel_ab |> log10()) +
+  geom_tile() +
+  ylab("") +
+  scale_x_discrete("Taxa", breaks = NULL) +
+  scale_fill_gradient(low = "gray99", high = "red", na.value = "white") +
+  facet_grid(control_type ~ ., scales = "free", space = "free")
+```
+
+It looks reasonable... 
+
+
+
+We also check if there were any LBP strains detected in the Mock 1 samples (their expected relative abundance should be around ~ 1/100).
+
+In Mock 2, their relative abundance should be around ~ 1/24.
+
+```{r}
+
+tmp |> 
+  dplyr::filter(str_detect(taxon_label, "LBP")) |>
+  mutate(
+    exp_rel_ab = 
+      case_when(
+        control_type == "Mock 1" ~ 1/100,
+        control_type == "Mock 2" ~ 1/24,
+        TRUE ~ NA_real_
+      )
+  ) |> 
+  ggplot() +
+  aes(x = .sample, y = rel_ab, col = .feature) +
+  facet_grid(. ~ control_type, scales = "free", space = "free") +
+  geom_hline(aes(yintercept = exp_rel_ab), linetype = "dashed", color = "black") +
+  geom_point(alpha = 0.5, size = 3) +
+  xlab("Barcode") +
+  scale_y_continuous(
+    "Relative abundance", 
+    labels = scales::percent_format(), 
+    breaks = seq(0, 1, by = 0.01)
+    ) +
+  scale_color_discrete("LBP strain") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+```
+The relative abundances in Mock 2 are around what is expected, but LBP strains are not detected in Mock 1.
+
+
+#### Mock 2
+
+In the Mock 2, we check for the proportion of species/taxa that were not expected based on the "theoretical" composition of Mock 2
+
+```{r}
+
+# Focus on Mock2
+
+tmp <- 
+  SE_mg |> 
+  as_tibble() |> 
+  dplyr::filter(control_type == "Mock 2") |> 
+  dplyr::filter(rel_ab > 0) |> 
+  mutate(
+    expected = 
+      str_detect(taxon_label, "LBP") | 
+      str_detect(taxon_label, "Gardnerella") |
+      str_detect(taxon_label, "Fannyhessea") |
+      str_detect(taxon_label, "bivia") |
+      str_detect(taxon_label, "crispatus") |
+      str_detect(taxon_label, "gasseri") |
+      str_detect(taxon_label, "jensenii") |
+      str_detect(taxon_label, "Streptococcus agalactiae") |
+      str_detect(taxon_label, "Finegoldia magna") 
+  )
+
+tmp |> 
+  ggplot() +
+  aes(y = rel_ab, x = .sample, fill = expected) +
+  geom_col(linewidth = 0.1) + # color = "black", 
+  scale_x_discrete("Samples") +
+  scale_y_continuous("Rel. ab.") + 
+  facet_grid(. ~ str_c("Plate ", ext_lib_plate_nb), scales = "free") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+tmp |> 
+  group_by(.sample, ext_lib_plate_nb, expected) |> 
+  summarize(tot_rel_ab_pc = round(100 * sum(rel_ab), 2), .groups = "drop") |>
+  dplyr::filter(!expected) |> 
+  gt(caption = "Percent of relative abundance with unexpected taxa")
+  
+
+```
+
+When we also consider the MultiGenera genes, results look worse: 
+
+```{r}
+
+# Focus on Mock2
+
+tmp <- 
+  SE_mg |> 
+  as_tibble() |> 
+  dplyr::filter(control_type == "Mock 2") |> 
+  dplyr::filter(rel_ab_bact > 0) |> 
+  mutate(
+    expected = 
+      str_detect(taxon_label, "LBP") | 
+      str_detect(taxon_label, "Gardnerella") |
+      str_detect(taxon_label, "Fannyhessea") |
+      str_detect(taxon_label, "bivia") |
+      str_detect(taxon_label, "crispatus") |
+      str_detect(taxon_label, "gasseri") |
+      str_detect(taxon_label, "jensenii") |
+      str_detect(taxon_label, "Streptococcus agalactiae") |
+      str_detect(taxon_label, "Finegoldia magna") 
+  )
+
+tmp |> 
+  ggplot() +
+  aes(y = rel_ab_bact, x = .sample, fill = expected) +
+  geom_col(linewidth = 0.1) + # color = "black", 
+  scale_x_discrete("Samples") +
+  scale_y_continuous("Rel. ab. (of bacterial content)") + 
+  facet_grid(. ~ str_c("Plate ", ext_lib_plate_nb), scales = "free") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+tmp |> 
+  group_by(.sample, ext_lib_plate_nb, expected) |> 
+  summarize(tot_rel_ab_pc = round(100 * sum(rel_ab_bact), 2), .groups = "drop") |>
+  dplyr::filter(!expected) |> 
+  gt(caption = "Percent of relative abundance with unexpected taxa")
+  
+
+```
+
+
+However, when examining the list of unexpected taxa, it seems that the "unexpectedness" can likely be attributed to shared genes that were assigned to a single taxa in VIRGO2:
+
+```{r}
+
+tmp |> 
+  dplyr::filter(!expected) |> 
+  arrange(.sample, -rel_ab_bact) |> 
+  group_by(.sample) |> 
+  slice_head(n = 20) |> 
+  ungroup() |> 
+  arrange(-rel_ab_bact) |> 
+  mutate(
+    taxon_label = taxon_label |> fct_inorder() |> fct_rev(),
+    expected = 
+      case_when(
+        str_detect(taxon_label, "actobacillus|Prevotella|Streptococcus|Finegoldia|MultiGenera") ~ "Likely shared genes",
+        TRUE ~ "??? contamination"
+      )
+    ) |>
+  ggplot() +
+  aes(x = .sample, y = taxon_label, size = rel_ab_bact, col = expected) +
+  geom_point() +
+  scale_y_discrete("Top 20 unexpected taxa") +
+  scale_color_manual("", values = c("red", "steelblue1")) +
+  xlab("Sample") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+
+
+
+
+#### Alpha-diversity of clinical samples and controls
+
+
+```{r}
+#| fig-width: 8
+
+vegan::diversity(SE_mg |> assay("rel_ab"), index = "shannon", MARGIN = 2) |> 
+  as_tibble() |> 
+  mutate(uid = colnames(SE_mg)) |> 
+  dplyr::left_join(SE_mg |> colData() |> as_tibble(), by = join_by(uid)) |> 
+  ggplot() +
+  aes(x = control_type, y = value |> exp(), col = sample_type, fill = sample_type) +
+  facet_grid(. ~ sample_type |> str_wrap(width = 20), scales = "free", space = "free") +
+  geom_violin(scale = "width", color = NA, alpha = 0.2) +
+  ggbeeswarm::geom_quasirandom(size = 0.5, alpha = 0.5) +
+  scale_y_log10() +
+  labs(
+    x = "",
+    y = "Effective number of species\nbased on shannon diversity index"
+  ) +
+  guides(fill = "none", color = "none") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+
+
+### Proportion of LBP strains per sample
+
+We saw above that the LBP strains were detected (as they should have) in the Mock 2 samples.
+
+In this section, we further document the detection and relative abundances of the LBP strains.
+
+```{r}
+
+SE_mg |> 
+  as_tibble() |> 
+  dplyr::filter(!is.na(LBP)) |> 
+  ggplot() +
+  aes(x = rel_ab, fill = (rel_ab == 0)) +
+  geom_histogram(binwidth = 0.01) +
+  scale_fill_manual("", values = c("steelblue", "gray"), labels = c("Rel. ab = 0", "Rel. ab > 0")) +
+  xlab("Relative abundance of LBP strains") +
+  ylab("Number of samples x LBP strain")
+
+```
+
+
+```{r}
+
+SE_mg |> 
+  as_tibble() |> 
+  dplyr::filter(!is.na(LBP), rel_ab > 0) |> 
+  ggplot() +
+  aes(x = rel_ab) +
+  geom_histogram(binwidth = 0.001) +
+  xlab("Non-zero relative abundance of LBP strains") +
+  ylab("Number of samples") +
+  facet_grid(LBP + .feature ~ .) +
+  theme(
+    strip.text.y = element_text(angle = 0)
+  )
+  
+
+```
+
+
+```{r}
+#| fig-width: 8
+#| fig-height: 4
+
+SE_mg |> 
+  as_tibble() |> 
+  dplyr::filter(!is.na(LBP), rel_ab > 0) |>
+  ggplot() +
+  aes(x = .feature) +
+  geom_bar() +
+  scale_x_discrete("LBP strains") +
+  scale_y_continuous("Number of samples with non-zero relative abundances") +
+  facet_grid(. ~ LBP, scales = "free", space = "free") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+  
+```
+
+
+```{r}
+
+number_of_non_zero_LBP_strains_per_sample <- 
+  SE_mg |> 
+  as_tibble() |>  
+  dplyr::filter(!is.na(LBP)) |> 
+  group_by(.sample) |> 
+  summarize(
+    number_of_non_zero_LBP_strains = sum(rel_ab > 0),
+  ) 
+
+number_of_non_zero_LBP_strains_per_sample |> 
+  ggplot() +
+  aes(x = number_of_non_zero_LBP_strains) +
+  geom_histogram(binwidth = 0.5) +
+  scale_x_continuous("Number of non-zero LBP strains per sample", breaks = 0:15, minor_breaks = 0) +
+  ylab("Number of samples") 
+
+```
+
+There are `r nrow(number_of_non_zero_LBP_strains_per_sample |> dplyr::filter(number_of_non_zero_LBP_strains > 0))` samples (`r (nrow(number_of_non_zero_LBP_strains_per_sample |> dplyr::filter(number_of_non_zero_LBP_strains > 0))/nrow(number_of_non_zero_LBP_strains_per_sample)*100) |> round(2)`%) with at least one LBP strain detected (non-zero relative abundance).
+
+
+```{r}
+
+SE_mg |> 
+  as_tibble() |>  
+  dplyr::filter(!is.na(LBP)) |> 
+  dplyr::left_join(
+    number_of_non_zero_LBP_strains_per_sample,
+    by = join_by(.sample)
+  ) |>
+  dplyr::filter(number_of_non_zero_LBP_strains != 0) |>
+  group_by(.feature) |>
+  mutate(tot_rel_abs_for_strain = sum(rel_ab)) |> 
+  ungroup() |> 
+  arrange(LBP, -tot_rel_abs_for_strain) |>
+  mutate(.feature = .feature |> fct_inorder()) |> 
+  group_by(.sample) |> 
+  mutate(
+    LBP_rel_abs = rel_ab / sum(rel_ab),
+    score = weighted.mean(LBP_rel_abs, .feature |> as.numeric()),
+    total_LBP_rel_abs = sum(rel_ab)
+  ) |> 
+  ungroup() |> 
+  arrange(score) |> 
+  mutate(.sample = .sample |> fct_inorder()) |> 
+  ggplot() +
+  aes(x = .feature, y = .sample, fill = rel_ab) +
+  geom_tile() +
+  scale_fill_continuous("Rel. ab", low = "white", high = "steelblue2") +
+  scale_x_discrete("Strains") +
+  scale_y_discrete("Samples", breaks = NULL) +
+  facet_grid(. ~ LBP + strain_origin, scales = "free_x", space = "free") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(
+    caption = "Rel. ab. of LBP strains in samples with at least one LBP strain detected (non-zero)",
+  )
+
+```
+
+
+
+### Compositions
+
+```{r}
+
+# creating a taxa category "other"
+summarized_rel_ab <- 
+  SE_mg |> 
+  as_tibble() |> 
+  group_by(.feature) |> 
+  mutate(max_rel_ab = max(rel_ab, na.rm = TRUE), mean_rel_ab = mean(rel_ab, na.rm = TRUE)) |> 
+  ungroup() |> 
+  mutate(
+    taxa = 
+      case_when(
+        !is.na(LBP) ~ taxon_label,
+        max_rel_ab > 1/3 ~ taxon_label,
+        TRUE ~ "Other"
+      ),
+    is_lacto = str_detect(genus, "Lactobacillus") & (taxa != "Other")
+  ) |> 
+  arrange(LBP, is_lacto, desc(max_rel_ab)) |>
+  mutate(
+    taxa = taxa |> fct_inorder()
+  ) |> 
+  group_by(.sample, sample_type, control_type, sample_category, poor_quality_mg_data, location, pid, visit_code, taxa, LBP, is_lacto, strain_origin) |>
+  summarize(rel_ab = sum(rel_ab), .groups = "drop") |>
+  arrange(.sample, -rel_ab) |> 
+  group_by(.sample) |>
+  mutate(
+    score = weighted.mean(taxa |> as.numeric(), rel_ab), 
+    tot = sum(rel_ab),
+    dom = taxa[1]
+    ) |> 
+  ungroup() |> 
+  arrange(score) |> 
+  mutate(.sample = .sample |> fct_inorder())
+
+```
+
+```{r}
+#| fig-width: 21
+#| fig-height: 12
+
+summarized_rel_ab |> 
+  ggplot() +
+  aes(x = .sample, y = rel_ab, fill = taxa) +
+  geom_col() +
+  scale_x_discrete("Samples", breaks = NULL) +
+  facet_grid(. ~ sample_type + str_wrap(sample_category, 50), scales = "free", space = "free") +
+  scale_fill_manual(
+    "", 
+    values = get_taxa_colors(summarized_rel_ab$taxa |> levels()),
+    guide = guide_legend(nrow = 5)
+    ) +
+  theme(
+    strip.text.x = element_text(angle = 90, hjust = 0),
+    legend.position = "bottom",
+  ) +
+  ggtitle("Taxonomic composition of all samples")
+
+```
+
+```{r}
+#| fig-width: 12
+#| fig-height: 12
+
+summarized_rel_ab |> 
+  dplyr::filter(sample_category != "Expected sample") |> 
+  ggplot() +
+  aes(x = .sample, y = rel_ab, fill = taxa) +
+  geom_col() +
+  scale_x_discrete("Samples", breaks = NULL) +
+  facet_grid(. ~ str_c(sample_type,"\n", control_type) + str_wrap(sample_category, 20), scales = "free", space = "free") +
+  scale_fill_manual(
+    "", 
+    values = get_taxa_colors(summarized_rel_ab$taxa |> levels()),
+    guide = guide_legend(nrow = 5)
+    ) +
+  theme(
+    strip.text.x = element_text(angle = 90, hjust = 0),
+    legend.position = "bottom",
+  ) +
+  ggtitle('"Unexpected" samples')
+
+```
+
+
+```{r}
+#| fig-width: 12
+#| fig-height: 8
+
+summarized_rel_ab |> 
+  dplyr::filter(sample_type == "Clinical sample") |> # 
+  ggplot() +
+  aes(x = pid, y = rel_ab, fill = taxa, alpha = poor_quality_mg_data) +
+  facet_grid(visit_code ~ location + sample_category, scales = "free_x", space = "free_x") +
+  geom_col() +
+  scale_x_discrete("Participant") + # , breaks = NULL) +
+  scale_alpha_discrete("Poor quality MG data", range = c(1, 0.5)) +
+  scale_fill_manual(
+    "", 
+    values = get_taxa_colors(summarized_rel_ab$taxa |> levels()),
+    guide = guide_legend(nrow = 5)
+    ) +
+  theme(
+    strip.text.x = element_text(angle = 0, hjust = 0.5),
+    strip.text.y = element_text(angle = 0),
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+    legend.position = "bottom",
+  ) +
+  ggtitle("Longitudinal profiles for all clinical samples")
+
+```
+
+
+```{r}
+#| fig-width: 12
+#| fig-height: 8
+
+summarized_rel_ab |> 
+  dplyr::filter(sample_type == "Clinical sample", sample_category %in% c("Expected sample")) |> # 
+  ggplot() +
+  aes(x = pid, y = rel_ab, fill = taxa, alpha = poor_quality_mg_data) +
+  geom_col() +
+  scale_x_discrete("Participant") + # , breaks = NULL) +
+  facet_grid(visit_code ~ location, scales = "free_x", space = "free_x") +
+  scale_alpha_discrete("Poor quality MG data", range = c(1, 0.5)) +
+  scale_fill_manual(
+    "", 
+    values = get_taxa_colors(summarized_rel_ab$taxa |> levels()),
+    guide = guide_legend(nrow = 5)
+  ) +
+  theme(
+    strip.text.x = element_text(angle = 0, hjust = 0.5),
+    strip.text.y = element_text(angle = 0),
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+    legend.position = "bottom",
+  ) +
+  ggtitle('Longitudinal profiles for all "expected" clinical samples')
+
+```
+
+```{r}
+#| fig-width: 12
+#| fig-height: 8
+
+summarized_rel_ab |> 
+  group_by(pid) |> 
+  mutate(
+    had_poor_quality_sample = any(poor_quality_mg_data)
+  ) |> 
+  ungroup() |> 
+  dplyr::filter(sample_type == "Clinical sample", had_poor_quality_sample) |> # 
+  ggplot() +
+  aes(x = visit_code, y = rel_ab, fill = taxa, alpha = poor_quality_mg_data) +
+  geom_col() +
+  scale_x_discrete("Visits") + # , breaks = NULL) +
+  facet_grid(. ~ pid + location, scales = "free_x", space = "free_x") +
+  scale_alpha_discrete("Poor quality MG data", range = c(1, 0.3)) +
+  scale_fill_manual(
+    "", 
+    values = get_taxa_colors(summarized_rel_ab$taxa |> levels()),
+    guide = guide_legend(nrow = 5)
+  ) +
+  theme(
+    strip.text.x = element_text(angle = 0, hjust = 0.5),
+    strip.text.y = element_text(angle = 0),
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+    legend.position = "bottom",
+  ) +
+  ggtitle('Longitudinal profiles for participant with poor quality MG data')
+
+```
+
+
+```{r}
+#| fig-width: 12
+#| fig-height: 4
+
+g_comp <- 
+summarized_rel_ab |> 
+  dplyr::filter(sample_type == "Clinical sample", visit_code == "0000") |> # 
+  group_by(.sample) |> mutate(any_LBP = sum(rel_ab[!is.na(LBP)]) > 0) |> ungroup() |> 
+  dplyr::filter(any_LBP) |> 
+  ggplot() +
+  aes(x = pid, y = rel_ab, fill = taxa) +
+  geom_col(color = "white") +
+  scale_x_discrete("Participant") + # , breaks = NULL) +
+  facet_grid(visit_code ~ location + sample_category, scales = "free_x", space = "free_x") +
+  scale_fill_manual(
+    "", 
+    values = get_taxa_colors(summarized_rel_ab$taxa |> levels()),
+    guide = guide_legend(nrow = 15)
+    ) +
+  theme(
+    strip.text.x = element_text(angle = 0, hjust = 0.5),
+    strip.text.y = element_text(angle = 0),
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
+  ) 
+
+g_origin <- 
+  
+summarized_rel_ab |> 
+  dplyr::filter(sample_type == "Clinical sample", visit_code == "0000") |> # 
+  group_by(.sample) |> mutate(any_LBP = sum(rel_ab[!is.na(LBP)]) > 0) |> ungroup() |> 
+  dplyr::filter(any_LBP) |> 
+  ggplot() +
+  aes(x = pid, y = rel_ab, fill = strain_origin) +
+  geom_col(color = "white") +
+  scale_x_discrete("Participant") + # , breaks = NULL) +
+  facet_grid(visit_code ~ location + sample_category, scales = "free_x", space = "free_x") +
+  theme(
+    strip.text.x = element_text(angle = 0, hjust = 0.5),
+    strip.text.y = element_text(angle = 0),
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
+  ) 
+
+g_comp + g_origin + plot_layout(nrow = 1, widths = c(2, 1)) +
+  plot_annotation(title = "Participant(s) with LBP strains at screening visit")
+
+```
+
+
+
+### PCoA on counts
+
+```{r}
+
+SE_mg <- 
+  SE_mg |> 
+  mutate(
+    combined_sample_type = str_c(sample_type," (", control_type,")") |> str_remove(" \\(\\)")
+  )
+
+```
+
+
+```{r}
+#| fig-height: 3
+#| fig-width: 7
+
+dist_matrix <-
+  vegdist(
+    assay(SE_mg[, SE_mg$total_non_human_reads > 0], "count") |> t(), 
+    method = "bray")
+
+pcoa <- wcmdscale(dist_matrix, eig = TRUE)
+print(pcoa)
+
+pcoa$eig |>
+  as.data.frame() |>
+  rownames_to_column("axis") |>
+  mutate(axis = str_remove(axis, "Eigenvalue"), 
+         var_explained = 100*pcoa$eig/sum(pcoa$eig)) |>
+  slice_head(n = 10) |>
+  gt() |>
+  tab_header(title = "Eigenvalues of the PCoA") |>
+  cols_label(axis = "Axis", `pcoa$eig` = "Eigenvalue", var_explained = "Variance explained") |>
+  fmt_number(columns = vars(`pcoa$eig`, var_explained), decimals = 3)
+
+pcoa$eig |> 
+  as_data_frame() |>
+  rownames_to_column("axis") |>
+  mutate(axis = axis |> as.numeric()) |>
+  ggplot(aes(x = axis, y = value)) +
+  geom_col() +
+  labs(
+    x = "Axis",
+    y = "Eigenvalue"
+  ) 
+
+
+pcoa$eig |> 
+  as_data_frame() |>
+  rownames_to_column("axis") |>
+  mutate(axis = axis |> as.numeric()) |>
+  dplyr::filter(axis <= 20) |> 
+  ggplot(aes(x = axis, y = value)) +
+  geom_col() +
+  labs(
+    x = "Axis",
+    y = "Eigenvalue"
+  ) 
+
+pcoa_data <- 
+  tibble(
+    uid = rownames(pcoa$points),
+    PCoA = pcoa$points
+  ) |> 
+  dplyr::left_join(
+    SE_mg |> colData() |> as_tibble(),
+    by = join_by(uid)
+  )
+
+```
+
+```{r}
+
+pcoa_plot <- function(pcoa_tb, pcoa, color_var, axes = 1:2){
+  
+  pcoa_tb <- 
+    pcoa_tb |> 
+    mutate(
+      col = as.factor(!!sym(color_var)),
+      x = PCoA[, axes[1]],
+      y = PCoA[, axes[2]]
+      )
+
+  pcoa_tb |>
+    ggplot() +
+    aes(x = x, y = y, color = col) +
+    geom_point(size = 2, alpha = 0.7) +
+    coord_fixed() +
+    labs(
+      x = paste0("PCoA ", axes[1], " (", round(100 * pcoa$eig[axes[1]] / sum(pcoa$eig), 1), "%)"),
+      y = paste0("PCoA ", axes[2], " (", round(100 * pcoa$eig[axes[2]] / sum(pcoa$eig), 1), "%)"),
+      color = color_var
+    ) 
+}
+
+
+```
+
+#### Type of sample
+
+```{r}
+
+sample_type_colors <- c("gray","gray85", "dodgerblue", "black", "purple", "red")
+
+pcoa_plot(pcoa_data, pcoa, "combined_sample_type", c(1, 2)) + scale_color_manual(values = sample_type_colors) 
+pcoa_plot(pcoa_data, pcoa, "combined_sample_type", c(3, 4)) + scale_color_manual(values = sample_type_colors) 
+
+```
+
+```{r}
+#| eval: false
+
+manova <- adonis2(dist_matrix ~ pcoa_data$sample_type)
+manova
+
+```
+
+
+#### Extraction Plate
+
+
+```{r}
+
+pcoa_plot(pcoa_data, pcoa, "ext_lib_plate_nb", c(1, 2))
+pcoa_plot(pcoa_data, pcoa, "ext_lib_plate_nb", c(3, 4))
+
+```
+
+
+Permutation test 
+
+```{r}
+#| eval: false
+
+manova <- adonis2(dist_matrix ~ pcoa_data$ext_lib_plate_nb)
+manova
+
+```
+
+
+
+#### Selected for re-extraction
+
+```{r}
+
+pcoa_plot(pcoa_data, pcoa, "selected_for_re_extraction", c(1, 2)) 
+pcoa_plot(pcoa_data, pcoa, "selected_for_re_extraction", c(3, 4)) 
+
+```
+
+
+
+#### Bioinformatics Processing Batch 
+
+```{r}
+
+pcoa_plot(pcoa_data, pcoa, "bioinformatics_processing_batch", c(1, 2))
+pcoa_plot(pcoa_data, pcoa, "bioinformatics_processing_batch", c(3, 4))
+
+```
+
+#### Library Pool
+
+```{r}
+
+pcoa_plot(pcoa_data, pcoa, "library_pool", c(1, 2))
+pcoa_plot(pcoa_data, pcoa, "library_pool", c(3, 4))
+
+```
+
+
+#### Lane
+
+
+```{r}
+
+pcoa_plot(pcoa_data |> dplyr::filter(sequencing_lane %in% 1:4), pcoa, "sequencing_lane", c(1, 2))
+pcoa_plot(pcoa_data |> dplyr::filter(sequencing_lane %in% 1:4), pcoa, "sequencing_lane", c(3, 4))
+
+```
+
+
+### PCoA on relative abundances
+
+```{r}
+#| fig-height: 3
+#| fig-width: 7
+
+dist_matrix_relab <-
+  vegdist(
+    assay(SE_mg[, SE_mg$total_non_human_reads > 0], "rel_ab") |> t(), 
+    method = "bray")
+
+
+pcoa_relab <- wcmdscale(dist_matrix_relab, eig = TRUE)
+print(pcoa_relab)
+
+pcoa_relab$eig |>
+  as.data.frame() |>
+  rownames_to_column("axis") |>
+  mutate(axis = str_remove(axis, "Eigenvalue"), 
+         var_explained = 100*pcoa_relab$eig/sum(pcoa_relab$eig)) |>
+  slice_head(n = 10) |>
+  gt() |>
+  tab_header(title = "Eigenvalues of the PCoA") |>
+  cols_label(axis = "Axis", `pcoa_relab$eig` = "Eigenvalue", var_explained = "Variance explained") |>
+  fmt_number(columns = vars(`pcoa_relab$eig`, var_explained), decimals = 3)
+
+pcoa_relab$eig |> 
+  as_data_frame() |>
+  rownames_to_column("axis") |>
+  mutate(axis = axis |> as.numeric()) |>
+  ggplot(aes(x = axis, y = value)) +
+  geom_col() +
+  labs(
+    x= "Axis",
+    y = "Eigenvalue"
+  ) 
+
+
+pcoa_relab$eig |> 
+  as_data_frame() |>
+  rownames_to_column("axis") |>
+  mutate(axis = axis |> as.numeric()) |>
+  dplyr::filter(axis <= 20) |> 
+  ggplot(aes(x = axis, y = value)) +
+  geom_col() +
+  labs(
+    x= "Axis",
+    y = "Eigenvalue"
+  ) 
+
+pcoa_relab_data <- 
+  tibble(
+    uid = rownames(pcoa_relab$points),
+    PCoA = pcoa_relab$points
+  ) |> 
+  dplyr::left_join(
+    SE_mg |> colData() |> as_tibble(),
+    by = join_by(uid)
+  )
+
+```
+
+
+#### Type of sample
+
+
+```{r}
+
+pcoa_plot(pcoa_relab_data, pcoa_relab, "combined_sample_type", c(1, 2)) + scale_color_manual(values = sample_type_colors) 
+pcoa_plot(pcoa_relab_data, pcoa_relab, "combined_sample_type", c(3, 4)) + scale_color_manual(values = sample_type_colors) 
+
+```
+
+```{r}
+
+manova <- adonis2(dist_matrix_relab ~ pcoa_relab_data$sample_type)
+manova
+
+```
+
+
+#### Extraction Plate
+
+
+```{r}
+
+pcoa_plot(pcoa_relab_data, pcoa_relab, "ext_lib_plate_nb", c(1, 2))
+pcoa_plot(pcoa_relab_data, pcoa_relab, "ext_lib_plate_nb", c(3, 4))
+
+```
+
+```{r}
+#| eval: false
+
+manova <- adonis2(dist_matrix_relab ~ pcoa_relab_data$ext_lib_plate_nb)
+manova
+
+```
+
+
+#### Selected for re-extraction
+
+```{r}
+
+pcoa_plot(pcoa_relab_data, pcoa_relab, "selected_for_re_extraction", c(1, 2)) 
+pcoa_plot(pcoa_relab_data, pcoa_relab, "selected_for_re_extraction", c(3, 4)) 
+
+```
+
+
+#### Library Pool
+
+```{r}
+
+pcoa_plot(pcoa_relab_data, pcoa_relab, "library_pool", c(1, 2))
+pcoa_plot(pcoa_relab_data, pcoa_relab, "library_pool", c(3, 4))
+
+```
+
+
+#### Lane
+
+
+```{r}
+
+pcoa_plot(pcoa_relab_data |> dplyr::filter(sequencing_lane %in% 1:4), pcoa_relab, "sequencing_lane", c(1, 2))
+pcoa_plot(pcoa_relab_data |> dplyr::filter(sequencing_lane %in% 1:4), pcoa_relab, "sequencing_lane", c(3, 4))
+
+```
+
+
+
+#### Visit
+
+
+```{r}
+
+tmp <- 
+  pcoa_relab_data |> 
+  dplyr::filter(
+    sample_type == "Clinical sample", 
+    visit_code %in% c(seq(1000, 1900, by =100), 2120)
+    )
+
+v_colors <- c("red", "green3", colorRampPalette(c("dodgerblue1", "dodgerblue4","purple"))(7))
+  
+
+pcoa_plot(tmp, pcoa_relab, "visit_code", c(1, 2)) +  scale_color_manual(values = v_colors) 
+pcoa_plot(tmp, pcoa_relab, "visit_code", c(3,4)) +  scale_color_manual(values = v_colors) 
+
+```
+
+
+
+
+## Saving `SummarizedExperiment` objects
+
+We first check that the `SE` object is formatted as it should for its integration in the `MAE`.
+
+```{r}
+
+# we remove the columns pid, visit_code, and location
+colData(SE_mg) <- colData(SE_mg)[, !colnames(colData(SE_mg)) %in% c("pid", "visit_code", "location")]
+# we also remove additional columns that are not needed for downstream analyses
+colData(SE_mg) <- colData(SE_mg)[, !colnames(colData(SE_mg)) %in% c("combined_sample_type", "sample_category")]
+
+SE_mg <- check_se(SE_mg)
+
+```
+
+
+We save the `SE` objects to disk
+
+```{r}
+
+saveRDS(
+  SE_mg, 
+  str_c(
+    get_01_output_dir(),  
+    "02_se_mg_", today() |> str_remove_all("-"), ".rds"
+    )
+  )
+
+```
+
+
+We also save the `technical_metadata_agg` object to disk so we can re-use it for the qPCR data preparation.
+
+```{r}
+
+saveRDS(
+  technical_metadata_agg, 
+  str_c(
+    get_01_output_dir(),  
+    "02_technical_metadata_agg_", today() |> str_remove_all("-"), ".rds"
+    )
+  )
+
+```
+
+```{r}
+#| eval: false
+
+SE_mg |> 
+  as_tibble() |> 
+  select(.feature, .sample, mg_uid, rel_ab) |> 
+  pivot_wider(
+    names_from = .feature, 
+    values_from = rel_ab
+  ) |>
+  write_csv(
+    file = "MG_final_rel_ab_for_Michael_to_check.csv",
+    quote = "none"
+  )
+  
+
+```
+
+
+
+
+

@@ -21,6 +21,7 @@ editor: source
 
 ```{r}
 #| warning: false
+#| cache: false
 
 library(tidyverse)
 library(magrittr)
@@ -39,26 +40,25 @@ theme_set(theme_light())
 
 # Clinical data (CRF data)
 
-> TODO: fix the path to the VIBRANT dropbox once CRF data cleaning and QCed is finalized
-
-```{r}
-
-crf_data_path <- fs::dir_ls(
-  "/Users/laurasymul/OneDrive - UCL/Academia/Research/VIBRANT clinical data UCLouvain/Data processed/"
-) |> sort(decreasing = TRUE) |> str_subset("2025-05-29")
-
-# crf_data_path <- fs::dir_ls(
-#   "/Users/lvermeren/OneDrive - UCL/VIBRANT clinical data/Data processed/") |> sort(decreasing = TRUE) |> magrittr::extract(1) #LV
-
-```
 
 ## CRF data (raw and QCed)
 
 ```{r}
 
-load(str_c(crf_data_path, "/crf_raw.RData"), verbose = TRUE)
-load(str_c(crf_data_path, "/crf_clean.RData"), verbose = TRUE)
-load(str_c(crf_data_path, "/crf_plates_dictionary.RData"), verbose = TRUE)
+crf_files <- 
+  get_01_output_dir() |> 
+  fs::dir_ls() |> 
+  str_subset("/01_")
+
+crf_clean_file <- crf_files |> str_subset("01_crf_clean") |> sort(decreasing = TRUE) |> magrittr::extract(1)
+crf_raw_file <- crf_files |> str_subset("01_crf_raw") |> sort(decreasing = TRUE) |> magrittr::extract(1)
+crf_dict_file <- crf_files |> str_subset("01_crf_plates_dictionary") |> sort(decreasing = TRUE) |> magrittr::extract(1)
+
+load(crf_clean_file, verbose = TRUE)
+load(crf_raw_file, verbose = TRUE)
+load(crf_dict_file, verbose = TRUE)
+
+rm(crf_clean_file, crf_raw_file, crf_dict_file)
 
 ```
 
@@ -67,9 +67,18 @@ load(str_c(crf_data_path, "/crf_plates_dictionary.RData"), verbose = TRUE)
 
 ```{r}
 
-load(str_c(crf_data_path, "/participants.RData"), verbose = TRUE)
-load(str_c(crf_data_path, "/participants_variable_dictionary.RData"), verbose = TRUE)
-load(str_c(crf_data_path, "/participant_crfs_merged.RData"), verbose = TRUE)
+load(
+  crf_files |> str_subset("01_participants_2025") |> sort(decreasing = TRUE) |> magrittr::extract(1),
+  verbose = TRUE
+  )
+load(
+  crf_files |> str_subset("01_participants_variable_dictionary") |> sort(decreasing = TRUE) |> magrittr::extract(1),
+  verbose = TRUE
+  )
+load(
+  crf_files |> str_subset("01_participant_crfs_merged") |> sort(decreasing = TRUE) |> magrittr::extract(1),
+  verbose = TRUE
+  )
 
 ```
 
@@ -77,8 +86,14 @@ load(str_c(crf_data_path, "/participant_crfs_merged.RData"), verbose = TRUE)
 
 ```{r}
 
-load(str_c(crf_data_path, "/visits.RData"), verbose = TRUE)
-load(str_c(crf_data_path, "/visits_crfs_merged.RData"), verbose = TRUE)
+load(
+  crf_files |> str_subset("01_visits_2025") |> sort(decreasing = TRUE) |> magrittr::extract(1),
+  verbose = TRUE
+  )
+load(
+  crf_files |> str_subset("01_visits_crfs_merged") |> sort(decreasing = TRUE) |> magrittr::extract(1),
+  verbose = TRUE
+  )
 
 ```
 
@@ -89,7 +104,7 @@ load(str_c(crf_data_path, "/visits_crfs_merged.RData"), verbose = TRUE)
 
 visits |> 
   ggplot() +
-  aes(x = study_day, y = pid |> factor(), color = dfseq |> factor()) +
+  aes(x = study_day, y = pid |> factor(), color = visit_code |> factor()) +
   geom_point() 
 
 ```
@@ -117,8 +132,7 @@ visits <-
 
 ```{r}
 
-data_source <- "real"
-data_dir <- str_c(get_data_dir(data_source), "01 Preprocessed and QCed/")
+data_dir <- get_01_output_dir()
 se_files <- fs::dir_ls(data_dir, regexp = "se_.*\\.rds$") |> sort(decreasing = TRUE)
 
 ```
@@ -227,8 +241,6 @@ We will assemble the following tables (`SE` objects):
 ```{r}
 assay_list |> gt()
 ```
-
-> TODO: add the Flow Cytometry data once available
 
 
 ## `mae_coldata_assays` tables
@@ -479,7 +491,7 @@ SE_list <-
 
 
 mae <- 
-  MultiAssayExperiment(
+  MultiAssayExperiment::MultiAssayExperiment(
     experiments = MultiAssayExperiment::ExperimentList(SE_list),
     colData = 
       mae_coldata |> select(-in_CRF, -in_assays) |> 
@@ -493,9 +505,9 @@ mae <-
       colData_dictionary = participants_variable_dictionary,
       crf_plates_description = crf_plates_dictionary,
       crf_data_raw = crf_raw,
-      crf_data_clean = crf_clean #, 
-      # participant_crfs_merged = participant_crfs_merged,
-      # visits_crfs_merged = visits_crfs_merged
+      crf_data_clean = crf_clean, 
+      participant_crfs_merged = participant_crfs_merged,
+      visits_crfs_merged = visits_crfs_merged
     )
   )
 
@@ -637,8 +649,7 @@ We save the "master" MAE (with all assays); but if needed for publication, we ca
 saveRDS(
   mae, 
   str_c(
-    get_data_dir(data_source = data_source),  
-    "02 MAEs/",
+    get_02_output_dir(),
     "mae_full_", today() |> str_remove_all("-"), ".rds"
   )
 )

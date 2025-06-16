@@ -26,7 +26,7 @@ plot_samples_on_standard_curves <- function(se, feature){
   samples |> 
     ggplot() +
     aes(
-      x = unadj_conc |> log2(), 
+      x = unadj_conc |> log10(), 
       y = FI |> asinh(),
       col = value_type, shape = value_type
     ) +
@@ -36,14 +36,14 @@ plot_samples_on_standard_curves <- function(se, feature){
       aes(yintercept = FI |> asinh()), alpha = 0.5
     ) +
     geom_point(
-      data = standards, aes(x = exp_conc |> log2()), 
+      data = standards, aes(x = exp_conc |> log10()), 
       col = "green2", size = 2, alpha = 0.6
       ) +
     geom_text(
       data =
         standards |> select(sample_id, exp_conc) |> distinct() |> 
         mutate(sample_id = sample_id |> str_remove("S"), value_type = NA),
-      aes(x = exp_conc |> log2(), y = -Inf, label = sample_id), 
+      aes(x = exp_conc |> log10(), y = -Inf, label = sample_id), 
       col = "green2", vjust = 0, size = 3
     ) +
     geom_point(size = 0.8, alpha = 0.5) +
