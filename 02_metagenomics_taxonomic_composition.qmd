@@ -460,7 +460,7 @@ technical_metadata_agg <-
   arrange(sequencing_date) |> 
   summarise(
     latest_sequencing_date = max(sequencing_date),
-    across(cols_to_aggregate, ~ unique(.) |> na.omit() |> str_c(collapse = "; "))
+    across(all_of(cols_to_aggregate), ~ unique(.) |> na.omit() |> str_c(collapse = "; "))
   ) |> 
   mutate(library_sequenced_twice = str_detect(library_sequenced_twice, "TRUE")) 
 
@@ -470,7 +470,7 @@ technical_metadata_agg <-
   technical_metadata |> 
   select(-all_of(cols_to_aggregate)) |>
   distinct() |> 
-  left_join(technical_metadata_agg, by = join_by(mg_uid))
+  dplyr::left_join(technical_metadata_agg, by = join_by(mg_uid))
   
 ```
 
@@ -1394,7 +1394,7 @@ SE_mg$rel_ab_multi_genera <-
   as_tibble() |> 
   mutate(.sample = uid) |> 
   select(.sample) |> 
-  left_join(
+  dplyr::left_join(
     SE_mg |> 
       as_tibble() |> 
       dplyr::filter(.feature == "MultiGenera") |> 
@@ -2500,6 +2500,25 @@ saveRDS(
   )
 
 ```
+
+```{r}
+#| eval: false
+
+SE_mg |> 
+  as_tibble() |> 
+  select(.feature, .sample, mg_uid, rel_ab) |> 
+  pivot_wider(
+    names_from = .feature, 
+    values_from = rel_ab
+  ) |>
+  write_csv(
+    file = "MG_final_rel_ab_for_Michael_to_check.csv",
+    quote = "none"
+  )
+  
+
+```
+
 
 
 
