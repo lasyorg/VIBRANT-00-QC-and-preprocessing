@@ -1116,7 +1116,19 @@ This was actually a mistake and it should be 250 for all plates for the 16S targ
 We fix this here:
 
 ```{r}
-
+qpcr <- 
+  qpcr |> 
+  mutate(
+    copies_per_swab = 
+      case_when(
+        (qpcr_sample_type != "Standard") & 
+          (target == "16S") & 
+          (ext_lib_plate_nb < 12) ~ 
+          copies_per_swab / 2,
+        TRUE ~ 
+          copies_per_swab
+      )
+  )
 ```
 
 
