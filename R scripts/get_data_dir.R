@@ -60,6 +60,9 @@ get_03_output_dir <- function(){
   get_output_dir() |> str_c("03 QCed MAEs/")
 }
 
+get_04_output_dir <- function(){
+  get_output_dir() |> str_c("04 unblinded MAEs/")
+}
 
 
 
