@@ -1,0 +1,215 @@
+---
+title: "Arm unblinding"
+author: Laura Symul, Laura Vermeren
+date: today
+format: 
+   html:
+     page-layout: full
+     code-fold: true
+     toc: true
+     toc-location: left
+     toc-depth: 5
+     embed-resources: true
+execute:
+  cache: refresh # true refresh false
+  warning: false
+knitr:
+  opts_chunk:
+    out.width: "100%"
+editor: source
+---
+
+```{r}
+#| warning: false
+#| cache: false
+
+library(tidyverse)
+library(magrittr)
+library(gt)
+library(patchwork)
+library(SummarizedExperiment)
+library(tidySummarizedExperiment)
+library(MultiAssayExperiment)
+
+tmp <- fs::dir_map("R scripts/", source)
+tmp <- fs::dir_map("../VIBRANT-99-utils/R/", source)
+rm(tmp)
+theme_set(theme_light())
+
+```
+
+# Loading the `MultiAssayExperiment` object
+
+```{r}
+
+mae_files <- 
+  fs::dir_ls(
+    get_03_output_dir(),
+    regexp = "mae_full_.*\\.rds$"
+  ) |> 
+  sort(decreasing = TRUE) |>
+  magrittr::extract(1)
+
+mae <- readRDS(mae_files)
+
+rm(mae_files)
+
+```
+
+
+# Unblinding
+
+At the moment, the `arm` column in the `mae@colData` contains the following values:
+
+```{r}
+
+mae$arm |> table() |> as.data.frame() |> gt()
+
+```
+
+
+We load the randomization codes and arm assignment files:
+
+
+```{r}
+
+arm_dir <- str_c(get_clinical_data_dir(), "Unblinding/")
+
+mgh_arm_data_file <- str_c(arm_dir, "US_STAT_ML.xlsx")
+cap_arm_data_file <- str_c(arm_dir, "sa_stats_randomisation_table.xlsx")
+
+
+```
+
+The arm data are in the file `r mgh_arm_data_file |> basename()` for MGH and `r `cap_arm_data_file |> basename()` for CAP.
+
+```{r}
+
+mgh_arm_data <- 
+  readxl::read_excel(mgh_arm_data_file) |> 
+  mutate(
+    treatment_code = PHARMCODE,
+    arm = case_when(
+      TREATMENT == "LC-106 daily for 7d after metronidazole treatment" ~ "LC-106-7",
+      TREATMENT == "LC-106 daily for 3d + 4 d of placebo, starting after metronidazole treatment" ~ "LC-106-3",
+      TREATMENT == "LC-106 daily for 7d, starting on day 3 of metronidazole treatment" ~ "LC-106-o",
+      TREATMENT == "LC-115 daily for 7d after metronidazole treatment" ~ "LC-115",
+      TREATMENT == "Placebo daily for 7d after metronidazole treatment (Control for LC-106)" ~ "Pl",
+      TRUE ~ NA_character_
+    )
+  ) |> 
+  left_join(
+    mae@metadata$crf_data_clean$crf13 |> 
+      select(pid, treatment_code, group4)
+  )
+
+cap_arm_data <- 
+  readxl::read_excel(cap_arm_data_file) |> 
+  mutate(
+    treatment_code = PHARM_CODE,
+    arm = case_when(
+      TREATMENT_NAME == "LC-106 daily for 7d after metronidazole treatment" ~ "LC-106-7",
+      TREATMENT_NAME == "LC-106 daily for 3d + 4 d of placebo, starting after metronidazole treatment" ~ "LC-106-3",
+      TREATMENT_NAME == "LC-106 daily for 7d, starting on day 3 of metronidazole treatment" ~ "LC-106-o",
+      TREATMENT_NAME == "LC-115 daily for 7d after metronidazole treatment" ~ "LC-115",
+      TREATMENT_NAME == "Placebo daily for 7d after metronidazole treatment (Control for LC-106)" ~ "Pl",
+      TRUE ~ NA_character_
+    )
+  ) |> 
+  left_join(
+    mae@metadata$crf_data_clean$crf13 |> 
+      select(pid, treatment_code, group4)
+  )
+
+
+```
+
+```{r}
+#| eval: false
+
+all(mgh_arm_data$arm[mgh_arm_data$group4 == "Yes"] == "LC-106-o", na.rm = TRUE)
+all(cap_arm_data$arm[cap_arm_data$group4 == "Yes"] == "LC-106-o", na.rm = TRUE)
+
+```
+
+```{r}
+
+arm_data <- 
+  bind_rows(
+    mgh_arm_data |> filter(!is.na(pid)) |> select(pid, treatment_code, arm),
+    cap_arm_data |> filter(!is.na(pid)) |> select(pid, treatment_code, arm)
+  ) |> 
+  mutate(
+    arm = 
+      arm |> 
+      factor(
+        levels = c("Pl", "LC-106-7", "LC-106-3", "LC-106-o", "LC-115", "Blinded")
+      )
+  )
+  
+```
+
+
+```{r}
+#| eval: false
+
+mae_arm <- arm_data$arm[match(mae@colData$pid, arm_data$pid)]
+table(mae$randomized, mae_arm)
+table(mae$arm, mae_arm)
+
+```
+
+```{r}
+
+mae@colData$arm <-  arm_data$arm[match(mae@colData$pid, arm_data$pid)]
+
+```
+
+We are now unblinded.
+
+The number of participant in each arm and site is as follow:
+
+```{r}
+
+mae@colData |> 
+  as_tibble() |> 
+  select(pid, site, arm, ITT, mITT, PP) |> 
+  distinct() |> 
+  filter(!is.na(ITT), !is.na(arm)) |> 
+  mutate(
+    study_population = 
+      case_when(
+        ITT & mITT & PP ~ "ITT, mITT, PP",
+        ITT & mITT & !PP ~ "ITT, mITT",
+        ITT & !mITT & !PP ~ "ITT",
+        TRUE ~ "???"
+      ) |> factor(levels = c("ITT, mITT, PP","ITT, mITT", "ITT", "???"))
+  ) |> 
+  dplyr::count(site, arm, study_population) |> 
+  pivot_wider(names_from = site, values_from = n, values_fill = 0) |> 
+  arrange(arm, study_population) |> 
+  group_by(arm) |> 
+  gt(row_group_as_column = TRUE)
+
+```
+
+
+
+# Saving the `MultiAssayExperiment` objects
+
+We save the "master" MAE (with all assays); but if needed for publication, we can subset the MAE to only include the assays/data of interest.
+
+```{r}
+
+saveRDS(
+  mae, 
+  str_c(
+    get_04_output_dir(),  
+    "mae_full_", today() |> str_remove_all("-"), ".rds"
+  )
+)
+
+```
+
+
+

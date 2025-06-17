@@ -56,234 +56,8 @@ rm(mae_files)
 ```
 
 
-# Cross-assay QC
-
-## Comparing qPCR and metagenomics
-
-
-```{r}
-#| eval: true
-#| fig-width: 10
-#| fig-height: 8
-
-tmp <- 
-  dplyr::inner_join(
-    mae[["mg"]] |> 
-      as_tibble() |>
-      dplyr::filter(!is.na(LBP)) |> 
-      dplyr::filter(!is.na(rel_ab)) |> 
-      select(.feature, .sample, rel_ab, sample_type) |> 
-      dplyr::rename(
-        mg_rel_ab = rel_ab
-      ),
-    mae[["qPCR"]] |>
-      as_tibble() |>
-      dplyr::filter(!is.na(LBP)) |> 
-      select(.feature, .sample, copies_per_swab_med, copies_per_swab_cv, strain_group_qpcr),
-    by = join_by(.feature, .sample)
-  )
-
-tmp |> 
-  ggplot() +
-  aes(x = mg_rel_ab, y = copies_per_swab_med, color = sample_type) +
-  geom_point(alpha = 0.3, size = 1) +
-  facet_wrap(~ strain_group_qpcr + .feature) +
-  scale_y_log10() +
-  scale_x_log10()
-
-tmp |> 
-  dplyr::count(.feature, mg_rel_ab > 0, copies_per_swab_med > 0) |> 
-  ggplot() +
-  aes(x = `mg_rel_ab > 0`, y = `copies_per_swab_med > 0`) +
-  geom_tile(aes(fill = n)) +
-  geom_text(aes(label = n)) +
-  scale_fill_gradient(low = "white", high = "dodgerblue3") +
-  facet_wrap(~ .feature) 
-
-
-tmp |> 
-  dplyr::count(.feature, mg_rel_ab > 0, copies_per_swab_med > 1e+05) |> 
-  ggplot() +
-  aes(x = `mg_rel_ab > 0`, y = `copies_per_swab_med > 1e+05`) +
-  geom_tile(aes(fill = n)) +
-  geom_text(aes(label = n)) +
-  scale_fill_gradient(low = "white", high = "dodgerblue3") +
-  facet_wrap(~ .feature) 
-
-
-tmp |> 
-  dplyr::count(.feature, mg_rel_ab > 0, copies_per_swab_med > 10000) |> 
-  ggplot() +
-  aes(x = `mg_rel_ab > 0`, y = `copies_per_swab_med > 10000`) +
-  geom_tile(aes(fill = n)) +
-  geom_text(aes(label = n)) +
-  scale_fill_gradient(low = "white", high = "dodgerblue3") +
-  facet_wrap(~ .feature) 
-
-```
-
-> TODO sensitivity-specificity curves for each LBP
-
-## Metagenomics and 16S rRNA amplicon sequencing
-
-> TODO
-
-# Temporal profiles (for 10 "random" participants)
-
-
-## Weekly profiles
-
-```{r}
-
-
-weekly_samples_from_randomized_participants <- 
-  dplyr::inner_join(
-    tibble(uid = mae[["mg"]]$uid),
-    tibble(uid = mae[["amplicon"]]$uid),
-    by = join_by(uid)
-  ) |> 
-  dplyr::inner_join(
-    mae@colData |> as.data.frame() |> as_tibble() |> 
-      dplyr::filter(randomized) |> 
-      select(uid, pid, visit_code, randomized, arm, visit_type),
-    by = join_by(uid)
-  ) |> 
-  dplyr::filter(visit_type == "Clinic")
-  
-
-mae_sub <- mae[, weekly_samples_from_randomized_participants$uid]
-  
-```
-
-```{r}
-
-random_pids <- mae_sub$pid |> table() |> sort(decreasing = TRUE) |> names() |> head(10)
-
-```
-
-
-```{r}
-#| fig-width: 15
-#| fig-height: 8
-
-map(
-  random_pids,
-  plot_data_for_pid,
-  mae_sub = mae_sub
-)
-```
-
-
-
-## Full profiles
-
-```{r}
-
-
-all_samples_from_randomized_participants <- 
-  dplyr::full_join(
-    tibble(uid = mae[["mg"]]$uid),
-    tibble(uid = mae[["amplicon"]]$uid),
-    by = join_by(uid)
-  ) |> 
-  dplyr::inner_join(
-    mae@colData |> as.data.frame() |> as_tibble() |> 
-      dplyr::filter(randomized) |> 
-      select(uid, pid, visit_code, randomized, arm),
-    by = join_by(uid)
-  )
-
-mae_sub <- mae[, all_samples_from_randomized_participants$uid]
-  
-```
-
-```{r}
-
-# random_pids <- mae_sub$pid |> table() |> sort(decreasing = TRUE) |> names() |> head(10)
-
-```
-
-
-```{r}
-#| fig-width: 15
-#| fig-height: 8
-
-map(
-  random_pids,
-  plot_data_for_pid,
-  mae_sub = mae_sub
-)
-
-
-```
-
-
-
-```{r}
-#| eval: false
-#| fig-width: 15
-#| fig-height: 8
-
-plot_data_for_pid(selected_pid = "068200465", mae_sub = mae_sub)
-
-```
-
-We rework this graph for all pids and save it as a png.
-
-```{r}
-#| eval: false
-
-plot_path <- 
-  str_c(
-    get_data_dir(data_source = data_source),  
-    "03 QCed MAEs/profiles_plot/"
-    )
-
-all_pids <- unique(all_samples_from_randomized_participants$pid)
-
-for (pid in all_pids) {
-  p <- plot_data_for_pid(selected_pid = pid, mae_sub = mae_sub)
-  
-  file_name <- paste0("plot_", pid, ".png")
-  
-  ggsave(
-    filename = str_c(plot_path, file_name),
-    plot = p,
-    width = 15, height = 8, dpi = 300
-  )
-}
-
-```
-
-
-
-# Participant groups
-
-
-"Guessing the arms" based on the MG and qPCR data
-
-- "LC-115" if at any visit, two-three LBP115-specific strains are detected >0
-
-- "LC-106-o" if in group 4 
-
-- "LC-106-3 or -7" if at any visit, two LBP106-specific strains are detected >0
-
-- otherwise -> placebo
-
-> TODO
-
-```{r}
-
-
-
-
-
-```
-
-
 
 # Primary outcomes
-
 
 ## Primary outcome definition
 
@@ -303,7 +77,7 @@ If the total relative abundance of all LBP strains is larger than 0.1 or the max
 colonization_LBP_mg <- 
   mae[["mg"]] |> 
   as_tibble() |>
-  dplyr::filter(sample_type == "Clinical sample") |> 
+  dplyr::filter(sample_type == "Clinical sample", !poor_quality_mg_data) |> 
   dplyr::filter(!is.na(LBP)) |> 
   group_by(.sample) |> 
   summarize(
@@ -440,11 +214,11 @@ colonization_LBP_mg |>
 
 ```
 
-### "Crispatus colonization" *at* each visit
+### "*L. crispatus* colonization" *at* each visit
 
-We compute, at each visit and for each participant, the total relative abundance of all LBP strains or the maximum relative abundance of any LBP strain. 
+We compute, at each visit and for each participant, the total relative abundance of *L. crispatus*. 
 
-If the total relative abundance of all LBP strains is larger than 0.1 or the maximum relative abundance of any LBP strain is larger than 0.05, we consider that the LBP achieved colonization_mg *at* that visit.
+If the total relative abundance of *L. crispatus* strains is larger than 50%, we consider that the participant's VM was colonized by *L. crispatus* *at* that visit.
 
 ```{r}
 
@@ -456,11 +230,9 @@ colonization_crispatus_mg <-
   group_by(.sample) |> 
   summarize(
     total_crispatus_rel_ab_at = sum(rel_ab),
-    #max_crispatus_rel_ab_at = max(rel_abs_bact),
-    #n_detected_crispatus_at = sum(rel_abs_bact > 0)
   ) |> 
   mutate(
-    crispatus_dominance_at_mg = (total_crispatus_rel_ab_at > 0.5)
+    crispatus_dominance_at_mg = (total_crispatus_rel_ab_at >= 0.5)
   ) 
 
 ```
@@ -669,9 +441,13 @@ p1 + p2 +
 
 ### "LBP colonization" *at* each visit
 
-We compute, at each visit and for each participant, the total relative abundance of all LBP strains or the maximum relative abundance of any LBP strain. 
+We compute, at each visit and for each participant, the relative abundance of each LBP strain as estimated by qPCR by dividing the copies per swab for that strain by the copies per swab for the 16S rRNA gene.
 
-If the total relative abundance of all LBP strains is larger than 0.1 or the maximum relative abundance of any LBP strain is larger than 0.05, we consider that the LBP achieved colonization *at* that visit.
+Then, just as we did for the metagenomics, we compute the total relative abundance of all LBP strains or the maximum relative abundance of any LBP strain. 
+
+If the total relative abundance of all LBP strains is larger than 0.1 or the maximum relative abundance of any LBP strain is larger than 0.05, we consider that the LBP achieved colonization *at* that visit by qPCR.
+
+We also consider an additional secondary outcome, which is that if at least 2 strains are detected at >0, we consider that the participant is colonized by LBP *at* that visit by qPCR.
 
 ```{r}
 
@@ -680,17 +456,30 @@ colonization_qPCR <-
   as_tibble() |>
   dplyr::filter(sample_type == "Clinical sample") |> 
   dplyr::filter(!is.na(LBP)) |> 
+  left_join(
+    mae[["qPCR"]] |> 
+      as_tibble() |>
+      dplyr::filter(sample_type == "Clinical sample") |> 
+      dplyr::filter(is.na(LBP), .feature == "16S") |> 
+      select(.sample, copies_per_swab_med) |>
+      dplyr::rename(copies_per_swab_16S = copies_per_swab_med),
+    by = join_by(.sample)
+  ) |> 
+  mutate(rel_ab = copies_per_swab_med / copies_per_swab_16S) |> 
+  select(.feature, .sample, rel_ab, copies_per_swab_med, copies_per_swab_16S, everything()) |> 
   group_by(.sample) |> 
   summarize(
-    n = n(),
-    total_load_at = sum(copies_per_swab_med),
+    total_LBP_rel_ab_at = sum(rel_ab),
+    max_LBP_rel_ab_at = max(rel_ab),
     n_detected_strains_at = sum(copies_per_swab_med > 0),
     n_detected_LC106_strains_at = sum(copies_per_swab_med[LBP == "LC-106 & LC-115"] > 0),
     n_detected_LC115_only_strains_at = sum(copies_per_swab_med[LBP == "LC-115"] > 0)
   ) |> 
   mutate(
-    detected_at_qpcr = total_load_at > 0
+    colonized_LBP_at_qpcr = (total_LBP_rel_ab_at > 0.1) | (max_LBP_rel_ab_at > 0.05),
+    LBP_detected_at_qpcr = (n_detected_strains_at > 2)
   ) 
+
 
 ```
 
@@ -714,9 +503,23 @@ colonization_qPCR <-
 #| fig-height: 10
 #| fig-width: 10
 
+
+
 colonization_qPCR |> 
   ggplot() +
-  aes(x = visit_code, y = pid, fill = detected_at_qpcr) +
+  aes(x = visit_code, y = pid, fill = colonized_LBP_at_qpcr) +
+  geom_tile() +
+  facet_grid(
+    randomized + arm ~ ., 
+    scales = "free_y", space = "free_y", labeller = label_both
+    ) +
+  theme(    
+    strip.text.y = element_text(angle = 0)
+  )
+
+colonization_qPCR |> 
+  ggplot() +
+  aes(x = visit_code, y = pid, fill = LBP_detected_at_qpcr) +
   geom_tile() +
   facet_grid(
     randomized + arm ~ ., 
@@ -758,9 +561,23 @@ colonization_qPCR <-
 #| fig-height: 10
 #| fig-width: 10
 
+
 colonization_qPCR |> 
   ggplot() +
-  aes(x = visit_code, y = pid, fill = detected_at_qpcr) +
+  aes(x = visit_code, y = pid, fill = colonized_LBP_at_qpcr) +
+  geom_tile() +
+  facet_grid(
+    randomized + arm ~ ., 
+    scales = "free_y", space = "free_y", labeller = label_both
+    ) +
+  theme(    
+    strip.text.y = element_text(angle = 0)
+  )
+
+
+colonization_qPCR |> 
+  ggplot() +
+  aes(x = visit_code, y = pid, fill = LBP_detected_at_qpcr) +
   geom_tile() +
   facet_grid(
     randomized + arm ~ ., 
@@ -779,11 +596,16 @@ colonization_qPCR |>
 colonization_qPCR <- 
   colonization_qPCR |> 
   arrange(pid, visit_code) |>
-  mutate(colonized_at_qpcr = detected_at_qpcr |> replace_na(FALSE)) |>
+  mutate(
+    colonized_LBP_at_qpcr = colonized_LBP_at_qpcr |> replace_na(FALSE),
+    LBP_detected_at_qpcr = LBP_detected_at_qpcr |> replace_na(FALSE)
+    ) |>
   group_by(pid) |> 
   mutate(
-    tmp = ifelse(as.numeric(visit_code) < 1200, FALSE, colonized_at_qpcr),
-    detected_by_qpcr = cummax(tmp) |> as.logical()
+    tmp = ifelse(as.numeric(visit_code) < 1200, FALSE, colonized_LBP_at_qpcr),
+    colonized_LBP_by_qpcr = cummax(tmp) |> as.logical(),
+    tmp = ifelse(as.numeric(visit_code) < 1200, FALSE, LBP_detected_at_qpcr),
+    LBP_detected_by_qpcr = cummax(tmp) |> as.logical()
   ) |> 
   ungroup() |> 
   select(-tmp)
@@ -797,7 +619,25 @@ colonization_qPCR <-
 
 colonization_qPCR |> 
   ggplot() +
-  aes(x = visit_code, y = pid, fill = detected_by_qpcr) +
+  aes(x = visit_code, y = pid, fill = colonized_LBP_by_qpcr) +
+  geom_tile() +
+  annotate(
+    geom = "rect", 
+    xmin = 10.5, xmax = 11.5, ymin = -Inf, ymax = Inf,
+    col = "black", alpha = 0, linewidth = 1
+  ) +
+  facet_grid(
+    randomized + arm ~ ., 
+    scales = "free_y", space = "free_y", labeller = label_both
+  ) +
+  theme(
+    strip.text.y = element_text(angle = 0)
+  )
+
+
+colonization_qPCR |> 
+  ggplot() +
+  aes(x = visit_code, y = pid, fill = LBP_detected_by_qpcr) +
   geom_tile() +
   annotate(
     geom = "rect", 
@@ -834,7 +674,7 @@ p1 <- colonization_LBP_mg |>
 
 p2 <- colonization_qPCR |> 
   ggplot() +
-  aes(x = visit_code, y = pid, fill = detected_at_qpcr) +
+  aes(x = visit_code, y = pid, fill = colonized_LBP_at_qpcr) +
   geom_tile() +
   facet_grid(
     randomized + arm ~ ., 
@@ -846,7 +686,7 @@ p2 <- colonization_qPCR |>
 
 p1 + p2 + 
     plot_annotation(
-      title = str_c("LBP colonization at metagenomics VS qPCR")
+      title = str_c("LBP colonization *at* metagenomics VS qPCR")
     ) +
     plot_layout(ncol = 2) &
     theme(
@@ -878,7 +718,7 @@ p1 <- colonization_LBP_mg |>
 
 p2 <- colonization_qPCR |> 
   ggplot() +
-  aes(x = visit_code, y = pid, fill = detected_by_qpcr) +
+  aes(x = visit_code, y = pid, fill = colonized_LBP_by_qpcr) +
   geom_tile() +
   annotate(
     geom = "rect", 
@@ -941,17 +781,19 @@ se_primary_col_LBP_qPCR <-
       outcome = 
         colonization_qPCR |> 
         dplyr::filter(!is.na(.sample)) |> 
-        select(.sample, detected_at_qpcr, detected_by_qpcr) |> 
+        select(.sample, colonized_LBP_at_qpcr, colonized_LBP_by_qpcr, LBP_detected_at_qpcr, LBP_detected_by_qpcr) |> 
         as.data.frame() |> 
         column_to_rownames(".sample") |> t()
     )
   ) 
 
 
-
-mae <- c(mae, list(col_LBP_mg = se_primary_col_LBP_mg, 
-                   col_crispatus_mg = se_primary_col_crisp_mg,
-                   col_LBP_qPCR = se_primary_col_LBP_qPCR))
+mae <- c(
+  mae, 
+  list(col_LBP_mg = se_primary_col_LBP_mg, 
+       col_crispatus_mg = se_primary_col_crisp_mg,
+       col_LBP_qPCR = se_primary_col_LBP_qPCR)
+)
 
 ```
 
