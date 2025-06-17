@@ -220,7 +220,10 @@ day_0_dates |>
   scale_y_discrete(breaks = NULL) +
   scale_color_manual("Study site", values = site_colors) +
   ylab("Participants (blinded)") +
-  xlab("Day 0 date") 
+  xlab("Day 0 date") +
+  labs(
+    caption = "The dot notes the first visit date for each participant and\nthe segment extends to the expected end date for each participant (12 weeks after the day 0 date)\nas if all participants were enrolled at screening.",
+  )
   
 
 ```
@@ -248,7 +251,10 @@ flag_dates <- function(crf_data, crf_name, study_start_date, study_end_date, day
         flag_date = 
           (vdate < study_start_date) | 
           (vdate > (study_end_date + weeks (1))) |
-          (vdate > (expected_end_date + weeks(4))) 
+          (
+            (vdate > (expected_end_date + weeks(4))) & 
+              ifelse("dfseq" %in% colnames(crf_data), (dfseq != 8999), TRUE)
+            ) 
       )
     
     if (any(crf_data$flag_date, na.rm = TRUE)){
@@ -574,6 +580,8 @@ raw_data_list$cap068_data_30 <-
 ```
 
 
+
+
 ### Fixing visit dates
 
 Now that we have identified how to fix the visit dates and that invalid entries have been removed, we fix the visit dates in the CRFs.
@@ -627,9 +635,70 @@ raw_data_list <-
 ```
 
 
+
 ### Relative study day
 
 Now that dates have been fixed, we can compute a relative study day and add it to each crf with a `vdate` column.
+
+We need, however, to first recompute the enrollment dates as it may have changed for a few participants where their crf13 visit date got fixed.
+
+#### (Re-)defining `day_0_dates` and expected end dates for each participant
+
+
+```{r}
+
+# for randomized participants
+day_0_dates <- 
+  raw_data_list$cap068_data_13 |> 
+  select(pid, dfseq, vdate) |>
+  as_tibble() |> 
+  mutate(
+    day_0_date = as.Date(vdate, format = "%d%b%y") #"%d%b%Y"
+  ) 
+
+if (!all(day_0_dates$dfseq == 1000)){
+  stop("Randomization on the wrong visits!")
+}
+
+day_0_dates <- day_0_dates |> select(pid, day_0_date)
+
+# for non-randomized participants
+day_0_dates_non_randomized <- 
+  bind_rows(
+    raw_data_list$cap068_data_1 |> 
+      select(pid, dfseq, vdate) |>
+      as_tibble(),
+    raw_data_list$cap068_data_50 |> 
+      select(pid, dfseq, vdate) |>
+      as_tibble(),
+     raw_data_list$cap068_data_6 |>
+      select(pid, dfseq, vdate) |>
+      as_tibble()
+  ) |> 
+  mutate(day_0_date = as.Date(vdate, format = "%d%b%y"))|> #"%d%b%Y" 
+  arrange(pid, -dfseq, desc(day_0_date)) |>
+  group_by(pid) |>
+  slice_head(n = 1) |> # take the last screening visit
+  ungroup() |> 
+  filter(!(pid %in% day_0_dates$pid)) |>
+  select(pid, day_0_date)
+
+day_0_dates <- 
+  bind_rows(
+    day_0_dates,
+    day_0_dates_non_randomized
+  ) |> 
+  arrange(pid)
+
+rm(day_0_dates_non_randomized)
+
+if (any(duplicated(day_0_dates$pid))){
+  stop("Randomization on the same visit for several participants!")
+}
+
+```
+
+#### Relative study day computation
 
 The function below transforms the `vdate` and `vdate_original` variables into a relative study day, which is defined as the number of days since the day 0 date created in `day_0_date`. A `study_day` and `study_day_original` variables are added to each CRF.
 
@@ -670,6 +739,113 @@ raw_data_list <-
   )
 
 ```
+We check that all enrollment visits are on day 0.
+
+```{r}
+
+all_visit_dates <- 
+  raw_data_list |> 
+  imap(~ .x |> select(any_of(c("pid", "dfseq", "vdate", "vdate_original", "study_day"))) |> mutate(crf = .y)) |> 
+  bind_rows() |> 
+  arrange(pid, dfseq) |> 
+  filter(!is.na(pid), !is.na(vdate)) |> 
+  mutate(crf_nb = crf |> str_remove("cap068") |> parse_number())
+
+```
+
+```{r}
+
+all_visit_dates |> 
+  filter(dfseq == 1000) |> 
+  dplyr::count(dfseq, study_day)
+
+```
+
+
+#### Focus on the relative study day of daily visits
+
+
+```{r}
+
+all_visit_dates <- 
+  all_visit_dates |> 
+  mutate(
+    is_daily_code = (dfseq > 1000) & (dfseq < 3000) & ((dfseq %% 10) != 0),
+  ) |> 
+  group_by(pid) |> 
+  mutate(
+    pid_has_daily_codes = any(is_daily_code)
+  ) |> 
+  ungroup()
+
+```
+
+
+```{r}
+#| fig-width: 12
+#| fig-height: 8
+
+all_visit_dates |> 
+  filter(!is.na(dfseq), pid_has_daily_codes) |> 
+  select(pid_has_daily_codes, pid, dfseq, study_day, is_daily_code) |> 
+  distinct() |> 
+  ggplot() +
+  aes(x = study_day, y = pid |> factor(), col = is_daily_code) +
+  facet_grid(pid_has_daily_codes ~ .) +
+  geom_point(alpha = 0.5)
+
+```
+It looks like, overall, all study days are correct with respect to the study day pre-MTZ visit (Enrollment visit, visit 1000), but there might be a few exceptions.
+
+```{r}
+#| eval: false
+
+all_visit_dates |> 
+  filter(is_daily_code) |> 
+  dplyr::count(dfseq, study_day) |> 
+  View()
+```
+
+
+```{r}
+
+all_visit_dates <- 
+  all_visit_dates |> 
+  group_by(dfseq, study_day) |> 
+  mutate(n = n()) |> 
+  ungroup() |> 
+  arrange(dfseq, -n) |> 
+  group_by(dfseq) |> 
+  mutate(expected_study_day = study_day[1]) |>
+  ungroup()
+  
+```
+
+```{r}
+#| fig-width: 20
+
+all_visit_dates |> 
+  filter(!is.na(dfseq), dfseq >= 1000, dfseq <= 1500, pid_has_daily_codes) |> 
+  distinct() |> 
+  ggplot() +
+  aes(
+    x = study_day |> factor(), y = pid |> factor(), 
+    shape = is_daily_code, col = study_day == expected_study_day,
+    label = crf_nb
+    ) +
+  facet_grid(pid_has_daily_codes ~ dfseq, scales = "free", space = "free") +
+  geom_point(alpha = 0.5) +
+  xlab("Relative study day") +
+  theme(
+    strip.text.x = element_text(angle = 90),
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 0, hjust = 1, vjust = 0.5)
+  )
+
+```
+Upon inspection, it looks like the data is correct and solely reflects different data collection patterns for participants at MGH.
+
+
 
 ## VIBRANT `visit_code` and `uid`
 
