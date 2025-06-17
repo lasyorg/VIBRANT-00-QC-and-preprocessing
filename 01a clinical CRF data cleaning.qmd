@@ -846,7 +846,6 @@ all_visit_dates |>
 Upon inspection, it looks like the data is correct and solely reflects different data collection patterns for participants at MGH.
 
 
-
 ## VIBRANT `visit_code` and `uid`
 
 Finally, we can define the VIBRANT `visit_code` (from `dfseq`) and add the VIBRANT study unique identifier (`uid`) which is the concatenation of the pid (`pid`) and the visit code (`visit_code`).  
@@ -5643,6 +5642,7 @@ crf47_long <-
 ```
 
 ```{r}
+#| eval: false
 #| fig-height: 10
 #| fig-width: 8
 
@@ -5652,17 +5652,6 @@ crf47_long |>
   aes(x = home_swab_visit_code |> factor(), y = pid |> factor(), col = swabs_brought |> factor()) +
   geom_text(aes(label = home_swab_nb), size = 3, alpha = 0.5) +
   facet_grid(. ~ crf_visit_code, scales = "free", space = "free") +
-  theme(
-    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
-  )
-
-
-
-crf47_long |> 
-  filter(!is.na(home_swab_visit_code)) |> 
-  ggplot() +
-  aes(x = home_swab_visit_code |> factor(), y = pid |> factor(), col = crf_visit_code |> factor()) +
-  geom_text(aes(label = home_swab_nb), alpha = 0.5) +
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
   )
@@ -5687,21 +5676,72 @@ crf47_long |>
 
 
 ```
-
-It looks like the home swab visit codes might be off for some participants. And it also looks like this manifest wasn't filled systematically in the US.
-
-We'll use this CRF to check if any of the home swab visit codes needs to be changed when loading the daily swab 16S rRNA seq data.
-
 ```{r}
+#| fig-height: 10
+#| fig-width: 8
 
-# crf47_long |> 
-#   filter(!is.na(home_swab_visit_code)) |> 
-#   group_by(pid, crf_visit_code) |> 
-#   mutate(number_of_home_swab_visit_codes = n()) |> 
-#   ungroup() |> 
-#   write_csv("CRF47_home_swab_visit_codes.csv")
+crf47_long |> 
+  filter(!is.na(home_swab_visit_code)) |> 
+  ggplot() +
+  aes(x = home_swab_visit_code |> factor(), y = pid |> factor(), col = crf_visit_code |> factor()) +
+  geom_text(aes(label = home_swab_nb), alpha = 0.5) +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
+  )
 
 ```
+
+Overall, this makes sense, but it looks like the home swab visit codes might be off for a few participants. Specifically, when there are two swabs with the same code but filled at different weekly visits (= 2 numbers overlapping on the plot), this is likely indicative of a mistake. 
+
+Also, it looks like this manifest wasn't filled systematically in the US, but we have another file (manifest) that documents which were the missed swabs in the US.
+
+
+- SA data: when we visually inspected the visit codes for the participants with overlapping daily visit code in the 16S rRNA sequencing data, we did not find these overlap, so we can assume that the home swab visit codes were correct in the 16S rRNA manifest, but that there were a few encoding errors in the CRF data.
+
+> TODO: fix the CRF data for completion of the data (not urgent).
+
+```{r}
+#| eval: false
+
+crf47_long |> 
+  filter(!is.na(home_swab_visit_code)) |> 
+  group_by(pid, home_swab_visit_code) |>
+  mutate(n_visits = crf_visit_code |> unique() |> length()) |> 
+  ungroup() |> 
+  filter(n_visits > 1) |> 
+  arrange(pid, home_swab_visit_code) 
+
+
+```
+
+
+
+
+```{r}
+#| eval: false
+# quick check that the study day will be good
+
+crf47_long <- 
+  crf47_long |> 
+  dplyr::rename(crf_visit_study_day = study_day)
+
+crf47_long <- 
+  crf47_long |> 
+  mutate(home_swab_visit_code = home_swab_visit_code |> as.character())
+
+crf47_long <- 
+  crf47_long |> 
+  left_join(
+    crf32 |> select(pid, visit_code, study_day) |> 
+      dplyr::rename(home_swab_visit_code = visit_code, home_swab_study_day = study_day),
+    by = join_by(pid, home_swab_visit_code)
+  )
+
+```
+
+
+
+
 
 ```{r}
 crf47 <- rem_columns_with_unique_values(crf47)

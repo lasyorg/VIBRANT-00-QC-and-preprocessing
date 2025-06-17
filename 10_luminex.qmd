@@ -1,6 +1,6 @@
 ---
 title: "VIBRANT Luminex QC"
-author: Laura Symul
+author: Laura Symul (with help of Lenine Liebenberg and Joseph Elsherbini)
 date: today
 format: 
    html:

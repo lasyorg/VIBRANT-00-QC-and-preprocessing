@@ -1,6 +1,6 @@
 ---
 title: "QC across assays & MAE augmentation"
-author: Laura Symul
+author: Laura Symul, Laura Vermeren
 date: today
 format: 
    html:
@@ -220,10 +220,11 @@ map(
 
 
 ```{r}
+#| eval: false
 #| fig-width: 15
 #| fig-height: 8
 
-plot_data_for_pid(selected_pid = "068100046", mae_sub = mae_sub)
+plot_data_for_pid(selected_pid = "068200465", mae_sub = mae_sub)
 
 ```
 

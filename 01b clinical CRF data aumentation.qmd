@@ -835,8 +835,9 @@ From the `visit_long` table, we build the `visits` table with one row per `pid` 
   + `specimen_collection_swab` (`collected`, `not collected`, `unclear`) [CRF35]
   + `specimen_collection_softcup` (`collected`, `not collected`, `unclear`) [CRF35]
   + `specimen_collection_cytobrush` (`collected`, `not collected`, `unclear`) [CRF35]
-  + `specimen_collection_home_swab` (`collected`, `not collected`, `unclear`) [CRF47]
-
+  
+We do not document the home swab collection because it looks like there are more mistakes in the CRF data (CRF47) than in the daily swab manifest.  
+  
 ### Merging observed and expected visits
 
 ```{r}
@@ -1041,14 +1042,6 @@ visits |>
   count(specimen_collection_swab > 0, specimen_collection_softcup, specimen_collection_cytobrush) |> 
   gt()
 ```
-
-
-
-#### [TODO] Home swabs
-
-  + `specimen_collection_home_swab` (`collected`, `not collected`, `unclear`) [CRF47]
-
->  STOPPED HERE
 
 
 ```{r}
