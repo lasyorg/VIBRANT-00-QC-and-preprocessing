@@ -450,8 +450,13 @@ If the total relative abundance of all LBP strains is larger than 0.1 or the max
 colonization_crispatus_mg <- 
   mae[["mg"]] |> 
   as_tibble() |>
+<<<<<<< Updated upstream
   filter(sample_type == "Clinical sample") |> 
   filter(species == "crispatus") |> 
+=======
+  dplyr::filter(sample_type == "Clinical sample", !poor_quality_mg_data) |> 
+  dplyr::filter(species == "crispatus") |> 
+>>>>>>> Stashed changes
   group_by(.sample) |> 
   summarize(
     total_crispatus_rel_ab_at = sum(rel_abs_bact),
