@@ -179,8 +179,8 @@ colonization_LBP_mg |>
 
 colonization_LBP_mg <- 
   colonization_LBP_mg |> 
-  arrange(pid, visit_code) |>
   mutate(colonized_LBP_at_mg = colonized_LBP_at_mg |> replace_na(FALSE)) |>
+  arrange(pid, visit_code) |>
   group_by(pid) |> 
   mutate(
     tmp = ifelse(as.numeric(visit_code) < 1200, FALSE, colonized_LBP_at_mg),
