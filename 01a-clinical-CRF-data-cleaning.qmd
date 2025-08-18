@@ -1657,7 +1657,7 @@ plots <- crf5 |> plot_marginal_dist()
 
 plots[["diagnosis"]] <- 
   crf5 |> 
-  count(diagnosis) |> 
+  dplyr::count(diagnosis) |> 
   mutate(diagnosis = str_wrap(diagnosis, 50)) |>
   mutate(diagnosis = fct_reorder(diagnosis, n, .desc = TRUE)) |> 
   ggplot(aes(y = n, x = diagnosis)) +
@@ -1739,13 +1739,13 @@ We check that there is only one entry per participant:
 crf6 |> 
   group_by(pid) |> 
   summarize(n_entries = n()) |> 
-  count(n_entries) |> 
+  dplyr::count(n_entries) |> 
   gt::gt(caption = "Number of entries per participant in CRF6") 
 
 crf7 |> 
   group_by(pid) |> 
   summarize(n_entries = n()) |> 
-  count(n_entries) |> 
+  dplyr::count(n_entries) |> 
   gt::gt(caption = "Number of entries per participant in CRF7") 
 
 ```
@@ -1801,7 +1801,7 @@ crf7 |>
   group_by(pid) |> 
   filter(dfseq == max(dfseq)) |> 
   ungroup() |> 
-  count(meet_eligibility) |> 
+  dplyr::count(meet_eligibility) |> 
   gt::gt("Number of participants who meet eligibility criteria")
 
 ```
@@ -2360,7 +2360,7 @@ crf14 |>
   mutate(
     site = ifelse(str_detect(pid, "06810"), "MGH", "CAP")
   ) |> 
-  count(site, vaginal_ph_less_than, vaginal_ph_value) |> 
+  dplyr::count(site, vaginal_ph_less_than, vaginal_ph_value) |> 
   gt()
 
 ```
@@ -3181,11 +3181,11 @@ We check that we only have 1 entry per participant at visit 1100.
 #| fig-height: 2
 
 crf22 |> 
-  count(dfseq)
+  dplyr::count(dfseq)
 
 crf22 |> 
-  count(pid) |> 
-  count(n)
+  dplyr::count(pid) |> 
+  dplyr::count(n)
 
 crf22 |> 
   ggplot() +
@@ -3399,9 +3399,7 @@ participant, we will set the number of missed doses to 1 and
 ```{r}
 
 crf23 |> 
-  count(
-    tablets_remain, used_applicators
-  )
+  dplyr::count(tablets_remain, used_applicators)
 
 ```
 
@@ -3412,18 +3410,35 @@ crf_clean <- crf_clean |> append(list(crf23 = crf23))
 
 ## Additional table: Exposures (antibiotics and study product)
 
-In this section, we create an additional table `exposures` that will contain the exposure to antibiotics and study product for each participant at each daily visit.
+In this section, we create an additional table `exposures` that contains the exposure to antibiotics (metronidazole) and study product for each participant at each daily visit.
+
+First, we create a `pids` vector containing the IDs of all randomized participants (from CRF13).
+
+Next, we create a `visits` vector containing all unique visit codes (`visit_code`) corresponding to daily visits (from CRF32).
+
+Then, we create the `exposures` data frame by expanding all visit codes for each `pid`. We estimate the missing `study_day` by interpolation. 
+
+Note: In CRF32, we noticed an error in the `study_day` for participant 068200281 for visit 1106 (8 instead of 13). We are correcting this here.
+We then add, for each daily visit, the number of metronidazole doses (from CRF22) and/or study product doses (from CRF23 and CRF32) taken by the participant.
+
+Data from CRF22 are processed manually, meaning that each comment from the study staff is reviewed to determine whether the participant took the antibiotics or not.
+
+For metronidazole exposures (based on CRF22), we first assign a value of 2 to participants who did not miss any doses — that is, those with `visit_code` 1100, `tablets_remain` equal to 0, `metro_dose_miss` marked as "None", and `prescription_container` marked as "Yes".  
+Then, we review the remaining cases individually by reading the staff comments to approximate when the missed dose(s) were not taken.
+A variable `comments_mtz` is also created to include notes for specific participants.
+
+For study product exposures, we create two variables, `study_product` and `study_product_PP`, as well as a `comment_studyproduct` variable.
+
+-   `study_product`: a binary flag indicating whether the participant reported **inserting** the study product on that day. This variable is constructed using data from CRF23 (weekly study product form) and CRF32 (daily diary). We first use the `insert_study_product_time` variable from CRF32 to assign value of 1 when participants reported an insertion time (i.e. another value than "Not applicable" or "None"). We then use the CRF23 to adjust the previous number by reading the comments (e.g. some participants fill the `insert_study_product_time` but comments from CRF32 precise that participants does not take the tablets that day) 
 
 
-First, we create a `pids` vector containing all the id's of the randomised participants (from crf13). 
+-   `study_product_PP`: a continuous variable ranging from 0 to 1, indicating whether the study product **remained** in the vagina after insertion. Many participants reported that the (fully intact) tablet fell out (e.g., into the toilet bowl) a few hours after insertion.  
 
-Next we create the `visits` vector containing all the visits code (dfseq) of all the daily visits (crf32). 
+  -   If CRF23 reports the exact days when this happened, the variable is set to 0 for those days.  
+  -   If CRF23 reports only the number of tablets that fell out (`n`), the variable is set to the fraction `(N - n) / N`, where `N` is the total number of inserted tablets.
 
-Then, we create an `exposures` data frame expanding all visit codes for each pid.
+-   `comment_studyproduct`: includes notes or clarifications for specific participants.
 
-We will then add for each daily visit the number of antibiotics (from crf22) and/or study product (from crf23 & crf32) taken by the participant. 
-
-Data from the crf22 are processed manually (i.e., each comments from the study staff is checked to see if the participant took the antibiotics or not).
 
 
 ```{r}
@@ -3432,19 +3447,42 @@ Data from the crf22 are processed manually (i.e., each comments from the study s
 # select all the daily visits
 # create a data frame with all the visits for each participant
 
+raw_data_list$cap068_data_32 <- 
+  raw_data_list$cap068_data_32 |> 
+  mutate(study_day = ifelse(pid == "068200281" & visit_code == 1106, 13, study_day))
+
 pids <- raw_data_list$cap068_data_13$pid |> unique()
-visits <- raw_data_list$cap068_data_32$visit_code |> unique()
+visits <- raw_data_list$cap068_data_32$visit_code |> unique() 
 
 exposures <- 
   expand_grid(
     pid = pids,
     visit_code = visits
   ) |> 
-  arrange(pid, visit_code) |> 
+  mutate(uid = paste0(pid, "_", visit_code)) |> 
+  select(uid, pid, visit_code, everything()) |> 
+  arrange(pid, visit_code) |>
   left_join(
-    raw_data_list$cap068_data_32 |> select(pid, visit_code, study_day), 
-    by = c("pid", "visit_code")
-  )
+    raw_data_list$cap068_data_32 |> select(uid, study_day), 
+    by = c("uid")
+  ) |> 
+  filter(visit_code <= 1207)
+
+exposures<- 
+  exposures |>
+  group_by(pid) |>
+  arrange(visit_code, .by_group = TRUE) |>
+  mutate(
+    study_day = zoo::na.approx(study_day, na.rm = FALSE)  
+  ) |> 
+  ungroup()
+
+# one mistake (already present before approximation) : 068200281, visit_code == 1106 have a study_day of 8 instead of 13
+
+
+
+
+
 
 ```
 
@@ -3502,13 +3540,13 @@ pid_ok <- str_c("068", c("100010", "100029", "100049", "100050", "100052", "1000
 exposures <- 
   exposures |>
   mutate( 
-    comments_antibiotics = 
+    comments_mtz = 
       case_when(
-        pid == "068200253" ~ "4 evening doses forgot but we don't knwo when (we put 4 days with 1 doses)", 
-        pid == "068200281" ~ "3 doses missed but she don't know when (we put 3 days with 1 doses)", 
-        pid == "068200387" ~ "1 dose missed but she don't know when (we put 1 day with 1 dose)",
-        pid == "068200375" ~ "one tablet disappeared (3 doses one day ?)", 
-        pid == "068200378" ~ "take one 1006 morning, 3 tablet return"
+        pid == "068200253" & visit_code %in% c(1001:1007) ~ "4 evening doses forgot but we don't knwo when (we put 4 days with 1 doses)", 
+        pid == "068200281" & visit_code %in% c(1001:1007) ~ "3 doses missed but she don't know when (we put 3 days with 1 doses)", 
+        pid == "068200387" & visit_code %in% c(1001:1007) ~ "1 dose missed but she don't know when (we put 1 day with 1 dose)",
+        pid == "068200375" & visit_code %in% c(1001:1007) ~ "one tablet disappeared (3 doses one day ?)", 
+        pid == "068200378" & visit_code %in% c(1001:1007) ~ "take one 1006 morning, 3 tablet return"
       ),
     metronidazole = 
     case_when(
@@ -3591,8 +3629,6 @@ exposures <-
 
 ```
 
-We do the same for the study product:
-
 
 ```{r}
 
@@ -3646,40 +3682,59 @@ exposures <-
   exposures |> 
   mutate(
     comments_studyproduct = case_when(
-      pid == "068100036" ~ "3 PILLS FELL OUT OF HER VAGINA AFTER A FEW HOURS, FULLY INTACT.",
-      pid == "068100045" ~ "Not in cfr23", 
-      pid == "068100050" ~ "Not in crf23", 
-      pid == "068100053" ~ "Report taking 4 time the study product in crf32 but only take 1 (according to crf23)", 
-      pid == "068100054" ~ "Modify : 13 doses --> 7 doses (start on 1102, ok ?)",
-      pid == "068100063" ~ "Modify : 15 doses --> 7 doses",
-      pid == "068100058" ~ "Modify : 8 doses --> 7 doses (remove 1003)",
-      pid == "068200020" ~ "6 doses OK but I think 1004 or 1005 is missing and 1102 is not missing --> TO CHECK", 
-      pid == "068200347" ~ "Only 6 doses in crf32 but no missign doses in crf23 --> add a doses 11001", 
+      pid == "068100036" &  visit_code %in% c(1101:1107) ~ "3 tablets fell AFTER insertion; no indication of when during treatment.",
+      pid == "068100045" & visit_code %in% c(1101:1107) ~ "Not in CRF23, and no information in CRF32 (no time of insertion)", 
+      pid == "068100050" & visit_code %in% c(1101:1107) ~ "Not in CRF23, and only information for 1101-1104 in CRF32", 
+      pid == "068100053" & visit_code %in% c(1101:1107) ~ "In CRF32, four insertion times are reported (suggesting the study product was taken four times), but CRF23 indicates only one dose was taken.", 
+      pid == "068100054" & visit_code %in% c(1101:1107) ~ "Modify : 13 doses --> 7 doses (start on 1102)",
+      pid == "068100063" & visit_code %in% c(1101:1107) ~ "Modify : 15 doses --> 7 doses (between 1101 and 1107)",
+      pid == "068100058" & visit_code %in% c(1101:1107) ~ "Modify : 8 doses --> 7 doses (remove 1003)",
+      pid == "068200020" & visit_code %in% c(1101:1107) ~ "1 tablet dropped BEFORE insertion (not taken, 6 doses total).\n  Last dose missing in CRF32 and CRF23, but CRF32 comment seems inconsistent.", 
+      pid == "068200225" & visit_code %in% c(1101:1107) ~ "1 tablet fell out AFTER insertion (last dose, visit code 1107)",
+      pid == "068200028" & visit_code %in% c(1101:1107) ~ "3 tablets fell out AFTER insertion; no indication of when during treatment.",
+      pid == "068200347" & visit_code %in% c(1101:1107) ~ "Only 6 doses in crf32 but no missign doses in crf23 --> add a doses 11001", 
       TRUE ~ NA_character_
     )
   ) |> 
   mutate(study_product = case_when(
-    pid %in% pid_temp & visit_code %in% c(1101:1107) ~ "1",
-    pid %in% pid_temp & !(visit_code %in% c(1101:1107)) ~ "0",
+    pid %in% pid_temp & visit_code %in% c(1101:1107) ~ 1,
+    pid %in% pid_temp & !(visit_code %in% c(1101:1107)) ~ NA,
 
-    pid == "068100013" & visit_code %in% c(1101:1107) ~ "1", 
-    pid == "068100006" & visit_code %in% c(1301, 1401:1407) ~ "0",
-    pid == "068100053" & visit_code %in% c(1101:1102, 1104:1107) ~ "0",
-    pid == "068100053" & visit_code == 1103 ~"1", 
-    pid == "068100054" & visit_code %in% c(1202:1207, 1003,1004) ~"0",
-    pid == "068100058" & visit_code == 1003 ~ "0",
-    pid == "068100061" & visit_code %in% c(1000:1007, 1201:1207, 1301) ~ "0", 
-    pid == "068200310" & visit_code == 1103 ~"1", 
-    pid == "068200347" & visit_code == 1101 ~"1",
-    pid == "068200278" & visit_code == 1104 ~ "0", 
-    pid == "068200281" & visit_code == 1106 ~"0",
-    TRUE ~ as.character(study_product)  
-  ))
+    pid == "068100006" & visit_code %in% c(1301, 1401:1407) ~ NA,
+    pid == "068100006" & visit_code %in% c(1104,1105,1202) ~ 0,
+    pid == "068100013" & visit_code %in% c(1101:1107) ~ 1, 
+    pid == "068100026" & visit_code == 1103 ~ 0,
+    pid == "068100036" & visit_code %in% c(1101:1107) ~ 1, 
+    pid == "068100046" & visit_code == 1103 ~ 0,
+    pid == "068100053" & visit_code %in% c(1101:1102, 1104:1107) ~ 0,
+    pid == "068100053" & visit_code == 1103 ~ 1, 
+    pid == "068100054" & visit_code %in% c(1202:1207, 1003,1004) ~ NA,
+    pid == "068100058" & visit_code == 1003 ~ NA,
+    pid == "068100058" & visit_code == 1101 ~ 0,
+    pid == "068100061" & visit_code %in% c(1000:1007, 1201:1207, 1301) ~ NA, 
+    pid == "068200020" & visit_code == 1102 ~ 0,
+    pid == "068200050" & visit_code == 1104 ~ 0,
+    pid == "068200240" & visit_code == 1101 ~ 0,
+    pid == "068200253" & visit_code %in% c(1007, 1101, 1102) ~ 0,
+    pid == "068200278" & visit_code == 1104 ~ 0, 
+    pid == "068200281" & visit_code == 1106 ~ 0,
+    pid == "068200310" & visit_code == 1103 ~ 1, 
+    pid == "068200310" & visit_code == 1007 ~ 0,
+    pid == "068200347" & visit_code == 1101 ~ 1,
+    pid == "068200356" & visit_code == 1101 ~ 0,
+    pid == "068200363" & visit_code == 1104 ~ 0,
+    
+    TRUE ~ study_product
+  ), 
+  study_product_PP = case_when(
+    pid == "068100036" & visit_code %in% c(1101:1107) ~ 4/7, 
+    pid == "068200028" &  visit_code %in% c(1101:1107) ~ 4/7,
+    pid == "068200225" & visit_code == 1107 ~ 0, 
+    TRUE ~ study_product
+  )
+  )
 
-# remove visit_code > 1207
-exposures <- 
-  exposures |> 
-  filter(visit_code <= 1207)
+
 
 ```
 
@@ -3707,13 +3762,25 @@ exposures |>
 #| fig-width: 12
 
 exposures |>
-  ggplot(aes(y = factor(visit_code), x = factor(pid), color = study_product)) +
+  ggplot(aes(y = factor(visit_code), x = factor(pid), color = study_product |> as.factor())) +
   geom_point() +
   scale_color_discrete(na.translate = FALSE) +  
   scale_color_manual(
     "Nb of study product doses", 
-    values = c("0" = "transparent", "1" = "steelblue2","no info" = "lightblue4"),
+    values = c("0" = "red", "1" = "steelblue2"),
     na.translate = FALSE
+    ) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), 
+        plot.title = element_text(hjust = 0.5)) + 
+  labs(title = "Exposures study product (insertion)", y = "Visit code", x = "Pid")
+
+exposures |>
+  ggplot(aes(y = factor(visit_code), x = factor(pid), color = study_product_PP)) +
+  geom_point() +
+  scale_color_gradient(
+    "Nb of study product doses", 
+    low = "red", high= "steelblue2",
+    na.value = "transparent"
   ) +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), 
         plot.title = element_text(hjust = 0.5)) + 
@@ -4411,6 +4478,7 @@ crf_clean <- crf_clean |> append(list(crf31 = crf31))
 
 ## CRF 32 (Daily diary - Study product and sawb collection times)
 
+
 ```{r}
 
 # Questionnaire pour plusieurs visites: D !!??
@@ -4651,7 +4719,7 @@ crf33 <- crf33 |> select(-any_of(columns_to_remove_for_clean))
 ```{r}
 
 crf33 |> 
-  count(
+  dplyr::count(
     sex_past_24hours, penis_vagina, finger_vagina, mouth_vagina, anal, condom_use, lubricant_use
   ) |> gt::gt("Sexual practices (before cleaning)")
 
@@ -4675,7 +4743,7 @@ crf33 <-
 
 
 crf33 |> 
-  count(
+  dplyr::count(
     sex_past_24hours, penis_vagina, finger_vagina, mouth_vagina, anal, condom_use, lubricant_use
   ) |> gt::gt("Sexual practices (after cleaning)")
 
@@ -5118,15 +5186,15 @@ crf35 |>
         TRUE ~ "time provided"
       )
   ) |> 
-  count(softcup, softcup_time_placed_cat, softcup_time_removed_cat) |> 
+  dplyr::count(softcup, softcup_time_placed_cat, softcup_time_removed_cat) |> 
   arrange(-n)
 
 
 crf35 |> 
-  count(vaginal_swab, vaginal_swab_sti_testing, vaginal_swab_amsel)
+  dplyr::count(vaginal_swab, vaginal_swab_sti_testing, vaginal_swab_amsel)
 
 crf35 |> 
-  count(self_collected_swabs)
+  dplyr::count(self_collected_swabs)
 
 ```
 
@@ -5575,7 +5643,7 @@ crf46 <- crf46 |> select(-any_of(columns_to_remove_for_clean), -vdate, -comments
 
 crf46 <-
   crf46 |>
-  rename(negative_control = negative_ontrol)
+  dplyr::rename(negative_control = negative_ontrol)
 
 ```
 
@@ -5647,7 +5715,7 @@ crf46 |>
         tablets_remain = sum(tablets_remain, na.rm = TRUE)
         ), 
     by = join_by(pid)) |>
-  count(total_applicators_stained, used_applicators, tablets_remain)
+  dplyr::count(total_applicators_stained, used_applicators, tablets_remain)
 
 ```
 
@@ -5715,7 +5783,7 @@ crf47 <- crf47 |> select(-c(any_of(columns_to_remove_for_clean), vdate))
 crf47_long <- 
   crf47 |>
   select(pid, dfseq, study_day, swabs_brought, abnormal_swabs, contains("_visit_code")) |> # , contains("abnormal_swab")
-  rename(crf_visit_code = dfseq) |> 
+  dplyr::rename(crf_visit_code = dfseq) |> 
   pivot_longer(
     cols = -c(pid, crf_visit_code, study_day, swabs_brought, abnormal_swabs), 
     names_to = "home_swab_nb", values_to = "home_swab_visit_code"
