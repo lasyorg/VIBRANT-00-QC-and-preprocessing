@@ -7,8 +7,8 @@ get_clinical_data_dir <- function(){
   
   if (str_detect(getwd(), "laurasymul"))
     data_dir <- "/Users/laurasymul/OneDrive - UCL/Academia/Research/VIBRANT clinical data UCLouvain/"
-  else if (str_detect(getwd(), "vermeren"))
-    data_dir <- "C:/Users/lvermeren/OneDrive - UCL/VIBRANT clinical data/"
+  else if (str_detect(getwd(), "/laura/"))
+    data_dir <- "/Users/laura/OneDrive - UCL/Fichiers de Laura Symul - VIBRANT clinical data UCLouvain/"
   else
     stop(
       str_c(
@@ -34,8 +34,8 @@ get_uclouvain_data_dir <- function(){
   
   if (str_detect(getwd(), "laurasymul"))
     data_dir <- "/Users/laurasymul/OneDrive - UCL/Academia/Research/VIBRANT data UCLouvain/"
-  else if (str_detect(getwd(), "vermeren"))
-    data_dir <- "C:/Users/lvermeren/OneDrive - UCL/VIBRANT data UCLouvain/"
+  else if (str_detect(getwd(), "/laura/"))
+    data_dir <- "/Users/laura/OneDrive - UCL/VIBRANT data UCLouvain/"
   else
     stop("You need to specify the path to the data directory in `R/get_data_dir.R`")
   
