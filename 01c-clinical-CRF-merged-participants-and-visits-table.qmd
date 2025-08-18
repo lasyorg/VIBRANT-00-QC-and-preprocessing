@@ -921,12 +921,14 @@ participant_crfs_merged <-
 Visit CRFs refer to those CRFs not present in the participants CRF list.
 
 We check that each of these CRFs includes both the study_day and dfseq variables. Any CRF that does not meet this requirement is excluded from the visit CRF list.
+We also remove crf29 (Adverse event) and crf34 (protocol deviation) because they does not contain visit_code.
 
 ```{r}
 
 visits_crf_name <- 
   setdiff(names(crf_clean[!names(crf_clean) %in% c("crf1", "crf101", "crf2", "crf102")]),
-          participants_crf_name)
+          participants_crf_name) |> 
+  setdiff("crf27_long")
 
 #crf in visits_crf name but with no study_day variable
 no_studyday <- crf_clean[names(crf_clean) %in% visits_crf_name] |>
@@ -942,12 +944,65 @@ no_dfseq
 
 ```
 
-
 ```{r}
 
-visits_crf_name <- setdiff(visits_crf_name, no_dfseq)
+visits_crf_name <- 
+  setdiff(visits_crf_name, no_dfseq) |> 
+  setdiff("crf29") |> 
+  setdiff("crf34")
+
+visits_crf_name
 
 ```
+
+We now check that each CRF contains one row per participant and visit (i.e., per `uid`).  
+In CRF14, one `uid` (=068100002_0000) appears four times. Three of these entries are identical, so we keep only one of them.
+
+```{r}
+process_crf_duplicates <- function(crf_clean, crf_names) {
+
+  crf_filtered <- 
+    crf_clean[names(crf_clean) %in% crf_names]
+  
+  for (name in crf_names) {
+
+    data <- crf_clean[[name]] 
+    
+    dup_uid <- 
+      data |> 
+      dplyr::count(uid) |> 
+      dplyr::filter(n > 1) |> 
+      pull(uid)
+    
+    dup_uid
+    
+    if (length(dup_uid) > 0) {
+      data <- 
+        data |> 
+        distinct() 
+      
+      crf_filtered[[name]] <- data
+        
+    } else {
+      crf_filtered[[name]] <- data #|> select(-c(dfseq, study_day))
+    }
+    
+}
+
+  return(crf_filtered)
+}
+
+visits_crf <- process_crf_duplicates(crf_clean, visits_crf_name)
+
+```
+For the uid 068100002_0000 in crf14, we keep the one for which we have data for nugent score (the rest is identical)
+
+```{r}
+visits_crf$crf14 <- 
+  visits_crf$crf14 |> 
+  filter(!(uid=="068100002_0000" & nugent_done == "Not done"))
+```
+
 
 
 ```{r}
@@ -991,6 +1046,16 @@ visits_crfs_merged <-
 visits_crfs_merged |> 
   select(any_of(colnames(visits_crfs_merged)[str_detect(colnames(visits_crfs_merged), "\\.x")]))
 ```
+
+We remove data for whic `hiv_result` is "missing" and for wich we have no other data. 
+```{r}
+visits_crfs_merged <-
+  visits_crfs_merged |> 
+  filter(!(hiv_results == "Missing"  & nugent_done == "Missing" &
+             if_all(-c(pid, visit_code, dfseq, hiv_results, nugent_done), is.na))) |> 
+  distinct()
+```
+
 
 
 # Exports

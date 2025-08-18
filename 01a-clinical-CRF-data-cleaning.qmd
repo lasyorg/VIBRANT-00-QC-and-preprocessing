@@ -56,18 +56,18 @@ We load the raw CRF data shared by Lara Lewis on May 7th 2025.
 
 ```{r}
 
-data_dir <- str_c(get_clinical_data_dir(), "raw 20250507/") # 20250320
+data_dir <- str_c(get_clinical_data_dir(), "raw 20250807/") # 20250507 # 20250320
 data_dir |> fs::dir_ls(regexp = "RData") |> basename()
 
 ```
 
-We use the `Rdata` file: `cap068_ecrf_data.Rdata`.
+We use the `Rdata` file: `cap068_ecrf_data_final.Rdata`.
 
 That file contains a list with the data from all CRFs + data dictionaries:
 
 ```{r}
 
-load(str_c(data_dir, "cap068_ecrf_data.Rdata"), verbose = TRUE)
+load(str_c(data_dir, "cap068_ecrf_data_final.RData"), verbose = TRUE) #cap068_ecrf_data.Rdata
 raw_data_list <- ecrf_data_list
 # rm(ecrf_data_list)
 raw_data_list |> names()
@@ -361,7 +361,7 @@ all_visit_dates |>
   filter(!is.na(dfseq)) |> 
   select(pid, dfseq, n_dates) |> 
   distinct() |> 
-  count(n_dates) |>
+  dplyr::count(n_dates) |>
   gt() |> 
   cols_label(
     n_dates ~ "Number of distinct dates for a given participant x visit",
@@ -377,7 +377,6 @@ Most of the double or triple visit dates are for the screening visits (0000), wh
 #| fig-width: 6
 #| fig-height: 4
 
-
 all_visit_dates |> 
   filter(!is.na(dfseq)) |> 
   select(pid, dfseq, n_dates) |> 
@@ -387,6 +386,7 @@ all_visit_dates |>
   aes(x = n_dates, fill = dfseq |> factor()) +
   geom_histogram(binwidth = 0.5) +
   scale_x_continuous(breaks = c(2:3), minor_breaks = NULL) +
+  scale_fill_discrete("Visit code") +
   ylab("Number of entries") +
   xlab("Number of distinct dates for a given participant x visit")
 
@@ -448,7 +448,7 @@ all_visit_dates <-
       )
   )
 
-all_visit_dates |> count(new_flag) |> gt()
+all_visit_dates |> dplyr::count(new_flag) |> gt()
 
 ```
 
@@ -557,22 +557,26 @@ Specifically, we noted:
 - 068200357 v 1000 has crf 22 (mtz adherence), should not have; entry identical to v1100 - ENTRY IS REMOVED
 - 068200407 v 1400 has crf 30 (pelvic evaluation), should not have; entry (including comments) identical to v1500 - ENTRY IS REMOVED (likely filled twice by mistake)
 
+They have been corrected in the new version of the data (`cap068_ecrf_data_final.Rdata`) except for pid "068200214" and dfseq 1201
 
 ```{r}
-
+#corrected
 raw_data_list$cap068_data_32 <- 
   raw_data_list$cap068_data_32 |> 
   filter(!(pid == "068200023" & dfseq == 1400)) |> 
   filter(!(pid == "068200281" & dfseq == 1400))
 
+# NOT corrected 
 raw_data_list$cap068_data_47 <- 
   raw_data_list$cap068_data_47 |> 
   filter(!(pid == "068200214" & dfseq == 1201)) 
 
+# corrected
 raw_data_list$cap068_data_22 <- 
   raw_data_list$cap068_data_22 |> 
   filter(!(pid == "068200357" & dfseq == 1000)) 
 
+# corrected
 raw_data_list$cap068_data_30 <-
   raw_data_list$cap068_data_30 |> 
   filter(!(pid == "068200407" & dfseq == 1400))
@@ -891,7 +895,7 @@ We replace the codes
 
 - "D" by "not done" 
 - "R" by "not required"
-- "A" by "missing"
+- "A" by "Not applicable"
 - "U" by "unknown"
 
 ```{r}
@@ -917,13 +921,13 @@ clean_crf <-
       if (is.character(crf[[col_ix]])) {
         crf[[col_ix]][crf[[col_ix]] == "D"] <- "Not done"
         crf[[col_ix]][crf[[col_ix]] == "R"] <- "Not required"
-        crf[[col_ix]][crf[[col_ix]] == "A"] <- "Missing"
+        crf[[col_ix]][crf[[col_ix]] == "A"] <- "Not applicable"
         crf[[col_ix]][crf[[col_ix]] == "U"] <- "Unknown"
       }
       if (is.factor(crf[[col_ix]])) {
         levels(crf[[col_ix]])[levels(crf[[col_ix]]) == "D"] <- "Not done"
         levels(crf[[col_ix]])[levels(crf[[col_ix]]) == "R"] <- "Not required"
-        levels(crf[[col_ix]])[levels(crf[[col_ix]]) == "A"] <- "Missing"
+        levels(crf[[col_ix]])[levels(crf[[col_ix]]) == "A"] <- "Not applicable"
         levels(crf[[col_ix]])[levels(crf[[col_ix]]) == "U"] <- "Unknown"
       }
     }
@@ -1320,7 +1324,10 @@ additional_income_sub <-
   mutate(income = (tolower(income) == "checked")) |>
   group_by(pid, dfseq) |>
   summarize(additional_income_type = str_c(additional_income_type[income], collapse = ", "), .groups = "drop") |>
-  mutate(additional_income_type = additional_income_type |> fct_infreq())
+  mutate(additional_income_type = 
+           case_when(additional_income_type == "" ~ "No additional income", 
+                     TRUE ~ additional_income_type), 
+         additional_income_type = additional_income_type |> fct_infreq())
 
 
 crf2 <- 
@@ -1645,7 +1652,25 @@ crf5 <- rem_columns_with_unique_values(crf5)
 ::: panel-tabset
 ```{r}
 #| results: asis
-crf5 |> plot_marginal_dist() |> plot_tabs( )
+
+plots <- crf5 |> plot_marginal_dist()
+
+plots[["diagnosis"]] <- 
+  crf5 |> 
+  count(diagnosis) |> 
+  mutate(diagnosis = str_wrap(diagnosis, 50)) |>
+  mutate(diagnosis = fct_reorder(diagnosis, n, .desc = TRUE)) |> 
+  ggplot(aes(y = n, x = diagnosis)) +
+  geom_col(fill = "cornflowerblue", color = "darkblue") +
+  ylab("nb of entries") + 
+  xlab("") +
+  ggtitle("diagnosis") +
+  theme(
+    text = element_text(size = 10),
+    axis.text.x = element_text(angle = 90, hjust = 1, size = 6)
+  )
+
+plots |> plot_tabs( )
 ```
 :::
 
@@ -2271,6 +2296,9 @@ crf_clean <- crf_clean |> append(list(crf13 = crf13))
 
 ## CRF 14 (BV diagnosis)
 
+
+
+
 ```{r}
 
 crf14 <- raw_data_list$cap068_data_14 |> as.tibble()
@@ -2294,6 +2322,27 @@ crf_raw <-
 ```
 
 ```{r}
+#| eval: false
+# LV : to remove
+crf14 |> 
+  mutate(
+    vaginal_ph_value = vaginal_ph_value |> as.numeric(),
+    site = ifelse(str_detect(pid, "06810"), "MGH", "CAP")
+  ) |> 
+  ggplot() + 
+  aes(x=vaginal_ph_less_than, y = vaginal_ph_value, col = site) + 
+  geom_boxplot(varwidth = TRUE)
+  #geom_point(alpha = 0.4, size = 0.5, position = position_dodge(width = 0.55))
+# 
+crf14_old |>
+  mutate(vaginal_ph_value = vaginal_ph_value |> as.numeric(), 
+        site = ifelse(str_detect(pid, "06810"), "MGH", "CAP")) |>
+  ggplot() +
+  aes(x=vaginal_ph_greater_than, y = vaginal_ph_value, col = site) +
+  geom_boxplot(varwidth = TRUE)
+```
+
+```{r}
 crf14 <- crf14 |> select(-any_of(columns_to_remove_for_clean), -vdate)
 ```
 
@@ -2311,7 +2360,7 @@ crf14 |>
   mutate(
     site = ifelse(str_detect(pid, "06810"), "MGH", "CAP")
   ) |> 
-  count(site, vaginal_ph_greater_than, vaginal_ph_value) |> 
+  count(site, vaginal_ph_less_than, vaginal_ph_value) |> 
   gt()
 
 ```
@@ -2831,7 +2880,9 @@ crf19 <- rem_columns_with_unique_values(crf19)
 ::: panel-tabset
 ```{r}
 #| results: asis
-crf19 |> plot_marginal_dist() |> plot_tabs( )
+crf19 |> 
+  mutate(new_sex_partner = factor(new_sex_partner, levels = c(0, 1), labels = c("No", "Yes"))) |> 
+  plot_marginal_dist() |> plot_tabs( )
 ```
 :::
 
@@ -3381,15 +3432,19 @@ Data from the crf22 are processed manually (i.e., each comments from the study s
 # select all the daily visits
 # create a data frame with all the visits for each participant
 
-pids <- raw_data_list$cap068_data_13$pid
-visits <- raw_data_list$cap068_data_32$dfseq |> unique()
+pids <- raw_data_list$cap068_data_13$pid |> unique()
+visits <- raw_data_list$cap068_data_32$visit_code |> unique()
 
 exposures <- 
   expand_grid(
     pid = pids,
-    dfseq = visits
+    visit_code = visits
   ) |> 
-  arrange(pid, dfseq)
+  arrange(pid, visit_code) |> 
+  left_join(
+    raw_data_list$cap068_data_32 |> select(pid, visit_code, study_day), 
+    by = c("pid", "visit_code")
+  )
 
 ```
 
@@ -3425,7 +3480,7 @@ exposures <-
   exposures |>
   mutate(
     metronidazole =  case_when(
-      pid %in% pid_temp & dfseq >= 1001 & dfseq <= 1007 ~ "2",
+      pid %in% pid_temp & visit_code >= 1001 & visit_code <= 1007 ~ "2",
 
       TRUE ~ NA_character_)
     )
@@ -3457,79 +3512,79 @@ exposures <-
       ),
     metronidazole = 
     case_when(
-      pid %in% pid_ok & dfseq %in% c(1001:1007) ~ "2",
-      pid == "068100006" & dfseq == 1002 ~"1", 
-      pid == "068100006" & dfseq %in% c(1001,1003:1007) ~"2",
-      pid == "068100011" & dfseq %in% c(1001) ~ "1", # start at night
-      pid == "068100011" & dfseq %in% c(1002:1007) ~ "2",
-      pid == "068100026" & dfseq %in% c(1001:1003, 1005:1007) ~ "2",
-      pid == "068100026" & dfseq == 1004 ~ "1",
-      pid == "068100036" & dfseq %in% c(1001:1002,1004:1007) ~ "2",
-      pid == "068100036" & dfseq == 1003 ~"1",
-      pid == "068100045" & dfseq %in% c(1001:1003, 1005:1007) ~"2",
-      pid == "068100045" & dfseq == 1004 ~"1",
-      pid == "068100046" & dfseq %in% c(1002:1007) ~"2",
-      pid == "068100046" & dfseq == 1001 ~"1",
-      pid == "068100062" & dfseq %in% c(1001:1004) ~"2",
-      pid == "068100062" & dfseq %in% c(1005:1007) ~ "no info",
-      pid == "068100063" & dfseq %in% c(1001:1002,1004) ~"2",
-      pid == "068100063" & dfseq == 1003 ~"1",
-      pid == "068100063" & dfseq %in% c(1005:1007) ~ "no info",
-      pid == "068200020" & dfseq %in% c(1001) ~"1", # start 1001 at night
-      pid == "068200020" & dfseq %in% c(1002:1007) ~"2",
-      pid == "068200020" & dfseq == 1007 ~ "no info",
-      pid == "068200058" & dfseq %in% c(1001:1006) ~"2",
-      pid == "068200058" & dfseq == 1007 ~"1",
-      pid == "068200058" & dfseq == 1008 ~"1",
-      pid == "068200085" & dfseq %in% c(1001:1003, 1005:1007) ~"2",
-      pid == "068200085" & dfseq == 1004 ~"0",
-      pid == "068200087" & dfseq %in% c(1001, 1004:1005) ~"2",
-      pid == "068200087" & dfseq %in% c(1002:1003) ~"1",
-      pid == "068200087" & dfseq %in% c(1006:1007) ~ "no info",
-      pid == "068200118" & dfseq %in% c(1001,1002,1005:1007) ~"2",
-      pid == "068200118" & dfseq == 1003 ~"1",
-      pid == "068200118" & dfseq == 1004 ~"0",
-      pid == "068200118" & dfseq %in% (1008:1009) ~ "no info",
-      pid == "068200150" & dfseq %in% c(1001:1003, 1005:1007) ~"2", 
-      pid == "068200150" & dfseq == 1004 ~"1",
-      pid == "068200191" & dfseq %in% c(1001:1006) ~"2",
-      pid == "068200191" & dfseq == 1007 ~ "no info",
-      pid == "068200239" & dfseq %in% c(1001:1006) ~"2",
-      pid == "068200239" & dfseq %in% c(1007,1008) ~"1",
-      pid == "068200224" & dfseq %in% c(1001:1006) ~"2",
-      pid == "068200224" & dfseq == 1007 ~ "no info",
-      pid == "068200240" & dfseq %in% c(1001:1006) ~"2",
-      pid == "068200240" & dfseq == 1007 ~"1",
-      pid == "068200253" & dfseq %in% c(1001:1002) ~"2", 
-      pid == "068200253" & dfseq %in% c(1003:1006) ~"1",
-      pid == "068200253" & dfseq == 1007 ~ "0",
-      pid == "068200281" & dfseq %in% c(1001:1002, 1006) ~"2", 
-      pid == "068200281" & dfseq %in% c(1003:1005) ~"1",
-      pid == "068200281" & dfseq == 1007 ~ "no info",
-      pid == "068200310" & dfseq %in% c(1001:1003,1006) ~"2", 
-      pid == "068200310" & dfseq %in% c(1004:1005) ~"1",
-      pid == "068200310" & dfseq == 1007 ~ "no info",
-      pid == "068200356" & dfseq %in% c(1001:1005) ~"2",
-      pid == "068200356" & dfseq %in% c(1006:1007) ~ "no info",
-      pid == "068200357" & dfseq %in% c(1001:1004,1006:1007) ~"2",
-      pid == "068200357" & dfseq %in% c(1005) ~"1", # 
-      pid == "068200366" & dfseq %in% c(1001:1004, 1006:1007) ~"2",
-      pid == "068200366" & dfseq == 1005 ~"1",
-      pid == "068200375" & dfseq %in% c(1001:1006) ~"2",
-      pid == "068200375" & dfseq == 1007 ~"1", 
-      pid == "068200378" & dfseq %in% c(1001, 1003, 1004) ~"2",
-      pid == "068200378" & dfseq %in% c(1002, 1005) ~"1",
-      pid == "068200378" & dfseq %in% c(1006,1007) ~ "2", 
-      pid == "068200414" & dfseq %in% c(1001, 1005, 1006) ~"2", 
-      pid == "068200414" & dfseq %in% c(1002:1004) ~"1",
-      pid == "068200414" & dfseq == 1007 ~ "2",
-      pid == "068200428" & dfseq %in% c(1001:1006) ~"2",
-      pid == "068200428" & dfseq %in% c(1007:1008) ~"1",
-      pid == "068200460" & dfseq %in% c(1001:1005, 1007) ~"2",
-      pid == "068200460" & dfseq == 1006 ~"0",
-      pid == "068200465" & dfseq %in% c(1002:1004) ~"2",
-      pid == "068200465" & dfseq %in% c(1001, 1005) ~"1",
-      pid == "068200465" & dfseq %in% c(1006:1007) ~ "2",
+      pid %in% pid_ok & visit_code %in% c(1001:1007) ~ "2",
+      pid == "068100006" & visit_code == 1002 ~"1", 
+      pid == "068100006" & visit_code %in% c(1001,1003:1007) ~"2",
+      pid == "068100011" & visit_code %in% c(1001) ~ "1", # start at night
+      pid == "068100011" & visit_code %in% c(1002:1007) ~ "2",
+      pid == "068100026" & visit_code %in% c(1001:1003, 1005:1007) ~ "2",
+      pid == "068100026" & visit_code == 1004 ~ "1",
+      pid == "068100036" & visit_code %in% c(1001:1002,1004:1007) ~ "2",
+      pid == "068100036" & visit_code == 1003 ~"1",
+      pid == "068100045" & visit_code %in% c(1001:1003, 1005:1007) ~"2",
+      pid == "068100045" & visit_code == 1004 ~"1",
+      pid == "068100046" & visit_code %in% c(1002:1007) ~"2",
+      pid == "068100046" & visit_code == 1001 ~"1",
+      pid == "068100062" & visit_code %in% c(1001:1004) ~"2",
+      pid == "068100062" & visit_code %in% c(1005:1007) ~ "no info",
+      pid == "068100063" & visit_code %in% c(1001:1002,1004) ~"2",
+      pid == "068100063" & visit_code == 1003 ~"1",
+      pid == "068100063" & visit_code %in% c(1005:1007) ~ "no info",
+      pid == "068200020" & visit_code %in% c(1001) ~"1", # start 1001 at night
+      pid == "068200020" & visit_code %in% c(1002:1007) ~"2",
+      pid == "068200020" & visit_code == 1007 ~ "no info",
+      pid == "068200058" & visit_code %in% c(1001:1006) ~"2",
+      pid == "068200058" & visit_code == 1007 ~"1",
+      pid == "068200058" & visit_code == 1008 ~"1",
+      pid == "068200085" & visit_code %in% c(1001:1003, 1005:1007) ~"2",
+      pid == "068200085" & visit_code == 1004 ~"0",
+      pid == "068200087" & visit_code %in% c(1001, 1004:1005) ~"2",
+      pid == "068200087" & visit_code %in% c(1002:1003) ~"1",
+      pid == "068200087" & visit_code %in% c(1006:1007) ~ "no info",
+      pid == "068200118" & visit_code %in% c(1001,1002,1005:1007) ~"2",
+      pid == "068200118" & visit_code == 1003 ~"1",
+      pid == "068200118" & visit_code == 1004 ~"0",
+      pid == "068200118" & visit_code %in% (1008:1009) ~ "no info",
+      pid == "068200150" & visit_code %in% c(1001:1003, 1005:1007) ~"2", 
+      pid == "068200150" & visit_code == 1004 ~"1",
+      pid == "068200191" & visit_code %in% c(1001:1006) ~"2",
+      pid == "068200191" & visit_code == 1007 ~ "no info",
+      pid == "068200239" & visit_code %in% c(1001:1006) ~"2",
+      pid == "068200239" & visit_code %in% c(1007,1008) ~"1",
+      pid == "068200224" & visit_code %in% c(1001:1006) ~"2",
+      pid == "068200224" & visit_code == 1007 ~ "no info",
+      pid == "068200240" & visit_code %in% c(1001:1006) ~"2",
+      pid == "068200240" & visit_code == 1007 ~"1",
+      pid == "068200253" & visit_code %in% c(1001:1002) ~"2", 
+      pid == "068200253" & visit_code %in% c(1003:1006) ~"1",
+      pid == "068200253" & visit_code == 1007 ~ "0",
+      pid == "068200281" & visit_code %in% c(1001:1002, 1006) ~"2", 
+      pid == "068200281" & visit_code %in% c(1003:1005) ~"1",
+      pid == "068200281" & visit_code == 1007 ~ "no info",
+      pid == "068200310" & visit_code %in% c(1001:1003,1006) ~"2", 
+      pid == "068200310" & visit_code %in% c(1004:1005) ~"1",
+      pid == "068200310" & visit_code == 1007 ~ "no info",
+      pid == "068200356" & visit_code %in% c(1001:1005) ~"2",
+      pid == "068200356" & visit_code %in% c(1006:1007) ~ "no info",
+      pid == "068200357" & visit_code %in% c(1001:1004,1006:1007) ~"2",
+      pid == "068200357" & visit_code %in% c(1005) ~"1", # 
+      pid == "068200366" & visit_code %in% c(1001:1004, 1006:1007) ~"2",
+      pid == "068200366" & visit_code == 1005 ~"1",
+      pid == "068200375" & visit_code %in% c(1001:1006) ~"2",
+      pid == "068200375" & visit_code == 1007 ~"1", 
+      pid == "068200378" & visit_code %in% c(1001, 1003, 1004) ~"2",
+      pid == "068200378" & visit_code %in% c(1002, 1005) ~"1",
+      pid == "068200378" & visit_code %in% c(1006,1007) ~ "2", 
+      pid == "068200414" & visit_code %in% c(1001, 1005, 1006) ~"2", 
+      pid == "068200414" & visit_code %in% c(1002:1004) ~"1",
+      pid == "068200414" & visit_code == 1007 ~ "2",
+      pid == "068200428" & visit_code %in% c(1001:1006) ~"2",
+      pid == "068200428" & visit_code %in% c(1007:1008) ~"1",
+      pid == "068200460" & visit_code %in% c(1001:1005, 1007) ~"2",
+      pid == "068200460" & visit_code == 1006 ~"0",
+      pid == "068200465" & visit_code %in% c(1002:1004) ~"2",
+      pid == "068200465" & visit_code %in% c(1001, 1005) ~"1",
+      pid == "068200465" & visit_code %in% c(1006:1007) ~ "2",
       TRUE ~ as.character(metronidazole)
       )
   )
@@ -3561,7 +3616,7 @@ crf32_raw <-
 
 exposures_studyproduct <- 
   crf32_raw |> 
-  select(pid, dfseq, insert_study_product_time) |> 
+  select(pid, visit_code, insert_study_product_time) |> 
   filter(!(insert_study_product_time %in% c("Not applicable", "Blank"))) |> 
   mutate(study_product = 1)
 
@@ -3569,7 +3624,7 @@ exposures <-
   exposures |> 
   left_join(
     exposures_studyproduct |> select(-insert_study_product_time),
-    by = c("pid", "dfseq")
+    by = c("pid", "visit_code")
   )
 
 # QC : participant who missed a doses 
@@ -3604,27 +3659,27 @@ exposures <-
     )
   ) |> 
   mutate(study_product = case_when(
-    pid %in% pid_temp & dfseq %in% c(1101:1107) ~ "1",
-    pid %in% pid_temp & !(dfseq %in% c(1101:1107)) ~ "0",
+    pid %in% pid_temp & visit_code %in% c(1101:1107) ~ "1",
+    pid %in% pid_temp & !(visit_code %in% c(1101:1107)) ~ "0",
 
-    pid == "068100013" & dfseq %in% c(1101:1107) ~ "1", 
-    pid == "068100006" & dfseq %in% c(1301, 1401:1407) ~ "0",
-    pid == "068100053" & dfseq %in% c(1101:1102, 1104:1107) ~ "0",
-    pid == "068100053" & dfseq == 1103 ~"1", 
-    pid == "068100054" & dfseq %in% c(1202:1207, 1003,1004) ~"0",
-    pid == "068100058" & dfseq == 1003 ~ "0",
-    pid == "068100061" & dfseq %in% c(1000:1007, 1201:1207, 1301) ~ "0", 
-    pid == "068200310" & dfseq == 1103 ~"1", 
-    pid == "068200347" & dfseq == 1101 ~"1",
-    pid == "068200278" & dfseq == 1104 ~ "0", 
-    pid == "068200281" & dfseq == 1106 ~"0",
+    pid == "068100013" & visit_code %in% c(1101:1107) ~ "1", 
+    pid == "068100006" & visit_code %in% c(1301, 1401:1407) ~ "0",
+    pid == "068100053" & visit_code %in% c(1101:1102, 1104:1107) ~ "0",
+    pid == "068100053" & visit_code == 1103 ~"1", 
+    pid == "068100054" & visit_code %in% c(1202:1207, 1003,1004) ~"0",
+    pid == "068100058" & visit_code == 1003 ~ "0",
+    pid == "068100061" & visit_code %in% c(1000:1007, 1201:1207, 1301) ~ "0", 
+    pid == "068200310" & visit_code == 1103 ~"1", 
+    pid == "068200347" & visit_code == 1101 ~"1",
+    pid == "068200278" & visit_code == 1104 ~ "0", 
+    pid == "068200281" & visit_code == 1106 ~"0",
     TRUE ~ as.character(study_product)  
   ))
 
-# remove dfseq > 1207
+# remove visit_code > 1207
 exposures <- 
   exposures |> 
-  filter(dfseq <= 1207)
+  filter(visit_code <= 1207)
 
 ```
 
@@ -3633,7 +3688,7 @@ exposures <-
 #| fig-width: 12
 
 exposures |>
-  ggplot(aes(y = factor(dfseq), x = factor(pid), color = metronidazole)) +
+  ggplot(aes(y = factor(visit_code), x = factor(pid), color = metronidazole)) +
   geom_point() +
   # scale_color_discrete(na.translate = FALSE) +  
   scale_color_manual(
@@ -3643,7 +3698,7 @@ exposures |>
     ) +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), 
         plot.title = element_text(hjust = 0.5)) + 
-  labs(title = "Exposures metronidazole", y = "Pid", x = "dfseq")
+  labs(title = "Exposures metronidazole", y = "Visit code", x = "Pid")
 
 ```
 
@@ -3652,7 +3707,7 @@ exposures |>
 #| fig-width: 12
 
 exposures |>
-  ggplot(aes(y = factor(dfseq), x = factor(pid), color = study_product)) +
+  ggplot(aes(y = factor(visit_code), x = factor(pid), color = study_product)) +
   geom_point() +
   scale_color_discrete(na.translate = FALSE) +  
   scale_color_manual(
@@ -3662,7 +3717,7 @@ exposures |>
   ) +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), 
         plot.title = element_text(hjust = 0.5)) + 
-  labs(title = "Exposures study product", y = "Pid", x = "dfseq")
+  labs(title = "Exposures study product", y = "Visit code", x = "Pid")
 
 ```
 
@@ -3860,7 +3915,20 @@ crf26 <- rem_columns_with_unique_values(crf26)
 ::: panel-tabset
 ```{r}
 #| results: asis
-crf26 |> plot_marginal_dist() |> plot_tabs( )
+
+plots <- crf26 |> plot_marginal_dist()
+
+plots[["height"]] <- 
+  crf26 |> 
+  ggplot(aes(x = height)) +
+  geom_histogram(binwidth = 0.05, fill = "cornflowerblue", color = "darkblue") +
+  xlab("height (feet)") +
+  ylab("nb of entries") +
+  ggtitle("height") +
+  theme_minimal()
+
+plots |> plot_tabs( )
+
 ```
 :::
 
@@ -4506,16 +4574,22 @@ crf32 |>
   mutate(site = ifelse(str_detect(pid, "06810"), "MGH", "CAP")) |>
   ggplot() +
   aes(
-    y = insert_study_product_time, 
+    y = insert_study_product_time,
     x = vaginal_swab_collection_time,
     col = (insert_study_product_time == vaginal_swab_collection_time)
   ) +
   geom_jitter(alpha = 0.5) +
   facet_grid(. ~ site, scales = "free", space = "free") +
-  guides(col = "none") +
-  theme(
-    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
-  ) 
+  #guides(col = "none") +
+  scale_color_manual(name = "Same time?",
+                     values = c("darkblue", "red")) +
+  xlab("Time of vaginal swab collection") + 
+  ylab("Time of study product insertion") + 
+  theme(axis.text.x = element_text(
+    angle = 90,
+    hjust = 1,
+    vjust = 0.5
+  ), ) 
 
 ```
 Note: participants were instructed to first swab, then insert study product.

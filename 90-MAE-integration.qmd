@@ -575,78 +575,78 @@ mae_coldata |>
 visit_dict <- 
   bind_rows(
     tibble(
-      visit = "screening", 
+      visit = "Screening", 
       definition = "Screening visit for which we have the most assay data. If two screening visits have the same number of assays, we take the last one.", 
       possible_visit_codes = "0000, 0001, 0010, 0011",
       visit_number = "V0",
       study_week = -1
     ),
     tibble(
-      visit = "add. screening", 
+      visit = "Add. screening", 
       definition = 'If a participant has data for two screening visits, one is the "main" screening visit, and the other is labelled as an additional screening visit.', 
       possible_visit_codes = "0000, 0001, 0010, 0011",
       visit_number = "V0b",
       study_week = -2
       ),
     tibble(
-      visit = "pre-MTZ", 
+      visit = "Day 0 (pre-MTZ)", 
       definition = "Visit before the metronidazole treatment (MTZ) starts.", 
       possible_visit_codes = "1000, 1011",
       visit_number = "V1",
       study_week = 0
       ),
     tibble(
-      visit = "post-MTZ", 
+      visit = "Week 1 (post-MTZ)", 
       definition = "Visit after the metronidazole treatment (MTZ) ends.", 
       possible_visit_codes = "1100",
       visit_number = "V2",
       study_week = 1
       ),
     tibble(
-      visit = "post-INT", 
-      definition = "Visit after the intervention (INT) ends.", 
+      visit = "Week 2 (post-SP)", 
+      definition = "Visit after the study product (SP) ends.", 
       possible_visit_codes = "1200, 1211",
       visit_number = "V3",
       study_week = 2
       ),
     tibble(
-      visit = "1w post-INT", 
-      definition = "Visit one week after the intervention (INT) ends.", 
+      visit = "Week 3", 
+      definition = "Visit one week after the study product (SP) ends.", 
       possible_visit_codes = "1300",
       visit_number = "V4",
       study_week = 3
       ),
     tibble(
-      visit = "2w post-INT", 
-      definition = "Visit two weeks after the intervention (INT) ends.", 
+      visit = "Week 4", 
+      definition = "Visit two weeks after the study product (SP) ends.", 
       possible_visit_codes = "1400",
       visit_number = "V5",
       study_week = 4
       ),
     tibble(
-      visit = "3w post-INT", 
-      definition = "Visit three weeks after the intervention (INT) ends.", 
+      visit = "Week 5", 
+      definition = "Visit three weeks after the study product (SP) ends.", 
       possible_visit_codes = "1500, 1511, 1512",
       visit_number = "V6",
       study_week = 5
       ),
     tibble(
-      visit = "5w post-INT", 
-      definition = "Visit five weeks after the intervention (INT) ends.", 
+      visit = "Week 7", 
+      definition = "Visit five weeks after the study product (SP) ends.", 
       possible_visit_codes = "1700, 1711",
       visit_number = "V7",
       study_week = 7
       ),
     tibble(
-      visit = "7w post-INT", 
-      definition = "Visit seven weeks after the intervention (INT) ends.", 
+      visit = "Week 9", 
+      definition = "Visit seven weeks after the study product (SP) ends.", 
       possible_visit_codes = "1900, 1911",
       visit_number = "V8",
       study_week = 9
       ),
     tibble(
-      visit = "10w post-INT", 
-      definition = "Visit ten weeks after the intervention (INT) ends.", 
+      visit = "Week 12", 
+      definition = "Visit ten weeks after the study product (SP) ends.", 
       possible_visit_codes = "2120, 2121, 2122",
       visit_number = "V9",
       study_week = 12
