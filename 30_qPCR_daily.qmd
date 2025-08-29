@@ -324,6 +324,41 @@ This appears to have fixed the issue.
 Check with Michael and/or Sinaye about these two samples, and check in the 16S amplicon sequencing manifest if we also find these replicates 
 :::
 
+A subset of wells has no vibr_sample_id, yet each of these wells has a valid gDNA extraction coordinate (ext_lib_plate_id/ext_lib_position) and a measurable Cq. Within the same qPCR run and plate layout, the corresponding wells carry valid identifiers for earlier VMRC targets but become blank for later VMRC targets.
+
+We think this pattern is consistent with a metadata transcription/propagation error during target-specific exports: the plate map (sample IDs) was entered or propagated for the first VMRC assays and not copied forward for the subsequent assays. In other words, the physical samples were present and measured, but the identifier field was left empty for some targets. This is a documentation issue rather than a biological or assay failure.
+
+We will correct this by replacing the missing "vibr_sample_id" by plate according to the position on the previous VRMC plate. 
+
+```{r}
+qpcr <- 
+  qpcr |> 
+  mutate(
+    well_col = well |> str_sub(1, 1), 
+    well_row = well |> str_sub(2,3) |> as.integer()
+    ) |> 
+  relocate(well_col, well_row, .after = well)
+```
+
+
+```{r}
+
+qpcr |> 
+  dplyr::filter(target != "16S", ext_lib_plate_nb == 10) |> 
+  select(pcr_plate_id, ext_lib_plate_nb, strain_group_qpcr, target, well_col, well_row, sample, vibr_sample_id) |>
+  distinct() |>
+  ggplot() +
+  aes(x =  well_row |> factor(), y = well_col |> factor() |> fct_rev(), fill = !is.na(vibr_sample_id)) +
+  facet_grid(pcr_plate_id ~ strain_group_qpcr + target) +
+  geom_tile() +
+  geom_path(aes(group = sample), col = "black", alpha = 0.5) +
+  geom_point() +
+  scale_fill_manual("vibrant sample id", values = c("steelblue", "lightgreen")) +
+  xlab("Well column") + ylab("Well row") +
+  labs(caption = "Black lines connect replicates") 
+
+```
+
 
 >>> TODO: document the samples that had a position on the gDNA plates BUT did NOT have a `vibr_sample_id` (i.e., `NA` in the `vibr_sample_id` column).
 >>> TODO: show the gDNA plate design with whether `vibr_sample_id` was missing.
@@ -474,7 +509,6 @@ We harmonized `content` to "Std" and `sample` to "Standard".
 
 ```{r}
 
-# est ce que je garde les numero pour les standard LBP ? 
 qpcr <-  
   qpcr |> 
   mutate(
@@ -565,14 +599,14 @@ qpcr |> dplyr::count(qpcr_sample_type, name = "n_wells") |> arrange(-n_wells) |>
 
 
 ```{r}
-
-qpcr <- 
-  qpcr |> 
-  mutate(
-    well_col = well |> str_sub(1, 1), 
-    well_row = well |> str_sub(2,3) |> as.integer()
-    ) |> 
-  relocate(well_col, well_row, .after = well)
+# move above 
+# qpcr <- 
+#   qpcr |> 
+#   mutate(
+#     well_col = well |> str_sub(1, 1), 
+#     well_row = well |> str_sub(2,3) |> as.integer()
+#     ) |> 
+#   relocate(well_col, well_row, .after = well)
 
 ```
 
