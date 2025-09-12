@@ -1,0 +1,198 @@
+---
+title: "VIBRANT subsetting MAE"
+author: Laura Symul, Laura Vermeren, Lara Wautier, Céline Bugli
+date: today
+format: 
+  html:
+    code-fold: true
+    toc: true
+    toc-location: left
+    theme: journal
+    embed-resources: true
+execute:
+  cache: true # refresh true false
+project:
+  execute-dir: project
+editor: 
+  markdown: 
+    wrap: 80
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+```{r libraries}
+#| warning: false
+#| cache: false
+
+library(tidyverse)
+library(magrittr)
+library(gt)
+library(patchwork)
+library(SummarizedExperiment)
+library(MultiAssayExperiment)
+library(tidySummarizedExperiment)
+library(brms)
+library(gtsummary)
+library(labelled)
+library(scales)
+# library(gridExtra)
+library(ggpubr)
+library(ggh4x)
+# library(mia) # BiocManager::install("mia")
+
+#theme_set(theme_light())
+tmp <- fs::dir_map("R scripts", source)
+rm(tmp)
+
+```
+
+```{r source-utils}
+#| warning: false
+#| cache: false
+tmp <- fs::dir_map("../VIBRANT-99-utils/R/", source)
+rm(tmp)
+```
+
+
+:::callout-note
+The purpose of this document is to subset the master `MAE` object into smaller, analysis-specific `MAE` objects that contain only the data required for the respective analyses.  
+
+These curated `MAE` objects are intended for public release, and therefore do not include sensitive or unnecessary information.
+
+At the end of this document, several `MAE` objects are created:
+
+- `MAE_1`: contains all necessary data for the first VIBRANT paper 1 (primary outcome) [cite paper].  
+- `MAE_2`: contains all necessary data for [describe analysis or paper].  
+- ...
+:::
+
+
+```{r loading-mae}
+#| eval: true
+
+mae_file <- 
+  fs::dir_ls(str_c(data_dir(), "04 unblinded MAEs/"), regexp = "mae_full_.*\\.rds$") |> 
+  sort(decreasing = TRUE) |>
+  magrittr::extract(1)
+
+cat(str_c("Loading the RDS file containing the unblinded VIBRANT MAE: /", mae_file |> str_remove(data_dir()), "\n"))
+
+mae <- readRDS(mae_file)
+
+rm(mae_file)
+
+fs::dir_ls(str_c(data_dir(), "01 Preprocessed and QCed/"), regexp = "exposures_.*\\.Rdata$") |> 
+  sort(decreasing = TRUE) |>
+  magrittr::extract(1) |> 
+  load()
+
+
+mae
+
+```
+
+
+## MAE 1 
+
+`MAE_1` contains all necessary information for the primary outcome analyses and contains only the randomized participants. 
+
+-   `participant_crf_merged` table stored in the metadata of the MAE with the following variable : site, age, race, ethn, cut_size_meals, eat_less, hungry_did_not_eat, sexual_partners_lifetime, sexual_partners_past_month, contraception_method, used_applicators, number_applicators, applicator_stain_positive, applicator_stain_negative, applicator_stain_indeterminant, total_applicators_stained, proportion_positive_applicators, total
+
+-   `visits_crfs_merged` table stored in the metadata of the MAE contains : visit_code, study_day, the participant's partner's gender (past_week_sex_partner), insert_study_product_time, nugent_total_score
+
+-   `coldata` contains the population flag (`ITT`, `mITT`, `PP`), `PIPV`, if participants is randomized or not (`randomized`), the site, location, arm, visit_code, visit_type, study_week
+
+The `mae_1`will contains the following assay with the following informations: 
+
+-   `col_LBP_mg` SE contains : .feature, .sample, outcome
+-   `col_LBP_qPCR` SE contains : .feature, .sample,  outcome
+-   `col_crispatus_mg` SE contains : .feature, .sample, outcome
+-   `mg` SE contains the following : .feature, .sample, uid, LBP, poor_quality_mg_data, rel_ab, rel_ab_bact and the taxonomic table 
+-   `qPCR` SE contains : uid, .feature, copies_per_swab_med, taxon_label, LBP, strain_origin
+-   `qPCR_daily` SE contains : uid, .feature, copies_per_swab_med, taxon_label, LBP, strain_origin
+
+
+```{r}
+
+# Randomized participants 
+mae_randomized <- mae[, !is.na(colData(mae)$randomized) & colData(mae)$randomized == TRUE]
+
+# subsetting only necessary SE
+se_names <- c("col_LBP_mg", "col_LBP_qPCR", "col_crispatus_mg", "mg", "qPCR", "qPCR_daily")
+selected_experiments <- experiments(mae_randomized)[se_names]
+
+mae_1 <- MultiAssayExperiment(
+  experiments = selected_experiments,
+  colData = colData(mae_randomized),
+  metadata = metadata(mae_randomized)
+)
+
+# Meta data 
+
+## filtering partcipant_crfs_merged
+vars_participant <- c("pid", "site", "age", "race", "ethn", "cut_size_meals", "eat_less", "hungry_did_not_eat",
+                      "sexual_partners_lifetime", "sexual_partners_past_month", "contraception_method",
+                      "used_applicators", "number_applicators", "applicator_stain_positive",
+                      "applicator_stain_negative", "applicator_stain_indeterminant",
+                      "total_applicators_stained", "proportion_positive_applicators", "total")
+
+## filtering visits_crfs_merged
+vars_visits <- c("pid", "visit_code", "study_day", 
+                 "past_week_sex_partner", "insert_study_product_time", "nugent_total_score")
+
+## new metadata
+new_metadata <- 
+  list(
+    participant_crfs_merged = metadata(mae_1)$participant_crfs_merged[, vars_participant],
+    visits_crfs_merged = metadata(mae_1)$visits_crfs_merged[, vars_visits],
+    exposures = metadata(mae_1)$exposures  
+)
+
+metadata(mae_1) <- new_metadata
+
+
+# filtering coldata
+vars_coldata <- c("ITT", "mITT", "PP", "PIPV", "randomized", 
+                  "site", "location", "arm", 
+                  "visit_code", "visit_type", "study_week")
+colData(mae_randomized) <- colData(mae_randomized)[, vars_coldata]
+
+
+# filtering the SE 
+
+# 1. mg 
+assays(mae_1[["mg"]]) <- assays(mae_1[["mg"]])[c("rel_ab_all", "rel_ab_bact", "rel_ab")]
+colData(mae_1[["mg"]]) <- colData(mae_1[["mg"]])[, c("uid", "poor_quality_mg_data")]
+
+# 2. qPCR
+assays(mae[["qPCR"]]) <- assays(mae[["qPCR"]])[c("copies_per_swab_med")]
+colData(mae[["qPCR"]]) <- colData(mae[["qPCR"]])[, c("uid", "qpcr_sample_type")]
+rowData(mae[["qPCR"]]) <- rowData(mae[["qPCR"]])[, c("taxon_label", "LBP", "strain_origin")]
+
+# 3. qPCR_daily
+assays(mae[["qPCR_daily"]]) <- assays(mae[["qPCR_daily"]])[c("copies_per_swab_med")]
+colData(mae[["qPCR_daily"]]) <- colData(mae[["qPCR_daily"]])[, c("uid", "qpcr_sample_type")]
+rowData(mae[["qPCR_daily"]]) <- rowData(mae[["qPCR_daily"]])[, c("taxon_label", "LBP", "strain_origin")]
+
+# 4. col_LBP_mg, col_LBP_qPCR, col_crispatus_mg : no changes
+
+```
+
+
+## Save MAEs 
+
+```{r}
+
+saveRDS(
+  mae_1, 
+  str_c(
+    get_05_output_dir(),  
+    "mae_1_", today() |> str_remove_all("-"), ".rds"
+  )
+)
+
+
+```
+

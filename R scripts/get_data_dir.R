@@ -64,6 +64,9 @@ get_04_output_dir <- function(){
   get_output_dir() |> str_c("04 unblinded MAEs/")
 }
 
+get_05_output_dir <- function(){
+  get_output_dir() |> str_c("05 subsetted MAEs/")
+}
 
 
 
