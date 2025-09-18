@@ -37,10 +37,8 @@ library(brms)
 library(gtsummary)
 library(labelled)
 library(scales)
-# library(gridExtra)
 library(ggpubr)
 library(ggh4x)
-# library(mia) # BiocManager::install("mia")
 
 #theme_set(theme_light())
 tmp <- fs::dir_map("R scripts", source)
@@ -94,7 +92,7 @@ mae
 ```
 
 
-## MAE 1 
+## MAE 1 (primary outcomes)
 
 `MAE_1` contains all necessary information for the primary outcome analyses and contains only the randomized participants. 
 
@@ -181,6 +179,70 @@ rowData(mae[["qPCR_daily"]]) <- rowData(mae[["qPCR_daily"]])[, c("taxon_label", 
 ```
 
 
+
+## MAE 2 (dynamics)
+
+`MAE_2` contains all necessary information for the colonization and microbiota dynamics paper. 
+
+
+> TODO
+
+
+
+## MAE 3 (host)
+
+`mae_3` contains all necessary information for the "host" paper and contains only the randomized participants and the data from weekly samples. 
+
+The `mae_3`will contains the following assay with the following informations: 
+
+-   `visit_and_sample_info`
+-   `mg` 
+-   `qPCR` 
+-   `luminex`
+-   `flow` 
+-   `col_LBP_mg`
+
+
+```{r}
+
+# Randomized participants 
+mae_3 <- mae[, !is.na(colData(mae)$randomized) & colData(mae)$randomized == TRUE]
+
+# subsetting only necessary SE
+se_names <- c("visit_and_sample_info", "mg", "qPCR", "luminex", "flow", "col_LBP_mg")
+mae_3@ExperimentList@listData <- mae_3@ExperimentList@listData[se_names]
+
+# Meta data 
+mae_3@metadata <- mae_3@metadata[c("study","data_source", "data_status","date","colData_dictionary")] 
+
+```
+
+
+## MAE 4 (predictors)
+
+## MAE 6 (BV diagnosis)
+
+
+```{r}
+
+# All participants 
+mae_6 <- mae
+
+# subsetting only necessary SE
+se_names <- c("visit_and_sample_info", "mg", "qPCR", "amplicon")
+mae_6@ExperimentList@listData <- mae_6@ExperimentList@listData[se_names]
+
+# Meta data 
+mae_6@metadata <- mae_6@metadata[c("study","data_source", "data_status","date","colData_dictionary", "crf_plates_description", "crf_data_raw", "crf_data_clean")] 
+crf_list <- c("crf1", "crf101", "crf2","crf102", "crf14")
+mae_6@metadata$crf_data_raw <- mae_6@metadata$crf_data_raw[crf_list]
+mae_6@metadata$crf_data_clean <- mae_6@metadata$crf_data_clean[crf_list]
+
+```
+
+
+
+
 ## Save MAEs 
 
 ```{r}
@@ -190,6 +252,23 @@ saveRDS(
   str_c(
     get_05_output_dir(),  
     "mae_1_", today() |> str_remove_all("-"), ".rds"
+  )
+)
+
+saveRDS(
+  mae_3, 
+  str_c(
+    get_05_output_dir(),  
+    "mae_3_host_", today() |> str_remove_all("-"), ".rds"
+  )
+)
+
+
+saveRDS(
+  mae_6, 
+  str_c(
+    get_05_output_dir(),  
+    "mae_6_BV_", today() |> str_remove_all("-"), ".rds"
   )
 )
 

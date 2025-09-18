@@ -2330,7 +2330,7 @@ crf14 |>
     site = ifelse(str_detect(pid, "06810"), "MGH", "CAP")
   ) |> 
   ggplot() + 
-  aes(x=vaginal_ph_less_than, y = vaginal_ph_value, col = site) + 
+  aes(x = vaginal_ph_less_than, y = vaginal_ph_value, col = site) + 
   geom_boxplot(varwidth = TRUE)
   #geom_point(alpha = 0.4, size = 0.5, position = position_dodge(width = 0.55))
 # 
