@@ -474,21 +474,26 @@ mae_coldata |>
 
 ### Imputing `study_day` for daily `visit_code` that did not have CRF data
 
-There were a few daily swabs with daily `visit_code` that did not have CRF data, and consequently did not have study days assigned.
+There were a few entries with daily `visit_code` that did not have a date in the CRF data. Consequently they also did not have study days (`study_day`) assigned.
+
+```{r}
+
+mae_coldata |> 
+  filter(
+    is.na(study_day), 
+    is.na(sample_type) | (sample_type == "Clinical sample")
+    ) |> 
+  dplyr::count(visit_type, assays, in_CRF, visit_attended, sample_type)
+
+```
+
+
 
 We impute the missing values using the `study_days` from "surrounding" visits.
 
 ```{r}
 
-# study_days_for_daily_codes <- 
-#   tibble(study_day = (1:(7*6)) -1) |> 
-#   mutate(
-#     visit_code = 1000 + ((study_day %% 7) + 1) + (study_day %/% 7) * 100,
-#     visit_code = visit_code |> as.character()
-#   ) |> 
-#   dplyr::rename(exp_study_day = study_day) |> 
-#   select(visit_code, exp_study_day) 
-
+# first, we create a "dictionary" with the most common study_days for each daily swab visit code
 study_days_for_daily_codes <- 
   mae_coldata |> 
   dplyr::filter(visit_type == "Home") |> 
@@ -514,15 +519,19 @@ study_days_for_daily_codes |>
 ```
 
 ```{r}
+
+# In the plot above, we notice that visits 1501:1503 did not have "expected" study day, so we create it by expanding the time series
 study_days_for_daily_codes <-
   study_days_for_daily_codes |> 
   mutate(
     exp_study_day = 
       case_when(
-        is.na(exp_study_day) & (visit_code %in% c(1501:1503)) ~ as.numeric(visit_code) - 1501 + 36,
+        is.na(exp_study_day) & (visit_code %in% c(1501:1503)) ~ 
+          as.numeric(visit_code) - 1501 + 36,
         TRUE ~ exp_study_day
       )
   )
+
 ```
 
 
@@ -530,17 +539,23 @@ study_days_for_daily_codes <-
 
 ```{r}
 
+# visits from the participants with missing study_days
 pid_with_missing_daily_study_days <- 
+  # we first filter to retrieve the pids
   mae_coldata |> 
-  filter(is.na(study_day), in_assays) |> 
+  filter(is.na(study_day)) |>  # , in_assays
   select(pid) |> distinct() |> 
+  # we join with the coldata
   left_join(mae_coldata, by = join_by(pid)) |> 
   arrange(pid, visit_code) |> 
+  # we join the study_day dictionary
   left_join(study_days_for_daily_codes) |> 
-  mutate(diff = study_day - exp_study_day) |>
+  mutate(diff = study_day - exp_study_day) |> # the typical difference for a participant between their study_day and the "expected" study_day (some participant started sampling at home one day early or late)
   group_by(pid) |> 
-  fill(diff, .direction = "downup") |> 
+  fill(diff, .direction = "downup") |>  # impute when missing
+  mutate(diff = ifelse(all(is.na(diff)), 0, diff)) |> # if still missing,we set to 0
   ungroup() |> 
+  # we fix the study_day
   mutate(
     fixed_study_day = 
       case_when(
@@ -558,7 +573,10 @@ pid_with_missing_daily_study_days <-
 
 mae_coldata <- 
   mae_coldata |> 
-  left_join(pid_with_missing_daily_study_days |> select(uid, fixed_study_day), by = join_by(uid)) |> 
+  left_join(
+    pid_with_missing_daily_study_days |> select(uid, fixed_study_day), 
+    by = join_by(uid)
+    ) |> 
   mutate(
     study_day =
       case_when(
