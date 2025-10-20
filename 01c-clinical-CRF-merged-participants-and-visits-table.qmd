@@ -38,13 +38,12 @@ theme_set(theme_bw())
 
 ```
 
-The purpose of this document is to create:
+The purpose of this document is to create, from the data prepared in previous documents, two tables collating participant-invariant (`participant_crfs_merged`) or time-varying (`visits_crfs_merged`) variables collected across CRFs. Specifically, this document creates
 
-- a `participant_crfs_merged`: a table with one row per `pid` containing harmonized data from CRFs that were supposed to be completed only once.
+- `participant_crfs_merged`: a table with one row per `pid` containing participant-invariant data collected from CRFs that were filled out only once per participant.
 
-- `visits_crfs_merged` : a table with one row per `pid` and `visit_code` with harmonized data from CRFs that were meant to be completed at multiple visits.
+- `visits_crfs_merged` : a table with one row per `pid` and `visit_code` with harmonized data from CRFs that were filled out at multiple visits.
 
-# Load the CRF data processed in `01a-clinical-crf-data-cleaning.qmd`
 
 ```{r}
 
@@ -60,7 +59,8 @@ rm(crf_clean_file)
 
 # `participant_crfs_merged` table
 
-List of the participant CRFs that are expected to be completed only once. 
+
+The participant-invariant variables were expected to be found in the following CRFs, which were supposed to be filled only once per participant:
 
 ```{r}
 
@@ -73,11 +73,12 @@ participants_crf_name <-
     "crf43", "crf44","crf46"
     )
 participants_crf_name
+
 ```
 
-Some of those crf contained duplicate `pid` values. Some crf are filled at several visits and some are in log format. 
+Data related to some of those CRFs contained duplicate `pid` values. It appears that some CRFs were filled at several visits and some are in long format. 
 
-We need to correct them before creating the `participants_crfs_merged` table.
+We need to transform them such that we have a single entry per participant before creating the `participants_crfs_merged` table.
 
 ```{r}
 map_df(
@@ -102,15 +103,15 @@ map_df(
 ```
 
 
-## Correction of CRFs for participants with multiple entries
+## Harmonizing CRFs data for participants with multiple entries
 
-We create a function that, for each CRF in the participants table, compares the rows corresponding to duplicate `pid`s.  
+Below, we create a function that, for each CRF in the participants table, compares the rows corresponding to duplicate `pid`s.  
 
 If the rows are identical (*i.e.*, they have the same values for all columns except `visit_code` and `study_day`), only one row is kept.  
 
 If the rows are not identical, they remain in the CRF and will be manually reviewed later.  
 
-The `visit_code` and `study_day` variables are removed from these CRFs.
+Additionally, the `visit_code` and `study_day` variables are removed from these CRFs.
 
 
 ```{r}
@@ -200,7 +201,7 @@ map_df(
 
 We review each of these CRFs and decide how to handle the duplicate entries.
 
-### CRF1 
+### CRF 1 
 
 For this CRF, we keep the first observation for each participant since it's the only that contains data.
 
@@ -238,7 +239,7 @@ participants_crf[["crf1"]] <-
 ```
 
 
-### CRF101
+### CRF 101
 
 For one specific case (`pid = 200156`), the `income_sources` variable is corrected manually.
 
@@ -309,7 +310,7 @@ participants_crf[["crf101"]] <- NULL
 ```
 
 
-### CRF2
+### CRF 2
  
 For participants with duplicate entries, if they ever reported being worried for any of the ‘worry’ variables, we retain the ‘Checked’ value (worst-case scenario).
 
@@ -350,7 +351,7 @@ rm(pid_temp, worry_cols, other_cols)
 ```
 
 
-### CRF102
+### CRF 102
 
 The duplicate entries have incoherent response for the `monthly_gross_income` variable. We decide to keep the most recent visit.
 
@@ -399,7 +400,7 @@ participants_crf[["crf102"]] <- NULL
 ```
 
 
-### CRF5
+### CRF 5
 
 For each duplicated participant, the rows are merged while preserving all relevant information.  
 The following rules are applied during summarization:
@@ -470,7 +471,7 @@ participants_crf[["crf5"]] <-
 
 ```
 
-### CRF6
+### CRF 6
 
 We keep the values of the most recent visit.
 
@@ -507,7 +508,7 @@ rm(pid_temp)
 ```
 
 
-### CRF7
+### CRF 7
 
 We keep the values of the most recent visit.
 
@@ -537,7 +538,7 @@ rm(pid_temp)
 ```
 
 
-### CRF8
+### CRF 8
 
 We keep the values of the most recent visit.
 
@@ -567,7 +568,7 @@ rm(pid_temp)
 
 
 
-### CRF9
+### CRF 9
 
 Only one participant is duplicated. We decide to keep the most recent observation.
 
@@ -599,7 +600,7 @@ rm(pid_temp)
 ```
 
 
-### CRF10
+### CRF 10
 
 We keep the most recent visit.  
 
@@ -629,7 +630,7 @@ rm(pid_temp)
 
 
 
-### CRF11
+### CRF 11
 
 We keep the most recent visit.
 
@@ -662,7 +663,7 @@ rm(pid_temp)
 
 
 
-### CRF12
+### CRF 12
 
 We keep the most recent visit. 
 
@@ -692,7 +693,7 @@ rm(pid_temp)
 
 ```
 
-### CRF15
+### CRF 15
 
 Only one participant is duplicated. We combine the response for the two variable :
 - `pap_smear_results` we keep *Negative for intraepithelial lesion or cancer (malignancy)*
@@ -734,7 +735,7 @@ participants_crf[["crf15"]] <-
 
 
 
-### CRF22 (Metrodanizole exposure)
+### CRF 22 (Metrodanizole exposure)
 
 Data are used to create the exposure table. 
 
@@ -775,7 +776,7 @@ participants_crf[["crf22"]] <-
 ```
 
 
-### CRF23 (product exposure)
+### CRF 23 (product exposure)
 
 Data are used to create the exposure table. 
 Some participants came twice because they were in the overlap arm or because they don't finished the treatment at the first visit.
@@ -813,7 +814,7 @@ participants_crf[["crf23"]] <-
 
 
 
-### CRF24
+### CRF 24
 
 We keep the most recent visit.
 
@@ -843,7 +844,7 @@ participants_crf[["crf24"]] <-
 ```
 
 
-### CRF25
+### CRF 25
 
 We keep the most recent visit.
 
@@ -872,7 +873,7 @@ participants_crf[["crf25"]] <-
 
 ```
 
-### CRF28
+### CRF 28
 
 We keep the most recent visit.
 
@@ -900,7 +901,7 @@ participants_crf[["crf28"]] <-
 
 ```
 
-### CRF46
+### CRF 46
 
 We keep the first observation for these participants since the second observation is not complete.
 
@@ -983,13 +984,30 @@ participant_crfs_merged <-
 # participant_crfs_merged |> colnames() |> str_detect("\\.y") |> sum()
 ```
 
+The created table has `r nrow(participant_crfs_merged)` entries (unique participants) and `r ncol(participant_crfs_merged)` variables:
+
+
+
+```{r}
+#| width: 14
+#| height: 6
+
+visdat::vis_dat(participant_crfs_merged, sort_type = FALSE) +
+  theme(
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 90, hjust = 0, vjust = 0.5)
+  )
+
+```
+
+
 
 # `visits_crfs_merged` table
 
-Visit CRFs refer to those CRFs not present in the participants CRF list.
+We call "visit CRFs" any CRFs that was not present in the "participants CRFs" list. These CRFs were expected to contain potentially time-varying variables collected at multiple visits.
 
-We check that each of these CRFs includes both the `study_day` and `visit_code` variables. Any CRF that does not meet this requirement is excluded from the visit CRF list.
-We also remove CRF29 (Adverse event) and CRF34 (protocol deviation) because they does not contain visit_code.
+Before merging data from these CRFs, we check that each of these CRFs includes both the `study_day` and `visit_code` variables. Any CRF that does not meet this requirement is excluded from the visit CRF list.
+We also remove CRF29 (Adverse Events) and CRF34 (Protocol Deviation) because they does not contain visit_code.
 
 ```{r}
 
