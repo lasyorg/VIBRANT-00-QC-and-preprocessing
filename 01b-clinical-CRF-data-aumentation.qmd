@@ -40,7 +40,7 @@ theme_set(theme_bw())
 
 The purpose of this document is to create
 
-- a `participants` table with critical participant-invariant information (arm, site, etc.), including the population flags along with a 
+- a `participants` table with study-level participant-invariant information (*e.g.*, arm, site, etc.), including the population flags along with a 
 
   + `participants_variable_dictionary`
 
