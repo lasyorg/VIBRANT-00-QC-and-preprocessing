@@ -10,7 +10,7 @@ format:
     theme: journal
     embed-resources: true
 execute:
-  cache: refresh # refresh true false
+  cache: true # refresh true false
 project:
   execute-dir: project
 editor: 
@@ -39,22 +39,20 @@ Sys.setlocale("LC_TIME", "C") #LV
 
 
 :::callout-note
-The purpose of this document is to clean, format, check the quality, and potentially fix the CRF data.
+The purpose of this document is to clean, format, and QC the CRF data.
 
-This document loads the raw CRF data (provided as a `R list` - see first section) and returns 2 output lists:
+At the end of this document, 2 lists are provided:
 
-- `crf_raw` which contains one element (a `tibble`) per CRF with the "raw" CRF data (*i.e.*, similar to the initially loaded `R list`) but from which sensitive information such as visit dates, comments, etc., have been removed and from which "data check metadata" documenting quality checks performed by the CAPRISA data team has also been removed. 
+- `crf_raw` which contains one element (a `tibble`) per CRF with the "raw" (= not altered) CRF data but from which "sensitive information" (such as visit dates, comments, etc.) have been removed and from which we have also removed information about "data checks" performed by the CAPRISA data team.
 
-- `crf_clean` which also contains one element per CRF, but where the columns have been formatted, cleaned, corrected when needed, and prepared for downstream analyses.
-
-After loading the raw data, we perform a few automatic cleaning actions on all CRF tables, then, go through each CRF one by one to perform cleaning actions specific to that CRF.
+- `crf_clean` which also contains one element per CRF, but where the columns have been formatted, QCed, cleaned, and prepared for downstream analyses.
 :::
 
-
+After loading the raw data, we perform a few automatic cleaning actions on all CRF tables, then, go through each CRF one by one to perform cleaning actions specific to that CRF.
 
 # Raw data
 
-We load the raw CRF data shared by Lara Lewis on July 7th 2025.
+We load the raw CRF data shared by Lara Lewis on May 7th 2025.
 
 ```{r}
 
@@ -63,25 +61,24 @@ data_dir |> fs::dir_ls(regexp = "RData") |> basename()
 
 ```
 
-
-
-```{r}
-#| warning: false
-
-load(str_c(data_dir, "cap068_ecrf_data_final.RData"), verbose = TRUE) #cap068_ecrf_data.Rdata
-
-```
+We use the `Rdata` file: `cap068_ecrf_data_final.Rdata`.
 
 That file contains a list with the data from all CRFs + data dictionaries:
 
-
 ```{r}
+
+load(str_c(data_dir, "cap068_ecrf_data_final.RData"), verbose = TRUE) #cap068_ecrf_data.Rdata
 raw_data_list <- ecrf_data_list
+# rm(ecrf_data_list)
 raw_data_list |> names()
+
 ```
 
-
 # CRF-wide harmonizations
+
+In this section, we perform harmonisations that apply to all CRFs.
+
+We begin by converting them to `tibble`. 
 
 ```{r}
 # We transform all data.frames into tibbles
@@ -118,20 +115,20 @@ raw_data_list <- raw_data_list |> map(pid_harmonization)
 
 In this section, we process the visit dates throughout all CRF to
 
-- rename the original `vdate` column as `vdate_original`
-- transform the `vdate` column which is a `character` in the raw data into a `date`
-- define a `study_day` variable that provides the relative date from visit V1 (Enrollment visit, day 0) - to do so, we define a table with the V1 date for each participant (see below)
-- define a `flag_date` variable that flags visits with potential mistakes in their visit dates (*e.g.*, they occurred before the study started or after the study ended, or, for a given participant, outside their enrollment window).
+- rename the original `vdate` column as `vdate_original`;
+- transform the `vdate` into an actual date (and not a character string);
+- define a `study_day` variable that provides a relative date from V1 (Enrollment visit, day 0) - to do so, we define a table with the V1 date for each participant (see below);
+- define a `flag_date` variable that flags visits that may have mistakes in their visit dates (e.g, they occur before the study even started or after the study ended, or for that participant, outside their enrollment window).
 
 The flagged dates are then reviewed and corrected when possible.
 
 ### Study start and end dates
 
-We define the study start date as "2023-10-19" and the study end date as "2025-02-18".
+We study start date is "2023-10-19" and the study end date is "2025-02-18".
 
 ```{r}
 
-study_start_date <- as.Date("2023-10-19") # Note: the official study start was 2024-02-01 (https://clinicaltrials.gov/study/NCT06135974?term=NCT06135974&rank=1) but a few participants were enrolled before that official study start date 
+study_start_date <- as.Date("2023-10-19") # The official study start was 2024-02-01 https://clinicaltrials.gov/study/NCT06135974?term=NCT06135974&rank=1
 study_end_date <- as.Date("2025-02-18")
 
 ```
@@ -655,7 +652,6 @@ We need, however, to first recompute the enrollment dates as it may have changed
 
 #### (Re-)defining `day_0_dates` and expected end dates for each participant
 
-Since we fixed a few dates, we need to re-define the `day_0_dates` table.
 
 ```{r}
 
@@ -769,14 +765,13 @@ all_visit_dates <-
 
 all_visit_dates |> 
   filter(dfseq == 1000) |> 
-  dplyr::count(dfseq, study_day)
+  dplyr::count(dfseq, study_day) |> 
+  gt()
 
 ```
 
 
-#### Relative study day of daily visits
-
-We check the relative study days for the daily "visits" (corresponding to home swab collection and daily survey data)
+#### Focus on the relative study day of daily visits
 
 
 ```{r}
@@ -901,10 +896,10 @@ raw_data_list <-
 
 ## Harmonization of missing value 
 
-We replace the codes
+We translate the following missing value codes into more descriptive missing values:
 
-- "D" by "not done" 
-- "R" by "not required"
+- "D" by "Not done" 
+- "R" by "Not required"
 - "A" by "Not applicable"
 - "U" by "unknown"
 
@@ -957,6 +952,8 @@ raw_data_list <- raw_data_list |> map(clean_crf)
 
 ## Defining CRF-wide functions
 
+In this section, we define functions that will be used to review and clean each CRF.
+
 ### Marginal distribution visualizations
 
 ```{r, functions}
@@ -979,14 +976,14 @@ plot_marginal_dist <- function(crf){
         plots[[var]] <- 
           tmp |> 
           ggplot(aes(y = var |> fct_rev())) + 
-          geom_bar(color="white", fill="cornflowerblue") + 
+          geom_bar(color="darkblue", fill="cornflowerblue") + 
           xlab("nb of entries") + 
           ylab("") + 
           ggtitle(var)
       } else {
         plots[[var]]  <-
           tmp |> ggplot(aes(x = var)) + 
-          geom_histogram(binwidth = 1, color="white", fill="cornflowerblue") + 
+          geom_histogram(binwidth = 1, color="darkblue", fill="cornflowerblue") + 
           ylab("nb of entries") +
           xlab(var) + 
           ggtitle(var)
@@ -1037,6 +1034,9 @@ rem_columns_with_unique_values <- function(crf){
 # Going through each CRFs
 
 In this section, we review the data from each CRF separately to create the two crf lists (`crf_raw` and `crf_clean`) that will be used for downstream analyses and integration into the MAE.
+
+* `crf_raw` list contains the original CRFs, unchanged in terms of content but with all sensitive information removed.
+* `crf_clean` list contains the cleaned CRFs, that have undergone quality control (QC) and data cleaning steps.
 
 ```{r}
 
@@ -1090,10 +1090,13 @@ crf1 |> colnames()
 
 ```
 
+We remove the date of birth to avoid any potential identification of participants.
+
 ```{r}
 crf1 <- crf1 |> select(-date_of_birth)
 ```
 
+Then, we add the CRF to the `crf_raw` list after removing the columns that we do not want to keep in the raw data.
 
 ```{r}
 
@@ -1116,6 +1119,7 @@ crf1 <- crf1 |> select(-c(any_of(columns_to_remove_for_clean), vdate))
 
 ```
 
+We harmonize and clean some variables. We create the variable `ethn` from `hispanic_latino_spanish`, and we shorten the levels of the education variable `highest_level_education`. We also clean up some "other, specify" variables.
 
 ```{r}
 
@@ -1171,6 +1175,8 @@ crf101 |> colnames()
 
 ```
 
+We remove the date of birth to avoid any potential identification of participants.
+
 ```{r}
 crf101 <- crf101 |> select(-date_of_birth)
 ```
@@ -1195,6 +1201,7 @@ crf_raw <-
 crf101 <- crf101 |> select(-c(any_of(columns_to_remove_for_clean), vdate))
 ```
 
+We create the variable `edu` from `highest_level_education`, and we shorten the levels of this variable. We also create the variable `income_sources` from the various income source variables.
 
 ```{r}
 
@@ -1296,6 +1303,7 @@ crf_raw <-
 crf2 <- crf2 |> select(-any_of(columns_to_remove_for_clean))
 ```
 
+We create the variable `annual_gross_income` from `annual_gross_income`, and we shorten the levels of this variable. We also create the variables `primary_income` and `additional_income_type` from the various income source variables.
 
 ```{r}
 
@@ -1405,6 +1413,7 @@ crf102 <- rem_columns_with_unique_values(crf102)
 
 ```
 
+We create the variable `monthly_gross_income` from `monthly_gross_income`, and we shorten the levels of this variable.
 
 ```{r}
 crf102 <- 
@@ -1468,6 +1477,7 @@ crf_raw <-
 crf3 <- crf3 |> select(-c(any_of(columns_to_remove_for_clean), vdate))
 ```
 
+We create the variable `hiv_results` from the various HIV testing results variables.
 
 ```{r}
 
@@ -1619,6 +1629,8 @@ crf5 <- raw_data_list$cap068_data_5 |> as_tibble()
 crf5 |> colnames()
 
 ```
+
+We remove `date_resolved` and `description` as they contain potentially identifying information.
 
 ```{r}
 
@@ -1859,6 +1871,8 @@ crf8 |> colnames()
 
 ```
 
+We remove `date_start_menses` to add the CRF to the `crf_raw` list.
+
 ```{r}
 
 crf_raw <- 
@@ -1878,6 +1892,9 @@ crf_raw <-
 crf8 <- crf8 |> select(-any_of(columns_to_remove_for_clean))
 ```
 
+We convert `date_start_menses` to the number of days since the day 0 date, and we convert `start_hormone_contraception` to a numeric variable (number of days since the day 0 date). 
+
+We also create the variables `protection_type`, `number_pregnancies`, `unplanned_pregnancies`, `number_deliveries` from the various related variables.
 
 ```{r}
 
@@ -2006,6 +2023,7 @@ crf_raw <-
 crf9 <- crf9 |> select(-any_of(columns_to_remove_for_clean))
 ```
 
+We create the variables `antibiotic_type`, `treatment_type`, and `STIs_type` from the various related variables.
 
 ```{r}
 
@@ -2091,6 +2109,7 @@ crf_raw <-
 crf10 <- crf10 |> select(-any_of(columns_to_remove_for_clean))
 ```
 
+We create the variable `relationship_type` from the various relationship status variables.
 
 ```{r}
 
@@ -2722,8 +2741,10 @@ crf17 |>
   ggplot() +
   aes(x = visit_code, y = pid |> factor(), fill = vaginal_discharge) +
   geom_tile() +
-  scale_fill_manual(values = c(colorRampPalette(c("lightblue1", "red"))(4), "gray80"))
-
+  scale_fill_manual(
+    values = c(colorRampPalette(c("lightblue1", "red"))(4), "gray80"), 
+    labels = function(x) str_wrap(x, width = 30)
+    )
 
 crf17 |> 
   ggplot() +
@@ -2860,7 +2881,7 @@ crf19 <-
     symptom_interfere_sex = symptom_interfere_sex |> fct_infreq() |> fct_relevel("Rarely", after = 2L),
     vaginal_bleeding = 
       ifelse(vaginal_bleeding %in% c("Blank", "Not done"), NA, vaginal_bleeding) |> 
-      fct_infreq() |> fct_relevel("Blank", after = Inf),
+      fct_infreq(), #|> fct_relevel("Blank", after = Inf)
     past_week_sex_partner = past_week_sex_partner |> fct_infreq(),
     new_sex_partner = 
       case_when(
@@ -2928,6 +2949,7 @@ crf_raw <-
 crf20 <- crf20 |> select(-any_of(columns_to_remove_for_clean))
 ```
 
+We create the variables `used_during_past_week`, `sex_past_24hours`, and `clean_vagina_outside` from the various related variables.
 
 ```{r}
 
@@ -3030,6 +3052,7 @@ crf_raw <-
 crf21 <- crf21 |> select(-any_of(columns_to_remove_for_clean))
 ```
 
+We create the variable `clean_vagina_inside_type`, `clean_vagina_often`, `last_clean_vagina`, `put_in_vagina_type`, `contraception` and `contraceptive_missed_doses` from the related variables.
 
 ```{r}
 
@@ -3191,16 +3214,18 @@ We check that we only have 1 entry per participant at visit 1100.
 #| fig-height: 2
 
 crf22 |> 
-  dplyr::count(dfseq)
+  dplyr::count(dfseq) |> 
+  gt()
 
 crf22 |> 
   dplyr::count(pid) |> 
-  dplyr::count(n)
+  dplyr::count(n) |> 
+  gt()
 
 crf22 |> 
   ggplot() +
   aes(
-    y = dfseq, x = pid |> factor(), 
+    y = visit_code, x = pid |> factor(), 
     color = prescription_container, 
     size = metro_dose_miss, 
     shape = is.na(comments)
@@ -3376,11 +3401,11 @@ of remaining tablets:
 ```{r}
 
 crf23 |> 
-  select(pid, dfseq, tablets_remain, n_missed_days) |> 
+  select(pid, visit_code, tablets_remain, n_missed_days) |> 
   left_join(crf13 |> select(pid, group4), by = "pid") |> 
   filter(!is.na(tablets_remain)) |> 
   ggplot() +
-  aes(x = tablets_remain, y = n_missed_days, col = group4, shape = dfseq |> factor()) +
+  aes(x = tablets_remain, y = n_missed_days, col = group4, shape = visit_code |> factor()) +
   geom_jitter(size = 1, alpha = 0.5, width = 0.25, height = 0.25) +
   xlab("Number of remaining tablets") +
   ylab("Number of missed days") +
@@ -3409,7 +3434,8 @@ participant, we will set the number of missed doses to 1 and
 ```{r}
 
 crf23 |> 
-  dplyr::count(tablets_remain, used_applicators)
+  dplyr::count(tablets_remain, used_applicators) |> 
+  gt()
 
 ```
 
@@ -3420,7 +3446,7 @@ crf_clean <- crf_clean |> append(list(crf23 = crf23))
 
 ## Additional table: Exposures (antibiotics and study product)
 
-In this section, we create an additional table `exposures` that contains the exposure to antibiotics (metronidazole) and study product for each participant at each daily visit.
+In this section, we create an additional table `exposures` that contains the exposure to antibiotics (metronidazole) and to study product for each participant at each daily visit.
 
 First, we create a `pids` vector containing the IDs of all randomized participants (from CRF13).
 
@@ -3428,12 +3454,14 @@ Next, we create a `visits` vector containing all unique visit codes (`visit_code
 
 Then, we create the `exposures` data frame by expanding all visit codes for each `pid`. We estimate the missing `study_day` by interpolation. 
 
-Note: In CRF32, we noticed an error in the `study_day` for participant 068200281 for visit 1106 (8 instead of 13). We are correcting this here.
+*Note*: In CRF32, we noticed an error in the `study_day` for participant 068200281 for visit 1106 (8 instead of 13). We correct this mistake here.
+
 We then add, for each daily visit, the number of metronidazole doses (from CRF22) and/or study product doses (from CRF23 and CRF32) taken by the participant.
 
 Data from CRF22 are processed manually, meaning that each comment from the study staff is reviewed to determine whether the participant took the antibiotics or not.
 
 For metronidazole exposures (based on CRF22), we first assign a value of 2 to participants who did not miss any doses — that is, those with `visit_code` 1100, `tablets_remain` equal to 0, `metro_dose_miss` marked as "None", and `prescription_container` marked as "Yes".  
+
 Then, we review the remaining cases individually by reading the staff comments to approximate when the missed dose(s) were not taken.
 A variable `comments_mtz` is also created to include notes for specific participants.
 
@@ -3490,10 +3518,6 @@ exposures<-
 # one mistake (already present before approximation) : 068200281, visit_code == 1106 have a study_day of 8 instead of 13
 
 
-
-
-
-
 ```
 
 
@@ -3510,7 +3534,7 @@ crf22_raw <-
   filter(!is.na(date_completed)) |> 
   select(-c(dfraster, dfvalid, dfstudy, dfplate, completed_by, dfscreen))
 
-# add participants with no missing doses to the table "exposure_antabiotics". Put value of 2 for antabiotics for days 1001->1007
+# add participants with no missing doses to the table "exposure_antabiotics". Put value of 2 for antibiotics for days 1001->1007
 
 pid_temp <- 
   crf22_raw |> 
@@ -3544,8 +3568,6 @@ rm(pid_temp)
 
 # case by case
 pid_ok <- str_c("068", c("100010", "100029", "100049", "100050", "100052", "100054", "100061", "200008", "200023", "200028", "200044", "200050", "200061", "200088", "200127", "200131", "200153", "200179", "200214", "200225", "200229", "200247", "200248", "200252", "200350", "200358", "200361", "200363", "200364", "200370","200373", "200379", "200385", "200387", "200388", "200392", "200397", "200398", "200399", "200407", "200409", "200412", "200415", "200421", "200422", "200425", "200438", "200439", "200441"))
-
-#200153 to verify
 
 exposures <- 
   exposures |>
@@ -3858,6 +3880,8 @@ crf25 |> colnames()
 
 ```
 
+We aslo remove some colums with description to avoid recognition of participants.
+
 ```{r}
 
 crf_raw <- 
@@ -4013,6 +4037,7 @@ plots |> plot_tabs( )
 
 
 crf26 |> 
+  filter(!is.na(height) & !is.na(weight)) |>
   ggplot() +
   aes(x = height, y = weight) +
   geom_path(aes(group = pid)) +
@@ -4020,6 +4045,7 @@ crf26 |>
   labs(caption = "Lines connect participants repeated weight measures.")
 
 crf26 |> 
+  filter(!is.na(height) & !is.na(weight)) |>
   ggplot() +
   aes(x = bp_systolic, y = bp_diastolic, col = pulse) +
   geom_path(aes(group = pid), alpha = 0.5) +
@@ -4043,6 +4069,8 @@ crf27 |> colnames()
 
 ```
 
+We remove the collection dates to avoid recognition of participants.
+
 ```{r}
 
 crf_raw <- 
@@ -4061,25 +4089,6 @@ crf_raw <-
 
 ```{r}
 crf27 <- crf27 |> select(-any_of(columns_to_remove_for_clean))
-```
-
-
-```{r}
-
-# check date 
-
-# crf27 |> 
-#   mutate(
-#     specimen_date_parsed = as.Date(specimen_collection_date, format = "%d%b%y")
-#   ) |> 
-#   filter(
-#     !(is.na(vdate) & is.na(specimen_date_parsed)) &  
-#     vdate != specimen_date_parsed                    
-#   ) |> 
-#   select(pid, vdate, specimen_collection_date, specimen_date_parsed)
-
-# visit dates are correct - these are typos in the specimen collection dates
-
 ```
 
 
@@ -4120,8 +4129,6 @@ crf27 |> plot_marginal_dist() |> plot_tabs( )
 ```{r}
 crf_clean <- crf_clean |> append(list(crf27 = crf27))
 ```
-
-
 
 
 ```{r}
@@ -4297,6 +4304,8 @@ crf29 |> plot_marginal_dist() |> plot_tabs( )
 ```
 :::
 
+We also create a summary table of adverse events by participant and study day.
+
 ```{r}
 
 crf29_bis  <- 
@@ -4353,12 +4362,12 @@ crf_raw <-
 crf30 <- crf30 |> select(-any_of(columns_to_remove_for_clean), -vdate, - comments)
 ```
 
+We create summary variables `vulvar`, `vaginal`, `cervical`, `general`,  `other_abnormal_finding` to summarize the findings of the pelvic examination.
 
 ```{r}
 
 crf30 <- 
   crf30  |> 
-  #filter(!is.na(date_completed)) |>  #datecompleted
   mutate(
     vulvar = pmap_chr(
       list(vulvar_erythema, vulvar_edema, vulvar_rash, vulvar_tenderness, bartholins_skene_gland),
@@ -4431,6 +4440,8 @@ crf31 |> colnames()
 
 ```
 
+We remove the medication start and stop dates to avoid recognition of participants.
+
 ```{r}
 
 crf_raw <- 
@@ -4439,7 +4450,7 @@ crf_raw <-
     list(
       crf31 = 
         crf31 |> 
-        select(-any_of(columns_to_remove_for_raw)) |> 
+        select(-any_of(columns_to_remove_for_raw), - med_start_date, -med_stop_date) |> 
         select(dfraster, pid, any_of("study_day"), any_of("study_day_original"), everything())
       )
     )
@@ -4450,6 +4461,7 @@ crf_raw <-
 crf31 <- crf31 |> select(-any_of(columns_to_remove_for_clean), -staff_initial_start, -staff_init_stop)
 ```
 
+We transform the medication start and stop dates into relative dates from day 0.
 
 ```{r}
 
@@ -4579,7 +4591,11 @@ crf32 |>
     col = insert_study_product_time
   ) +
   geom_point() +
-  facet_grid(ifelse(group4 == "Yes", "Group 4", "Other groups") + site ~ ., scales = "free", space = "free") +
+  ggh4x::facet_nested(
+    vars(ifelse(group4 == "Yes", "Group 4", "Other groups"), site),
+    scales = "free",
+    space = "free"
+  ) +
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5) #,
     # axis.text.y = element_blank()
@@ -4591,6 +4607,12 @@ crf32 |>
   xlab("visit code") + ylab("Participants")
 
 
+```
+
+
+We zoom on MGH participants since their data seems less structured than CAP participants.
+
+```{r}
 
 crf32 |>
   left_join(crf13 |> select(pid, group4), by = "pid") |> 
@@ -4602,8 +4624,11 @@ crf32 |>
     col = insert_study_product_time
   ) +
   geom_point() +
-  facet_grid(ifelse(group4 == "Yes", "Group 4", "Other groups") + site ~ ., scales = "free", space = "free") +
-  # facet_wrap(pid ~ ., scales = "free") +
+  ggh4x::facet_nested(
+    vars(site, ifelse(group4 == "Yes", "Group 4", "Other groups")),
+    scales = "free",
+    space = "free"
+  )  +
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5) #,
     # axis.text.y = element_blank()
@@ -4613,7 +4638,6 @@ crf32 |>
     values = c(colorRampPalette(colors = c("steelblue2","gold","purple"))(7), "gray90","gray70")
   ) +
   ylab("Participants")
-
 ```
 
 
@@ -4658,7 +4682,6 @@ crf32 |>
   ) +
   geom_jitter(alpha = 0.5) +
   facet_grid(. ~ site, scales = "free", space = "free") +
-  #guides(col = "none") +
   scale_color_manual(name = "Same time?",
                      values = c("darkblue", "red")) +
   xlab("Time of vaginal swab collection") + 
@@ -4698,8 +4721,6 @@ crf_clean <- crf_clean |> append(list(crf32 = crf32))
 ## CRF 33 (Daily diary - Sexual behavior and vaginal practices)
 
 ```{r}
-
-# Questionnaire pour plusieurs visites: D !!??
 
 crf33 <- raw_data_list$cap068_data_33
 crf33 |> colnames()
@@ -4876,31 +4897,6 @@ crf33 |>
   ggplot() +
   aes(
     x = dfseq |> factor(), y = pid, 
-    col = condom_use, shape = sex_type
-    ) +
-  geom_point() +
-  scale_color_manual(
-    "Condom use", 
-    values = c("Never" = "black", "Sometimes" = "deeppink4", "Always" = "deeppink1", "Unknown" = "gray70")
-    ) +
-  scale_shape_manual(values = c(16, 17, 15, 18, 8, 22, 5, 2)) +
-  scale_y_discrete(drop = FALSE) +
-  theme(
-    axis.text.y = element_blank(),
-    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
-  ) +
-  labs(
-    x = "Visit code", y = "Participants",
-    shape = "Sex type"
-  ) 
-
-
-crf33 |> 
-  filter(sex_past_24hours == "Yes") |> 
-  mutate(pid = pid |> as.character() |> factor(levels = all_pids) |> fct_infreq() |> fct_rev()) |> 
-  ggplot() +
-  aes(
-    x = dfseq |> factor(), y = pid, 
     col = lubricant_use, shape = sex_type
   ) +
   geom_point() +
@@ -4921,43 +4917,6 @@ crf33 |>
 
 ```
 
-
-```{r}
-#| fig-height: 8
-#| fig-width: 7
-
-crf33 |> 
-  group_by(pid) |> 
-  mutate(
-    tot_bleeding = 
-      sum(
-        vaginal_bleeding[!(vaginal_bleeding %in% c("Blank", "No - None"))] |> 
-          as.integer(), 
-        na.rm = TRUE
-        )
-  ) |> 
-  ungroup() |> 
-  arrange(tot_bleeding) |> 
-  mutate(pid = pid |> as.character() |> fct_inorder()) |> 
-  ggplot() +
-  aes(
-    x = dfseq |> factor(), y = pid, 
-    col = vaginal_bleeding
-    ) +
-  geom_point() +
-  scale_color_manual(
-    "Vaginal bleeding",
-    values = c("transparent", "pink", "red", "red3", "gray90")
-    ) +
-  theme(
-    axis.text.y = element_blank(),
-    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
-  ) +
-  labs(
-    x = "Visit code", y = "Participants"
-  ) 
-
-```
 
 ```{r}
 
@@ -4985,8 +4944,8 @@ pid_order <-
 
 
 ```{r}
-#| fig-height: 8
-#| fig-width: 14
+#| fig-height: 10
+#| fig-width: 18
 
 library(patchwork)
 
@@ -5049,12 +5008,11 @@ crf_clean <- crf_clean |> append(list(crf33 = crf33))
 
 ```{r}
 
-# Questionnaire pour plusieurs visites: vdate
-
 crf34 <- raw_data_list$cap068_data_34 |> as.tibble()
 crf34 |> colnames()
 
 ```
+We remove the date of violation/deviation to avoid recognition of participants.
 
 ```{r}
 
@@ -5064,7 +5022,7 @@ crf_raw <-
     list(
       crf34 = 
         crf34 |> 
-        select(-any_of(columns_to_remove_for_raw)) |> 
+        select(-any_of(columns_to_remove_for_raw), -date_violation_deviation) |> 
         select(dfraster, pid, any_of("study_day"), any_of("study_day_original"), everything())
       )
     )
@@ -5142,39 +5100,6 @@ crf_raw <-
 
 ```{r}
 crf35 <- crf35 |> select(-any_of(columns_to_remove_for_clean), -vdate)
-```
-
-
-```{r}
-
-# vaginal_swab_sub <-
-#   crf35 |>
-#   select(pid, dfseq, vaginal_swab, vaginal_swab_sti_testing, vaginal_swab_amsel) |>
-#   pivot_longer(cols = -c(pid, dfseq), names_to = "vaginal_swab_type", values_to = "vaginal_swab") |>
-#   mutate(vaginal_swab = (tolower(vaginal_swab) == "checked")) |>
-#   group_by(pid, dfseq) |>
-#   summarize(vaginal_swab_type = str_c(vaginal_swab_type[vaginal_swab], collapse = ", ")) |>
-#   mutate(vaginal_swab_type = vaginal_swab_type |> fct_infreq())
-
-# swab_sub <-
-#   crf35 |>
-#   select(pid, dfseq, pap_smear, cervicovaginal_hpv, endocervical_cytobrush, rectal_swab, urine, urine_urinalysis, urine_poc_pregnancy, 
-#          blood_sample, blood_hiv, blood_syphilis, blood_hsv, blood_count, blood_type, blood_research_tube, 
-#          other_specimen1, specimen1_specify, other_specimen2, specimen2_specify) |>
-#   pivot_longer(cols = -c(pid, dfseq), names_to = "swab_type", values_to = "swab") |>
-#   mutate(swab = (tolower(swab) == "checked")) |>
-#   group_by(pid, dfseq) |>
-#   summarize(swab_type = str_c(swab_type[swab], collapse = ", ")) |>
-#   mutate(swab_type = swab_type |> fct_infreq())
-
-# crf35 <-
-#   crf35 |>
-#   select(pid, dfseq, study_day, softcup, softcup_time_placed, softcup_time_removed) |>
-#   left_join(vaginal_swab_sub, by = c("pid", "dfseq")) |>
-#   left_join(crf35|>select(pid, dfseq, self_collected_swabs), by = c("pid", "dfseq")) |>
-#   left_join(swab_sub, by = c("pid", "dfseq")) |>
-#   left_join(crf35|>select(pid, dfseq, home_swabs), by = c("pid", "dfseq"))
-
 ```
 
 
@@ -5331,6 +5256,7 @@ crf_raw <-
 crf41 <- crf41 |> select(-any_of(columns_to_remove_for_clean), -vdate)
 ```
 
+We create summary variables `reason_type` and `crf_type` to summarize the reasons for the visit and the CRFs completed at that visit.
 
 ```{r}
 
@@ -5409,6 +5335,7 @@ crf_raw <-
 crf42 <- crf42 |> select(-any_of(columns_to_remove_for_clean), -vdate)
 ```
 
+We create a summary variable `missed_visits_reasons` to summarize the reasons for the missed visit.
 
 ```{r}
 
@@ -5447,7 +5374,7 @@ crf42 |> plot_marginal_dist() |> plot_tabs( )
 ```{r}
 crf42 |> 
   ggplot() +
-  aes(x = dfseq |> as.character(), y = pid |> factor(), col = missed_visits_reasons) +
+  aes(x = visit_code |> as.character(), y = pid |> factor(), col = missed_visits_reasons) +
   geom_point()
 ```
 This CRF data looks incomplete - we are likely missing more visits than these - this will be checked in the next document and when creating the MAE.
@@ -5588,18 +5515,12 @@ crf45 <- crf45 |> select(-any_of(columns_to_remove_for_clean), -vdate, -comments
 
 crf45 |> 
   ggplot() +
-  aes(x = dfseq |> factor(), y = pid |> factor(), color = psa_results) +
-  geom_point() +
-  scale_color_manual(
+  aes(x = dfseq |> factor(), y = pid |> factor(), fill = psa_results) +
+  geom_tile() +
+  scale_fill_manual(
     "PSA results",
-    values = c(
-      "Negative" = "lightblue2", 
-      "Positive" = "tomato", 
-      "Invalid" = "black", 
-      "Not done" = "gray80",
-      "Blank" = "gray90"
-      )
-  ) +
+    values = c("Negative" = "lightblue2", "Positive" = "tomato", "Invalid" = "black", "Blank" = "gray90")
+  )  +
   labs(
     x = "Visit code", y = "Participants"
   )
@@ -5731,7 +5652,8 @@ crf46 |>
         tablets_remain = sum(tablets_remain, na.rm = TRUE)
         ), 
     by = join_by(pid)) |>
-  dplyr::count(total_applicators_stained, used_applicators, tablets_remain)
+  dplyr::count(total_applicators_stained, used_applicators, tablets_remain) |> 
+  gt()
 
 ```
 
@@ -5845,6 +5767,7 @@ crf47_long |>
 
 
 ```
+
 ```{r}
 #| fig-height: 10
 #| fig-width: 8

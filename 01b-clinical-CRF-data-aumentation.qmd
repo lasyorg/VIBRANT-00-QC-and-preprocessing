@@ -10,7 +10,7 @@ format:
     theme: journal
     embed-resources: true
 execute:
-  cache: refresh # refresh true false
+  cache: true # refresh true false
 project:
   execute-dir: project
 editor: 
@@ -40,9 +40,9 @@ theme_set(theme_bw())
 
 The purpose of this document is to create
 
-- a `participants` table with study-level participant-invariant information (arm, site, etc.), including the population flags along with a 
+- a `participants` table with critical participant-invariant information (arm, site, etc.), including the population flags along with a 
 
-  + `participants_variable_dictionary` which provides a description for each of the columns in the `participants` table
+  + `participants_variable_dictionary`
 
 - a `visits_long` table with the `visit_code` and `study_day` for each participant and each CRFs. This table is used to identify residual discrepancies between CRFs in `visit_code` and `study_day` (and harmonize them if needed).
 
@@ -134,18 +134,10 @@ participants <-
 
 ```
 
-## Randomization (`randomized` and `treatment_code`)
+## Randomization (`randomized` and `arm`)
 
-Randomization data is available in CRF13. 
+Randomization data is available in CRF13. Randomized participants are participants with a `treatment_code`.
 
-
-:::callout-note
-Since data QC happened before unblinding, we do not know the study arm of participants at this stage. The only open (non-blinded) arm was the "LC-106-o" arm in which participants received the LBP before they completed their MTZ treatment. Participants in that arm are identified with the column `group4` since that arm was the fourth arm of the trial. 
-
-Unblinding happened on June 17, 2025, after the `MultiAssayExperiment` object was created, and arms were added to the `MultiAssayExperiment` object in the script `92-unblinding.qmd`.
-:::
-
-Here, we simply flag if participants were randomized or not (i.e., whether they had a `treatment_code`), if they were part of the overal arm (LC-106-o arm - `group4`), and we create a placeholder `arm` column that will be updated after unblinding.
 
 ```{r}
 #| eval: false
@@ -173,7 +165,7 @@ participants <-
 
 ```{r}
 
-# For now, we do not know the arms yet, only whether participants were in the overla arm or not.
+# For now, we do not know the arms yet, only whether participants were in the overlap arm or not.
 
 participants <- 
   participants |> 
@@ -197,7 +189,7 @@ participants <-
 
 participants |> 
   dplyr::count(site, randomized, arm) |> 
-  gt(caption = "Number of randomized participants per site and per arm")
+  gt("Number of randomized participants per site and per arm")
 
 ```
 
@@ -248,6 +240,8 @@ and criteria:
         -   `n_product_doses > 0.8 * max_product_doses` &
         
         -   `n_swabs_post_product_prior_week7 > 0`
+        
+We first look at the eligibility from CRF7. 
 
 ```{r}
 
@@ -282,6 +276,7 @@ participants |> dplyr::count(meet_eligibility, randomized) |>
 
 ```
 
+Then, we look at the swabs collected at in-person visits from CRF35.
 
 ```{r}
 # COLLECTED SWABS
@@ -321,6 +316,7 @@ participants |>
 
 ```
 
+We then check if the participants have been replaced (CRF44) or met any of the replacement criteria (CFR33 for bleeding, CRF20 for antibiotics, CRF15 for HSIL pap).
 
 ```{r}
 # REPLACEMENT
@@ -441,6 +437,7 @@ participants |>
 
 ```
 
+We finally look at the product use from CRF23 (Product Use) and/or our "consolidated" product exposure table to identify participants who took at least one dose of study product (mITT) or 80% of the doses (PP).
 
 ```{r}
 # PRODUCT USE
@@ -518,7 +515,8 @@ participants |>
     arm,
     n_study_product_doses_crf23 > 1, 
     n_study_product_doses_exposures  > 1
-  )
+  ) |> 
+  gt(caption = "Number of participants with more than 1 dose according to CRF23 or exposures table")
 
 
 participants |> 
@@ -527,11 +525,12 @@ participants |>
     arm,
     n_study_product_doses_crf23 > 5, 
     n_study_product_doses_exposures > 5
-  )
+  ) |> 
+  gt(caption = "Number of participants with more than 5 doses according to CRF23 or exposures table")
 
 ```
 
-
+We create the population flags. 
 
 ```{r}
 # create the flag 
@@ -540,9 +539,7 @@ participants <-
   mutate(
     ITT = randomized,
     mITT = ITT & meet_eligibility & (n_study_product_doses_crf23 > 0) & (n_swabs_post_product > 0),
-    PP = ITT & !replaced & !meets_replacement_criteria & (n_study_product_doses_crf23 > 0.8 * 7) & (n_swabs_post_product_prior_week7 > 0),
-    mITT_2 = ITT & meet_eligibility & (n_study_product_doses_exposures > 0) & (n_swabs_post_product > 0),
-    PP_2 = ITT & !replaced & !meets_replacement_criteria & (n_study_product_doses_exposures > 0.8 * 7) & (n_swabs_post_product_prior_week7 > 0)
+    PP = ITT & !replaced & !meets_replacement_criteria & (n_study_product_doses_crf23 > 0.8 * 7) & (n_swabs_post_product_prior_week7 > 0)
   )
 ```
 
@@ -555,81 +552,13 @@ participants |>
 ```
 
 
-
-
-```{r}
-#| eval: false
-
-# From Lara Lewis
-# Here are my sample sizes:
-# ITT - 96
-participants |> count(ITT) # same
-
-# MITT - 90 (excludes those with no follow-up / product use: 100016 100045 100050 100056 200350 200457)
-participants |> count(mITT) # same
-participants |> filter(ITT, !mITT) |> pull(pid) # same
-
-# SAF – 91 (excludes those who did not receive product or did not have post LBP follow-up: 100016 100045 100056 200350 200457)
-# PP – 86 (MITT and additionally excludes those meeting replacement criteria (2) and using <80% doses (2): 100004 (+) 100016 100045 100050 100053 (+) 100056 200253 (+) 200350 200457 200465 (+))
-participants |> count(PP) # I have 85 (one less)
-participants |> filter(ITT, !PP) |> pull(pid) # I have 068100040 in addition to those listed by L.L.
-# I believe she should be excluded from the PP population because she took oral antibiotic between visit 1300 and 1400 
-
-participants |> filter(randomized) |> arrange(ITT, mITT, PP, pid) |> select(pid, ITT, mITT, PP, everything()) |> View()
-
-# I have 
-# ITT - 96
-# mITT - 90 same
-# PP - 85  and I have extra: 068100040, 
-
-```
-
-```{r}
-#| eval: false
-
-participants |> 
-  filter(
-    randomized, mITT_2 != mITT
-  ) |> View()
-# 100050 reported using product in daily diaries but does not have CRF23 data; also, while she did not present at visits 1200:1500, she presented at visit 1700 -> I believe she needs to be included in the mITT, but not sure...
-
-```
-
-
 ```{r}
 
 participants <- 
   participants |> 
-  select(pid, site, location, randomized, arm, ITT, mITT, PP, everything()) |> 
-  select(-mITT_2, -PP_2)
+  select(pid, site, location, randomized, arm, ITT, mITT, PP, everything()) 
 
 ```
-
-```{r}
-#| eval: false
-
-write_csv(
-  participants |> 
-    filter(randomized) |> 
-    arrange(ITT, mITT, mITT_2, PP, PP_2) |> 
-    mutate(
-      PP_LL = ifelse(pid %in% c("100004", "200465"), FALSE, PP),
-      comment = 
-        case_when(
-          pid == "100004" ~ "She has missing reports in CRF23, but she filled her daily diaries `properly` and they suggest thay she took all of her doses. What do you think?",
-          pid == "200465" ~ "She is a group4 participant, so, she had 4 remaining tablets at one visit, but none at the following one, and her daily diaries suggest that she took all the doses. What do you think?",
-          pid == "100050" ~ "She reported using product in daily diaries but does not have CRF23 data; also, while she did not present at visits 1200:1500, she presented at visit 1700 -> I believe she needs to be included in the mITT, but not sure... what do you think?",
-          TRUE ~ NA_character_
-          )
-      ) |> 
-    relocate(PP_LL, .after = PP_2), 
-  file = "population_flags.csv"
-  )
-
-```
-
-These flags were checked with Lara Lewis (CAPRISA statistician) and validated.
-
 
 
 ## Dictionary
@@ -679,10 +608,10 @@ participants_variable_dictionary |> gt()
 
 ## `visits_long`
 
-We build the `visits_long` table by concatenating the `pid`, `dfseq`, and `study_day` from all CRFs. It consequently has the following columns
+We build the `visits_long` table by concatenating the `pid`, `visit_code`, and `study_day` from all CRFs. It consequently has the following columns
 
 - `pid`
-- `dfseq`
+- `visit_code`
 - `study_day`
 - `crf_plate`
 
@@ -709,21 +638,25 @@ visits_long <-
 
 ```
 
-Overview of visits' `study_day`
+Overview of visits's `study_day` by CRF plates. 
 
 ```{r}
+#| fig-width: 10
+#| fig-height: 12
 
 visits_long |> 
   left_join(participants, by = join_by(pid)) |> 
   ggplot() +
   aes(x = study_day, y = pid, col = crf_plate) +
   geom_point(size = 0.5, alpha = 0.5) +
-  facet_grid(site + randomized ~ ., scales = "free_y", space = "free_y") +
+  ggh4x::facet_nested(vars(site, randomized), scales = "free_y", space = "free_y") +
   ggtitle("All participants")
 
 ```
 
 ```{r}
+#| fig-width: 10
+#| fig-height: 12
 
 g_randomized <- 
   visits_long |> 
@@ -735,14 +668,15 @@ g_randomized <-
   facet_grid(site + randomized ~ ., scales = "free_y", space = "free_y") +
   ggtitle("Randomized participants")
 
-g_randomized 
-
 g_randomized + scale_x_continuous(limits = c(-100, 150))
 
 ```
 
+And by visit code. 
 
 ```{r}
+#| fig-width: 10
+#| fig-height: 12
 
 g_randomized <- 
   visits_long |> 
@@ -755,7 +689,7 @@ g_randomized <-
   # scale_x_continuous(limits = c(-100, 150)) +
   ggtitle("Randomized participants")
 
-g_randomized 
+g_randomized + scale_x_continuous(limits = c(-100, 150))
 
 ```
 
@@ -810,23 +744,8 @@ mismatched_study_days <-
   ungroup()
 
 mismatched_study_days |> 
-  filter(visit_code >= 1000)
-
-# mismatched_study_days |> 
-#   ggplot() + aes(x = f_diff, fill = n |> factor()) + geom_histogram() +
-#   facet_grid(n ~ .) +
-#   xlab("Fraction of study days different from the most frequent study day")
-# 
-# mismatched_study_days |> 
-#   filter(diff_with_most_freq_study_day != 0) |> 
-#   ggplot(aes(x = diff_with_most_freq_study_day)) +
-#   geom_histogram(binwidth = 1) 
-# 
-# mismatched_study_days |> 
-#   filter(diff_with_most_freq_study_day != 0) |> 
-#   filter(abs(diff_with_most_freq_study_day) < 100) |> 
-#   ggplot(aes(x = diff_with_most_freq_study_day)) +
-#   geom_histogram(binwidth = 1) 
+  filter(visit_code >= 1000) |> 
+  gt()
 
 ```
 All mismatches are for screening visits and for just one participant (068200281), it looks like she had some of her 2120 CRF done at one visit and came back for the others.
@@ -960,7 +879,7 @@ visits |>
   ggplot() +
   aes(x = visit_code, y = pid, col = visit_planned) +
   geom_point() +
-  facet_grid(randomized + site ~ . , scales = "free", space = "free") +
+  ggh4x::facet_nested(vars(randomized, site), scales = "free", space = "free") +
   theme(
     axis.text.x = element_text(angle = 90, vjust = 0.5)
   )
@@ -980,7 +899,7 @@ visits |>
   ggplot() +
   aes(x = visit_code, y = pid, col = visit_attended) +
   geom_point() +
-  facet_grid(site ~ . , scales = "free", space = "free") +
+  facet_grid(site + randomized ~ . , scales = "free", space = "free") +
   theme(
     axis.text.x = element_text(angle = 90, vjust = 0.5)
   )
@@ -992,7 +911,7 @@ visits |>
   ggplot() +
   aes(x = visit_code, y = pid, col = visit_type) +
   geom_point() +
-  facet_grid(site ~ . , scales = "free", space = "free") +
+  facet_grid(site + randomized ~ . , scales = "free", space = "free") +
   theme(
     axis.text.x = element_text(angle = 90, vjust = 0.5)
   )
@@ -1107,8 +1026,6 @@ visits_variable_dictionary |> gt()
 
 
 # Exports
-
-We export the `participants`, `visits_long`, and `visits` tables along with their variable dictionaries.
 
 ```{r}
 

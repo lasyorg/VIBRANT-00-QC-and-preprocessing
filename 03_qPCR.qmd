@@ -586,21 +586,7 @@ qpcr <-
 Now that this is fixed, we can merge the technical metadata with the qPCR data to be able to build their `uid` (VIBRANT cross-assay unique identifier) and identify their `sample_type`, `control_type`, etc.
 
 ```{r}
-# 
-# qpcr <- 
-#   qpcr |> 
-#   dplyr::left_join(
-#     SE_mg |>
-#       colData() |> as.data.frame() |> as_tibble() |> 
-#       select(
-#         swab_barcode,
-#         uid, mg_uid, 
-#         mg_pid, mg_visit_code,
-#         sample_type, control_type
-#       ) |> 
-#       distinct() ,
-#     by = join_by("qpcr_sample_id" == "swab_barcode")
-#   )
+
 
 qpcr <- 
   qpcr |> 
@@ -698,28 +684,7 @@ qpcr <-
 
 
 
-
-
-
 ```{r}
-
-# mg_samples <- 
-#   SE_mg |>
-#   colData() |> as.data.frame() |> as_tibble() |> 
-#   select(
-#     swab_barcode,
-#     uid, mg_uid, 
-#     mg_pid,mg_visit_code, 
-#     sample_type, control_type
-#   ) |> 
-#   distinct() |> 
-#   dplyr::left_join(
-#     qpcr |> 
-#       select(qpcr_sample_id, qpcr_sample_type) |> 
-#       distinct() |> 
-#       dplyr::filter(qpcr_sample_type %in% c("VIBRANT clinical sample", "Control sample")),
-#     by = join_by("swab_barcode" == "qpcr_sample_id")
-#   )
 
 mg_samples <- 
   technical_metadata |> 
@@ -1011,7 +976,7 @@ qpcr |>
     size = (qpcr_sample_type == "Standard")
     ) +
   geom_point(alpha = 0.5) +
-  facet_wrap(strain_group_qpcr + target ~ ., ncol = 6) +
+  ggh4x::facet_nested_wrap(vars(strain_group_qpcr, target), ncol = 6) +
   scale_size_manual("Standard", values = c(0.2, 1)) +
   scale_color_viridis_d("Extraction plate number", direction = -1, option = "A", end = 0.8) 
 
@@ -1041,7 +1006,7 @@ qpcr |>
     col = dilution_factor |> factor()
     ) +
   geom_point() +
-  facet_wrap(. ~ strain_group_qpcr + target, ncol = 9) +
+  ggh4x::facet_nested_wrap(vars(strain_group_qpcr, target), ncol = 9) +
   scale_color_manual(
     "Dilution factor", 
     values = colorRampPalette(c("dodgerblue1", "gray90"))(6)
@@ -1063,7 +1028,7 @@ qpcr |>
     col = dilution_factor |> factor()
     ) +
   geom_point() +
-  facet_wrap(. ~ strain_group_qpcr + target, ncol = 9) +
+  ggh4x::facet_nested_wrap(vars(strain_group_qpcr, target), ncol = 9) +
   scale_color_manual(
     "Dilution factor", 
     values = colorRampPalette(c("dodgerblue1", "gray90"))(6)
@@ -1208,7 +1173,7 @@ qpcr |>
     fill = cq
     ) +
   geom_tile() +
-  facet_grid(strain_group_qpcr + target ~ ext_lib_plate_nb, scales = "free", space = "free") +
+  ggh4x::facet_nested(cols = vars(ext_lib_plate_nb), rows = vars(strain_group_qpcr, target), scales = "free", space = "free") +
   xlab("Well column") + ylab("Well row") 
 
 ```
@@ -1234,7 +1199,7 @@ qpcr |>
     fill = copies_per_swab |> asinh()
     ) +
   geom_tile() +
-  facet_grid(strain_group_qpcr + target ~ ext_lib_plate_nb, scales = "free", space = "free") +
+  ggh4x::facet_nested(cols = vars(ext_lib_plate_nb), rows = vars(strain_group_qpcr, target), scales = "free", space = "free") +
   xlab("Well column") + ylab("Well row") 
 
 ```
@@ -1334,7 +1299,7 @@ plot_qpcr_empties <- function(qpcr, color_by = "qpcr_sample_type") {
     ggplot() +
     aes(x = sample, y = copies_per_swab, label = replicate_nb, col = !!sym(color_by)) +
     geom_text(size = 3) +
-    facet_grid(strain_group_qpcr + target ~ ext_lib_plate_nb, scales = "free_x", space = "free_x") +
+    ggh4x::facet_nested(cols = vars(ext_lib_plate_nb), rows = vars(strain_group_qpcr, target), scales = "free_x", space = "free_x") +
     theme(
       axis.text.x = element_text(angle = 45, hjust = 1),
       strip.text.y = element_text(angle = 0)
@@ -1392,7 +1357,7 @@ qpcr |>
   geom_text(size = 3) +
   scale_y_log10() +
   scale_color_discrete("Control type") +
-  facet_grid(strain_group_qpcr + target ~ plate_nb, scales = "free_x", space = "free_x") +
+  ggh4x::facet_nested(cols = vars(plate_nb), rows = vars(strain_group_qpcr, target), scales = "free_x", space = "free_x") +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1),
     # strip.text.x = element_text(angle = 90),
@@ -1414,7 +1379,7 @@ qpcr |>
   ggplot() +
   aes(x = starting_quantity, y = cq, col = replicate_nb |> factor()) +
   geom_point(alpha = 0.5, size = 0.5) +
-  facet_grid(strain_group_qpcr + target ~ ext_lib_plate_nb) +
+  ggh4x::facet_nested(cols = vars(ext_lib_plate_nb), rows = vars(strain_group_qpcr, target), scales = "free_x", space = "free_x") +
   scale_x_log10() +
   theme(
     strip.text.y = element_text(angle = 0),
@@ -1487,7 +1452,7 @@ qpcr |>
   aes(x = starting_quantity, y = cq, col = dilution_factor |> factor()) +
   geom_path(aes(group = interaction(ext_lib_plate_nb, replicate_nb)), alpha = 0.2) +
   geom_text(alpha = 0.2, aes(label = std_nb)) +
-  facet_wrap(strain_group_qpcr + target ~ ., ncol = 9) +
+  ggh4x::facet_nested_wrap(vars(strain_group_qpcr, target), ncol = 9) +
   scale_x_log10() +
   scale_color_manual(
     name = "Dilution factor",
@@ -1516,7 +1481,7 @@ qpcr |>
   aes(x = starting_quantity, y = cq, col = ext_lib_plate_nb |> factor()) +
   geom_path(aes(group = interaction(ext_lib_plate_nb, replicate_nb)), alpha = 0.2) +
   geom_text(alpha = 0.2, aes(label = std_nb)) +
-  facet_wrap(strain_group_qpcr + target ~ ., ncol = 9) +
+  ggh4x::facet_nested_wrap(vars(strain_group_qpcr, target), ncol = 9) +
   scale_x_log10() +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1)
@@ -1549,7 +1514,7 @@ qpcr |>
   scale_y_log10() +
   scale_color_discrete("replicate") +
   scale_x_discrete("Samples", breaks = NULL) +
-  facet_grid(strain_group_qpcr + target ~ ext_lib_plate_nb, scales = "free_x", space = "free_x") +
+  ggh4x::facet_nested(cols = vars(ext_lib_plate_nb), rows = vars(strain_group_qpcr, target), scales = "free_x", space = "free_x") +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1),
     strip.text.y = element_text(angle = 0)
@@ -1587,7 +1552,7 @@ qpcr |>
   mutate(vibr_sample_id = vibr_sample_id |> fct_reorder(mean_cps)) |>
   ggplot() +
   aes(x = ext_lib_plate_nb |> factor(), y = copies_per_swab, label = replicate_nb, col = (ext_lib_plate_nb == 12)) +
-  facet_grid(strain_group_qpcr + target ~ min_ext_lib_plate_nb + vibr_sample_id, scales = "free_x", space = "free_x") +
+  ggh4x::facet_nested(cols = vars(min_ext_lib_plate_nb), rows = vars(strain_group_qpcr, target), scales = "free_x", space = "free_x") +
   geom_text(size = 3) +
   scale_y_log10() +
   scale_color_discrete("replicate") +
@@ -1595,7 +1560,6 @@ qpcr |>
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1),
     strip.text.y = element_text(angle = 0),
-    strip.text.x = element_text(angle = 90, hjust = 1)
   )
 
 ```
@@ -1622,7 +1586,7 @@ qpcr |>
     fill = cq
     ) +
   geom_tile() +
-  facet_grid(strain_group_qpcr + target ~ ext_lib_plate_nb, scales = "free", space = "free") +
+  ggh4x::facet_nested(cols = vars(ext_lib_plate_nb), rows = vars(strain_group_qpcr, target), scales = "free", space = "free") +
   xlab("Well column") + ylab("Well row") 
 
 ```
@@ -1650,7 +1614,7 @@ qpcr |>
     fill = cq_imp
     ) +
   geom_tile() +
-  facet_grid(strain_group_qpcr + target ~ ext_lib_plate_nb, scales = "free", space = "free") +
+  ggh4x::facet_nested(cols = vars(ext_lib_plate_nb), rows = vars(strain_group_qpcr, target), scales = "free", space = "free") +
   xlab("Well column") + ylab("Well row") 
 
 ```
@@ -1757,7 +1721,7 @@ qpcr |>
   geom_vline(aes(xintercept = min_cq_empties), col = "dodgerblue") +
   geom_vline(aes(xintercept = robust_min_cq_empties), col = "green3") +
   geom_vline(aes(xintercept = max_cq_std), col = "red") +
-  facet_grid(strain_group_qpcr + target ~ ext_lib_plate_nb, scales = "free") +
+  ggh4x::facet_nested(cols = vars(ext_lib_plate_nb), rows = vars(strain_group_qpcr, target), scales = "free_y", space = "free_y") +
   theme(strip.text.y = element_text(angle = 0)) +
   labs(
     x = "cq value (imputed to 45 when not avalaible)",
@@ -1816,7 +1780,7 @@ qpcr |>
   scale_y_log10() +
   scale_color_discrete("replicate") +
   scale_x_discrete("Samples", breaks = NULL) +
-  facet_grid(strain_group_qpcr + target ~ ext_lib_plate_nb, scales = "free_x", space = "free_x") +
+  ggh4x::facet_nested(cols = vars(ext_lib_plate_nb), rows = vars(strain_group_qpcr, target), scales = "free_x", space = "free_x") +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1),
     strip.text.y = element_text(angle = 0)
@@ -1914,7 +1878,7 @@ qpcr |>
     alpha = copies_per_swab_adj_median |> log10()
   ) +
   geom_tile() +
-  facet_grid(strain_group_qpcr + target ~ ., scales = "free") +
+  ggh4x::facet_nested(rows = vars(strain_group_qpcr, target), scales = "free", space = "free") +
   scale_fill_discrete("Extraction plate number") +
   scale_alpha_continuous(limits = c(0, 10)) +
   theme(
@@ -2038,11 +2002,11 @@ tmp |>
     x = sample_type, y = copies_per_swab_adj_median |> asinh(), 
     col = str_c(sample_type, " ",control_type |> as.character(), " (", truth, ")")
     ) +
-  facet_grid(. ~ strain_group_qpcr + target) +
+  ggh4x::facet_nested(cols = vars(strain_group_qpcr, target)) +
   scale_color_discrete("Control type") + xlab("") +
   ggbeeswarm::geom_quasirandom(size = 0.7, alpha = 0.8) +
   theme(
-    strip.text.x = element_text(angle = 90),
+    #strip.text.x = element_text(angle = 90),
     axis.text.x = element_blank()
   )
 
@@ -2163,11 +2127,11 @@ tmp |>
     x = site, y = copies_per_swab_adj_median |> asinh(), 
     col = site
     ) +
-  facet_grid(. ~ strain_origin + target) +
+  ggh4x::facet_nested(cols = vars(strain_group_qpcr, target)) +
   scale_color_manual("Study site", values = site_colors) + 
   ggbeeswarm::geom_quasirandom(size = 0.7, alpha = 0.8) +
   theme(
-    strip.text.x = element_text(angle = 90),
+    #strip.text.x = element_text(angle = 90),
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
   )
 

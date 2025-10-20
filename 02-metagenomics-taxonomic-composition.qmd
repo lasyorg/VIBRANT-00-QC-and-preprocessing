@@ -640,43 +640,7 @@ plot_sample_categories(matched |> dplyr::filter(randomized)) +
 
 ```
 
-```{r}
-#| eval: false
 
-matched |> 
-  dplyr::filter(randomized & (category == "Sample from a randomized participant not sequenced")) |> 
-  select(pid, visit_code, specimen_collection_swab) |> 
-  arrange(-specimen_collection_swab) |> 
-  gt(caption = "Expected samples (collected swabs according to CRF35) with missing metagenomics data")
-
-```
-
-
-
-```{r}
-#| eval: false
-
-## SOLVED
-
-# In addition to the samples that have not been sequenced, there is one "participant x visit" that has been sequenced twice. 
-
-# This is likely a `pid` or `visit_code` mistake because that entry is not listed in CRF35.
-
-matched <- 
-  matched |> 
-  mutate(
-    category = 
-      case_when(
-        (sample_type == "Clinical sample") & (n_mg_rows > 1) ~ str_c(category, " (two distinct barcodes for the same participant x visit)"),
-        TRUE ~ category
-      )
-    ) 
-
-matched |>
-  dplyr::filter((sample_type == "Clinical sample"), n_mg_rows > 1) |> 
-  gt()
-
-```
 
 
 There are also two samples that were not listed in CRF35 but have been sequenced - these are likely daily swabs that were sent by mistake to the Ravel lab.
@@ -1221,7 +1185,7 @@ rm(tol)
 
 ```{r}
 
-# We check the relative abundances computation (should be `count_corr/sum(count_corr)`).
+# We check the relative abundances computation 
 
 tmp <- 
   SE_mg |> 
