@@ -11,7 +11,7 @@ format:
      toc-depth: 5
      embed-resources: true
 execute:
-  cache: refresh # true refresh false
+  cache: true # true refresh false
   warning: false
 knitr:
   opts_chunk:
@@ -38,6 +38,11 @@ rm(tmp)
 theme_set(theme_light())
 
 ```
+
+
+The purpose of this document is to perform various quality check on the qPCR data generated on "weekly swabs" from the VIBRANT clinical study. "Weekly swabs" are swab samples collected at their weekly in-clinic visits.
+
+
 
 ## Loading the data
 
