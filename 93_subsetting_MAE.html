@@ -6,8 +6,8 @@
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
-<meta name="author" content="Laura Symul, Laura Vermeren, Lara Wautier, Céline Bugli">
-<meta name="dcterms.date" content="2025-10-20">
+<meta name="author" content="Laura Vermeren, Laura Symul">
+<meta name="dcterms.date" content="2025-10-21">
 
 <title>VIBRANT subsetting MAE</title>
 <style>
@@ -2181,11 +2181,6 @@ vertical-align: -.125em;
    
   <ul>
   <li><a href="#mae-1-primary-outcomes" id="toc-mae-1-primary-outcomes" class="nav-link active" data-scroll-target="#mae-1-primary-outcomes">MAE 1 (primary outcomes)</a></li>
-  <li><a href="#mae-2-dynamics" id="toc-mae-2-dynamics" class="nav-link" data-scroll-target="#mae-2-dynamics">MAE 2 (dynamics)</a></li>
-  <li><a href="#mae-3-host" id="toc-mae-3-host" class="nav-link" data-scroll-target="#mae-3-host">MAE 3 (host)</a></li>
-  <li><a href="#mae-4-predictors" id="toc-mae-4-predictors" class="nav-link" data-scroll-target="#mae-4-predictors">MAE 4 (predictors)</a></li>
-  <li><a href="#mae-5-acceptability---qualitative-and-quantitative-study" id="toc-mae-5-acceptability---qualitative-and-quantitative-study" class="nav-link" data-scroll-target="#mae-5-acceptability---qualitative-and-quantitative-study">MAE 5 (Acceptability - qualitative and quantitative study)</a></li>
-  <li><a href="#mae-6-bv-diagnosis" id="toc-mae-6-bv-diagnosis" class="nav-link" data-scroll-target="#mae-6-bv-diagnosis">MAE 6 (BV diagnosis)</a></li>
   <li><a href="#save-maes" id="toc-save-maes" class="nav-link" data-scroll-target="#save-maes">Save MAEs</a></li>
   </ul>
 </nav>
@@ -2206,14 +2201,14 @@ vertical-align: -.125em;
     <div>
     <div class="quarto-title-meta-heading">Author</div>
     <div class="quarto-title-meta-contents">
-             <p>Laura Symul, Laura Vermeren, Lara Wautier, Céline Bugli </p>
+             <p>Laura Vermeren, Laura Symul </p>
           </div>
   </div>
     
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">October 20, 2025</p>
+      <p class="date">October 21, 2025</p>
     </div>
   </div>
   
@@ -2266,12 +2261,11 @@ Note
 <div class="callout-body-container callout-body">
 <p>The purpose of this document is to subset the master <code>MAE</code> object into smaller, analysis-specific <code>MAE</code> objects that contain only the data required for the respective analyses.</p>
 <p>These curated <code>MAE</code> objects are ultimately intended for public release, and therefore should not include sensitive or unnecessary information.</p>
-<p>At the end of this document, several <code>MAE</code> objects are created:</p>
+<p>At the end of this document, several <code>MAE</code> objects will ultimately be created:</p>
 <ul>
 <li><code>MAE_1</code>: contains all necessary data for the first VIBRANT paper describing the trial results (primary and secondary outcomes) - see <a href="https://www.medrxiv.org/content/10.1101/2025.09.18.25336053v3">Potloane et al., 2025</a>.<br>
 </li>
-<li><code>MAE_2</code>: contains all necessary data for the second VIBRANT paper describing in more details the dynamics of the microbiota and of colonization following metronidazole treatment and LBP intervention.<br>
-</li>
+<li><code>MAE_2</code>: …</li>
 <li>…</li>
 </ul>
 </div>
@@ -2417,103 +2411,19 @@ Functionality:
 </details>
 </div>
 </section>
-<section id="mae-2-dynamics" class="level2">
-<h2 class="anchored" data-anchor-id="mae-2-dynamics">MAE 2 (dynamics)</h2>
-<p><code>MAE_2</code> contains all necessary information for the colonization and microbiota dynamics paper.</p>
-<blockquote class="blockquote">
-<p>TODO</p>
-</blockquote>
-</section>
-<section id="mae-3-host" class="level2">
-<h2 class="anchored" data-anchor-id="mae-3-host">MAE 3 (host)</h2>
-<p><code>mae_3</code> contains all necessary information for the “host” paper and contains only the randomized participants and the data from weekly samples.</p>
-<p>The <code>mae_3</code>will contains the following assay with the following informations:</p>
-<ul>
-<li><code>visit_and_sample_info</code></li>
-<li><code>mg</code></li>
-<li><code>qPCR</code></li>
-<li><code>luminex</code></li>
-<li><code>flow</code></li>
-<li><code>col_LBP_mg</code></li>
-</ul>
-<div class="cell">
-<details class="code-fold">
-<summary>Code</summary>
-<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Randomized participants </span></span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>mae_3 <span class="ot">&lt;-</span> mae[, <span class="sc">!</span><span class="fu">is.na</span>(<span class="fu">colData</span>(mae)<span class="sc">$</span>randomized) <span class="sc">&amp;</span> <span class="fu">colData</span>(mae)<span class="sc">$</span>randomized <span class="sc">==</span> <span class="cn">TRUE</span>]</span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="co"># subsetting only necessary SE</span></span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>se_names <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">&quot;visit_and_sample_info&quot;</span>, <span class="st">&quot;mg&quot;</span>, <span class="st">&quot;qPCR&quot;</span>, <span class="st">&quot;luminex&quot;</span>, <span class="st">&quot;flow&quot;</span>, <span class="st">&quot;col_LBP_mg&quot;</span>)</span>
-<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>mae_3<span class="sc">@</span>ExperimentList<span class="sc">@</span>listData <span class="ot">&lt;-</span> mae_3<span class="sc">@</span>ExperimentList<span class="sc">@</span>listData[se_names]</span>
-<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Meta data </span></span>
-<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>mae_3<span class="sc">@</span>metadata <span class="ot">&lt;-</span> mae_3<span class="sc">@</span>metadata[<span class="fu">c</span>(<span class="st">&quot;study&quot;</span>,<span class="st">&quot;data_source&quot;</span>, <span class="st">&quot;data_status&quot;</span>,<span class="st">&quot;date&quot;</span>,<span class="st">&quot;colData_dictionary&quot;</span>)] </span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-</div>
-</section>
-<section id="mae-4-predictors" class="level2">
-<h2 class="anchored" data-anchor-id="mae-4-predictors">MAE 4 (predictors)</h2>
-<blockquote class="blockquote">
-<p>TODO</p>
-</blockquote>
-</section>
-<section id="mae-5-acceptability---qualitative-and-quantitative-study" class="level2">
-<h2 class="anchored" data-anchor-id="mae-5-acceptability---qualitative-and-quantitative-study">MAE 5 (Acceptability - qualitative and quantitative study)</h2>
-<blockquote class="blockquote">
-<p>TODO</p>
-</blockquote>
-</section>
-<section id="mae-6-bv-diagnosis" class="level2">
-<h2 class="anchored" data-anchor-id="mae-6-bv-diagnosis">MAE 6 (BV diagnosis)</h2>
-<p><code>mae_6</code> contains all necessary information and data for the “BV diagnosis” paper led by Meilin Zhu which aims at comparing BV diagnosis frameworks (Amsel criteria, Nugent scores, and molecular composition) across sites.</p>
-<div class="cell">
-<details class="code-fold">
-<summary>Code</summary>
-<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="co"># All participants </span></span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>mae_6 <span class="ot">&lt;-</span> mae</span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="co"># subsetting only necessary SE</span></span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>se_names <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">&quot;visit_and_sample_info&quot;</span>, <span class="st">&quot;mg&quot;</span>, <span class="st">&quot;qPCR&quot;</span>, <span class="st">&quot;amplicon&quot;</span>)</span>
-<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>mae_6<span class="sc">@</span>ExperimentList<span class="sc">@</span>listData <span class="ot">&lt;-</span> mae_6<span class="sc">@</span>ExperimentList<span class="sc">@</span>listData[se_names]</span>
-<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Meta data </span></span>
-<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>mae_6<span class="sc">@</span>metadata <span class="ot">&lt;-</span> mae_6<span class="sc">@</span>metadata[<span class="fu">c</span>(<span class="st">&quot;study&quot;</span>,<span class="st">&quot;data_source&quot;</span>, <span class="st">&quot;data_status&quot;</span>,<span class="st">&quot;date&quot;</span>,<span class="st">&quot;colData_dictionary&quot;</span>, <span class="st">&quot;crf_plates_description&quot;</span>, <span class="st">&quot;crf_data_raw&quot;</span>, <span class="st">&quot;crf_data_clean&quot;</span>)] </span>
-<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>crf_list <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">&quot;crf1&quot;</span>, <span class="st">&quot;crf101&quot;</span>, <span class="st">&quot;crf2&quot;</span>,<span class="st">&quot;crf102&quot;</span>, <span class="st">&quot;crf14&quot;</span>)</span>
-<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a>mae_6<span class="sc">@</span>metadata<span class="sc">$</span>crf_data_raw <span class="ot">&lt;-</span> mae_6<span class="sc">@</span>metadata<span class="sc">$</span>crf_data_raw[crf_list]</span>
-<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a>mae_6<span class="sc">@</span>metadata<span class="sc">$</span>crf_data_clean <span class="ot">&lt;-</span> mae_6<span class="sc">@</span>metadata<span class="sc">$</span>crf_data_clean[crf_list]</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-</div>
-</section>
 <section id="save-maes" class="level2">
 <h2 class="anchored" data-anchor-id="save-maes">Save MAEs</h2>
 <p>We export the subsetted <code>MAE</code> to disk as <code>.rds</code> files.</p>
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="fu">saveRDS</span>(</span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>  mae_1, </span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">str_c</span>(</span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">get_05_output_dir</span>(),  </span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;mae_1_&quot;</span>, <span class="fu">today</span>() <span class="sc">|&gt;</span> <span class="fu">str_remove_all</span>(<span class="st">&quot;-&quot;</span>), <span class="st">&quot;.rds&quot;</span></span>
-<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a><span class="fu">saveRDS</span>(</span>
-<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>  mae_3, </span>
-<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">str_c</span>(</span>
-<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>    <span class="fu">get_05_output_dir</span>(),  </span>
-<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;mae_3_host_&quot;</span>, <span class="fu">today</span>() <span class="sc">|&gt;</span> <span class="fu">str_remove_all</span>(<span class="st">&quot;-&quot;</span>), <span class="st">&quot;.rds&quot;</span></span>
-<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a><span class="fu">saveRDS</span>(</span>
-<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a>  mae_6, </span>
-<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a>  <span class="fu">str_c</span>(</span>
-<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a>    <span class="fu">get_05_output_dir</span>(),  </span>
-<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;mae_6_BV_&quot;</span>, <span class="fu">today</span>() <span class="sc">|&gt;</span> <span class="fu">str_remove_all</span>(<span class="st">&quot;-&quot;</span>), <span class="st">&quot;.rds&quot;</span></span>
-<span id="cb12-23"><a href="#cb12-23" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb12-24"><a href="#cb12-24" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="fu">saveRDS</span>(</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>  mae_1, </span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">str_c</span>(</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">get_05_output_dir</span>(),  </span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;mae_1_&quot;</span>, <span class="fu">today</span>() <span class="sc">|&gt;</span> <span class="fu">str_remove_all</span>(<span class="st">&quot;-&quot;</span>), <span class="st">&quot;.rds&quot;</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
 </section>

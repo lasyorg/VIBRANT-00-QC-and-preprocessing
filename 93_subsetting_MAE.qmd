@@ -1,6 +1,6 @@
 ---
 title: "VIBRANT subsetting MAE"
-author: Laura Symul, Laura Vermeren, Lara Wautier, Céline Bugli
+author: Laura Vermeren, Laura Symul
 date: today
 format: 
   html:
@@ -59,10 +59,10 @@ The purpose of this document is to subset the master `MAE` object into smaller, 
 
 These curated `MAE` objects are ultimately intended for public release, and therefore should not include sensitive or unnecessary information.
 
-At the end of this document, several `MAE` objects are created:
+At the end of this document, several `MAE` objects will ultimately be created:
 
 - `MAE_1`: contains all necessary data for the first VIBRANT paper describing the trial results (primary and secondary outcomes) - see [Potloane et al., 2025](https://www.medrxiv.org/content/10.1101/2025.09.18.25336053v3).  
-- `MAE_2`: contains all necessary data for the second VIBRANT paper describing in more details the dynamics of the microbiota and of colonization following metronidazole treatment and LBP intervention.  
+- `MAE_2`: ...
 - ...
 
 :::
@@ -181,77 +181,6 @@ rowData(mae[["qPCR_daily"]]) <- rowData(mae[["qPCR_daily"]])[, c("taxon_label", 
 
 
 
-## MAE 2 (dynamics)
-
-`MAE_2` contains all necessary information for the colonization and microbiota dynamics paper. 
-
-
-> TODO
-
-
-
-## MAE 3 (host)
-
-`mae_3` contains all necessary information for the "host" paper and contains only the randomized participants and the data from weekly samples. 
-
-The `mae_3`will contains the following assay with the following informations: 
-
--   `visit_and_sample_info`
--   `mg` 
--   `qPCR` 
--   `luminex`
--   `flow` 
--   `col_LBP_mg`
-
-
-```{r}
-
-# Randomized participants 
-mae_3 <- mae[, !is.na(colData(mae)$randomized) & colData(mae)$randomized == TRUE]
-
-# subsetting only necessary SE
-se_names <- c("visit_and_sample_info", "mg", "qPCR", "luminex", "flow", "col_LBP_mg")
-mae_3@ExperimentList@listData <- mae_3@ExperimentList@listData[se_names]
-
-# Meta data 
-mae_3@metadata <- mae_3@metadata[c("study","data_source", "data_status","date","colData_dictionary")] 
-
-```
-
-
-## MAE 4 (predictors)
-
-> TODO
-
-
-## MAE 5 (Acceptability - qualitative and quantitative study)
-
-> TODO
-
-
-## MAE 6 (BV diagnosis)
-
-
-`mae_6` contains all necessary information and data for the "BV diagnosis" paper led by Meilin Zhu which aims at comparing BV diagnosis frameworks (Amsel criteria, Nugent scores, and molecular composition) across sites.
-
-```{r}
-
-# All participants 
-mae_6 <- mae
-
-# subsetting only necessary SE
-se_names <- c("visit_and_sample_info", "mg", "qPCR", "amplicon")
-mae_6@ExperimentList@listData <- mae_6@ExperimentList@listData[se_names]
-
-# Meta data 
-mae_6@metadata <- mae_6@metadata[c("study","data_source", "data_status","date","colData_dictionary", "crf_plates_description", "crf_data_raw", "crf_data_clean")] 
-crf_list <- c("crf1", "crf101", "crf2","crf102", "crf14")
-mae_6@metadata$crf_data_raw <- mae_6@metadata$crf_data_raw[crf_list]
-mae_6@metadata$crf_data_clean <- mae_6@metadata$crf_data_clean[crf_list]
-
-```
-
-
 ## Save MAEs 
 
 We export the subsetted `MAE` to disk as `.rds` files.
@@ -265,24 +194,6 @@ saveRDS(
     "mae_1_", today() |> str_remove_all("-"), ".rds"
   )
 )
-
-saveRDS(
-  mae_3, 
-  str_c(
-    get_05_output_dir(),  
-    "mae_3_host_", today() |> str_remove_all("-"), ".rds"
-  )
-)
-
-
-saveRDS(
-  mae_6, 
-  str_c(
-    get_05_output_dir(),  
-    "mae_6_BV_", today() |> str_remove_all("-"), ".rds"
-  )
-)
-
 
 ```
 
