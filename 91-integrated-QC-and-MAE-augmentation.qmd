@@ -916,6 +916,359 @@ mae <- c(
 ```
 
 
+# Calculated variables
+
+## Education - can we harmonize between sites ?
+
+```{r}
+
+education <- 
+  bind_rows(
+    mae@metadata$crf_data_clean$crf1 |> 
+      select(uid, pid, visit_code, edu),
+    mae@metadata$crf_data_clean$crf101 |> 
+      select(uid, pid, visit_code, edu)
+  ) |> 
+  left_join(
+    mae@colData |> as_tibble() |> 
+      select(pid, site, randomized) |> 
+      distinct(),
+    by = join_by(pid)
+  )
+
+```
+
+```{r}
+#| fig-width: 8
+#| fig-height: 2.5
+education |> 
+  ggplot() +
+  aes(y = edu, fill = randomized) +
+  facet_wrap(. ~ site, scales = "free") +
+  geom_bar() +
+  xlab("Number of participants") +
+  ylab("") +
+  scale_fill_manual(
+    name = "",
+    values = c("TRUE" = "dodgerblue1", "FALSE" = "gray70"),
+    labels = c("TRUE" = "Randomized", "FALSE" = "Not randomized")
+  ) +
+  theme(legend.position = "top")
+
+
+
+```
+
+```{r}
+#| fig-width: 8
+#| fig-height: 2
+
+education |> 
+  filter(randomized) |> 
+  ggplot() +
+  aes(y = edu) +
+  facet_wrap(. ~ site, scales = "free") +
+  geom_bar(fill = "dodgerblue1") +
+  xlab("Number of participants") +
+  ylab("")
+```
+
+## Economic worry
+
+```{r}
+
+worry <- 
+   bind_rows(
+    mae@metadata$crf_data_clean$crf2 |> 
+      select(uid, pid, visit_code, starts_with("worry_")),
+    mae@metadata$crf_data_clean$crf102 |> 
+      select(uid, pid, visit_code, starts_with("worry_"))
+  ) |> 
+  left_join(
+    mae@colData |> as_tibble() |> 
+      select(pid, site, randomized) |> 
+      distinct(),
+    by = join_by(pid)
+  )
+
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+# create an upset plot to see the combinations of worries
+library(UpSetR)
+# create a binary matrix for the worries
+worry_matrix_CAP <-
+  worry |>
+  filter(randomized, site == "CAP", !is.na(worry_food)) |>
+  select(starts_with("worry_")) |>
+  # remove "worry_" prefix from column names
+  rename_with(~ str_remove_all(., "worry_")) |>
+  mutate(across(everything(), ~ ifelse(. == "Checked", 1, 0))) |>
+  as.data.frame()
+
+upset(
+  worry_matrix_CAP,
+  nsets = ncol(worry_matrix),
+  nintersects = NA,
+  keep.order = TRUE,
+  order.by = "freq",
+  #text.scale = c(2, 2, 2, 1.5, 2, 2),
+  main.bar.color = "dodgerblue1",
+  sets.bar.color = "gray70",
+  set_size.show = TRUE
+  )
+
+worry_matrix_MGH <-
+  worry |>
+  filter(randomized, site == "MGH", !is.na(worry_food)) |>
+  select(starts_with("worry_")) |>
+  # remove "worry_" prefix from column names
+  rename_with(~ str_remove_all(., "worry_")) |>
+  mutate(across(everything(), ~ ifelse(. == "Checked", 1, 0))) |>
+  as.data.frame()
+
+upset(
+  worry_matrix_MGH,
+  nsets = ncol(worry_matrix),
+  nintersects = NA,
+  keep.order = TRUE,
+  order.by = "freq",
+  #text.scale = c(2, 2, 2, 1.5, 2, 2),
+  main.bar.color = "dodgerblue1",
+  # sets.bar.color = "gray70",
+  set_size.show = TRUE
+)
+
+```
+
+
+```{r}
+
+
+table1_data <- 
+  metadata(mae)$participant_crfs_merged |> 
+  dplyr::left_join(
+    colData(mae) |> as_tibble() |> select(pid, site, arm, ITT, mITT, PP) |> distinct(), 
+    by = join_by(pid, site)
+    )  |> 
+  filter(mITT) |> 
+  select(pid, site, arm, cut_size_meals, eat_less, hungry_did_not_eat) |> 
+  mutate(
+    food_insecurity = ifelse(
+      cut_size_meals == "Yes" | eat_less == "Yes" | hungry_did_not_eat == "Yes",
+      "Yes",
+      "No"
+    ),
+    food_insecurity = factor(food_insecurity, levels = c("No", "Yes"))
+  ) |> 
+  select(-c(eat_less, cut_size_meals, hungry_did_not_eat))
+
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 8
+
+table1_data |> 
+  left_join(
+    worry |> select(pid, worry_food) |> distinct(),
+    by = join_by(pid)
+  ) |> 
+  dplyr::count(site, food_insecurity, worry_food) |> 
+  ggplot() +
+  aes(x = food_insecurity, y = worry_food, fill = n) +
+  geom_tile() +
+  geom_text(aes(label = n)) +
+  facet_wrap(. ~ site, scales = "free") +
+  scale_fill_gradient(low = "white", high = "dodgerblue1") 
+
+
+
+```
+
+
+
+
+## Pre-existing conditions
+
+```{r}
+
+pre_existing_conditions <- 
+  mae@metadata$crf_data_clean$crf5 |> 
+  select(pid, no_pre_existing_condition, diagnosis) |> 
+  left_join(
+    mae@colData |> as_tibble() |> 
+      select(pid, site, randomized) |> 
+      distinct(),
+    by = join_by(pid)
+  )
+
+```
+
+```{r}
+#| fig-height: 7
+#| 
+pre_existing_conditions |> 
+  filter(randomized) |> 
+  dplyr::mutate(
+    diagnosis = 
+      case_when(
+        no_pre_existing_condition ~ "No pre-existing condition",
+        TRUE ~ diagnosis
+        )
+    ) |> 
+  select(pid, diagnosis, site) |> 
+  distinct() |> 
+  dplyr::count(site, diagnosis) |> 
+  arrange(-n) |> 
+  mutate(diagnosis = diagnosis |> fct_inorder()) |>
+  ggplot() +
+  aes(x = n, y = diagnosis) +
+  facet_grid(. ~ site, scales = "free_x") +
+  geom_col()
+
+```
+## Psychological wellbeing
+
+```{r}
+psych_wellbeing <- 
+  mae@metadata$crf_data_clean$crf11 |> 
+  select(pid, upset:difficulties_piling_up) |>
+  distinct() |> 
+  left_join(
+    mae@colData |> as_tibble() |> 
+      select(pid, site, randomized) |> 
+      distinct(),
+    by = join_by(pid)
+  )
+
+psych_wellbeing_long <- 
+  psych_wellbeing |> 
+  filter(randomized) |>
+  filter(!is.na(upset)) |>
+  pivot_longer(
+    cols = upset:difficulties_piling_up,
+    names_to = "question",
+    values_to = "answer"
+  )
+
+
+
+```
+
+```{r}
+#| fig-height: 10
+#| fig-width: 8
+psych_wellbeing_long |> 
+  group_by(site, pid) |> 
+  mutate(total_score = sum(answer |> as.integer())) |>
+  ungroup() |> 
+  arrange(total_score) |> 
+  mutate(
+    pid = pid |> fct_inorder()
+  ) |>
+  ggplot() +
+  aes(y = pid, x = question, fill = answer) +
+  facet_grid(site ~ ., scales = "free_y", space = "free") +
+  geom_tile() +
+  scale_fill_brewer(type = "div", palette = "PRGn") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text.y = element_text(angle = 0)
+  )
+```
+
+## Sexual behavior
+
+### PSA
+
+```{r}
+
+psa <- 
+  mae@metadata$crf_data_clean$crf45 |> 
+  select(uid, pid, visit_code, psa_results) |> 
+  left_join(
+    mae@colData |> as_tibble() |> 
+      select(pid, site, randomized) |> 
+      distinct(),
+    by = join_by(pid)
+  )
+
+```
+
+```{r}
+#| fig-height: 8
+#| fig-width: 6
+
+
+psa |> 
+  ggplot() +
+  aes(x = visit_code, y = pid) +
+  geom_tile(fill = "lightseagreen")
+
+```
+
+## Metronidazole use
+
+```{r}
+
+mtz_crf_raw <- 
+  mae@metadata$crf_data_raw$crf22 |> 
+  left_join(
+    mae@colData |> as_tibble() |> 
+      select(pid, site, randomized) |> 
+      distinct(),
+    by = join_by(pid)
+  )
+
+mtz_crf_raw |> 
+  dplyr::count(dfseq)
+
+
+mtz_crf_raw |> 
+  filter(randomized) |> 
+  dplyr::count(dfseq)
+
+
+mtz_crf_raw |> 
+  filter(randomized) |> 
+  dplyr::filter(dfseq == 1200) 
+
+mtz_crf_raw |> 
+  filter(randomized) |> 
+  dplyr::count(pid) |> 
+  arrange(-n) |> 
+  dplyr::count(n)
+
+mtz_crf_raw |> 
+  group_by(pid) |> 
+  mutate(min_study_day = min(study_day)) |> 
+  ungroup() |> 
+  mutate(pid = pid |> fct_reorder(min_study_day)) |>
+  ggplot() +
+  aes(x = study_day, y = pid, col = dfseq |> as.character()) +
+  geom_point()
+
+mae@metadata$exposures |> 
+  ggplot() +
+  aes(x = study_day, y = pid, col = metronidazole |> factor()) + geom_point() +
+  scale_color_manual(
+    name = "Metronidazole use",
+    na.value = "lightgray",
+    values = c("0" = "red", "1" = "purple", "2" = "blue")
+  ) +
+  
+
+```
+
+
+
+
+
+
+
 # Saving the `MultiAssayExperiment` objects
 
 We save the MAE for downstream analyses.
