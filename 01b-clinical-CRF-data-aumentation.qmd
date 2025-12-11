@@ -198,7 +198,7 @@ participants <-
 
 participants |> 
   dplyr::count(site, randomized, arm) |> 
-  gt("Number of randomized participants per site and per arm")
+  gt(caption = "Number of randomized participants per site and per arm")
 
 ```
 
@@ -244,7 +244,7 @@ and criteria:
         
         -   not replaced (CRF44) &
         
-        -   did not meet replacement criteria (CRFXXX, XXX, and XXX) &
+        -   did not meet replacement criteria (CRF44 (replacement), 33 (daily bleeding), 20 (antibiotics), and 15 (pap smear)) &
         
         -   `n_product_doses > 0.8 * max_product_doses` &
         
@@ -568,6 +568,95 @@ participants <-
   select(pid, site, location, randomized, arm, ITT, mITT, PP, everything()) 
 
 ```
+
+
+
+Note - A few participants reported antibiotics in their concomitant medication, but this was not reported in CRF 20
+
+```{r}
+
+joined_antibiotic_use <- 
+  participants |> 
+  filter(randomized) |> 
+  select(pid, site, randomized, ITT, mITT, PP, any_antibiotics) |> 
+  left_join(
+    crf_clean$crf31 |>
+      filter(medication |> str_detect("METRONIDAZOLE")) |> 
+      select(pid, medication, indication, med_start_relative_date, med_stop_relative_date) |> 
+      mutate(
+        antibiotics_in_CM_any_time = TRUE,
+        antibiotics_in_CM_before_w5 = (med_start_relative_date < 35)
+      ),
+    by = join_by(pid)
+  ) 
+
+joined_antibiotic_use |> 
+  dplyr::count(PP, any_antibiotics, antibiotics_in_CM_before_w5)
+
+joined_antibiotic_use |> 
+  filter(PP, !any_antibiotics, antibiotics_in_CM_before_w5)
+
+joined_antibiotic_use |> 
+  filter(PP, !any_antibiotics, antibiotics_in_CM_before_w5) |> 
+  left_join(
+    crf_clean$crf20 |> 
+      select(pid, visit_code, used_during_past_week) |> 
+      filter(used_during_past_week |> str_detect("antibiotic")),
+    by = join_by(pid)
+  )
+
+```
+
+
+```{r}
+#| eval: false
+
+crf_raw_file <- data_dir |> fs::dir_ls() |> str_subset("01_crf_raw") |> sort(decreasing = TRUE) |> magrittr::extract(1)
+load(crf_raw_file, verbose = TRUE)
+crf_raw |> names()
+rm(crf_raw_file)
+
+crf_raw$crf31 |> 
+  filter(pid %in% c("068100060", "068100062"))
+
+```
+
+```{r}
+#| eval: false
+
+CM_before_week5 <- 
+  crf_clean$crf31 |>
+  select(pid, medication, indication, med_start_relative_date, med_stop_relative_date) |> 
+  filter(med_start_relative_date > 6, med_start_relative_date < 35) |> 
+  left_join(
+    participants |> select(pid, site, randomized, ITT, mITT, PP) |> distinct()
+  ) |> 
+  filter(randomized)
+
+CM_before_week5 |> 
+  write_csv(
+    str_c(
+      data_dir() |> str_remove("actual data/"), 
+      "results/99_misc/CM_before_week5.csv"
+      )
+    )
+
+CM_before_week5 |> 
+  dplyr::count(medication, site) |> 
+  arrange(site, -n) |> 
+  write_csv(
+    str_c(
+      data_dir() |> str_remove("actual data/"), 
+      "results/99_misc/CM_before_week5_summary.csv"
+      )
+    )
+
+```
+
+
+
+
+
 
 
 ## Dictionary

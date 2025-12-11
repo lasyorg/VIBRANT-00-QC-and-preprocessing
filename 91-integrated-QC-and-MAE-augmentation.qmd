@@ -61,7 +61,9 @@ rm(mae_files)
 
 
 
-# qPCR data - comparison of the total 16S in weekly vs daily samples
+# qPCR data 
+
+## Comparison of the total 16S in weekly *vs* daily samples
 
 ```{r}
 
@@ -72,19 +74,19 @@ qpcr_16S <-
       dplyr::filter(.feature == "16S", !is.na(copies_per_swab_med)) |>
       select(uid, dilution, copies_per_swab_med) |> 
       mutate(assay = "daily qPCR") |> 
-      expand_grid(type = c("orig", "LL3", "LM")),
+      expand_grid(calibration = c("orig", "LL3", "LM")),
     mae[["qPCR"]] |> 
       as_tibble() |>
       dplyr::filter(.feature == "16S") |>
       select(uid, dilution, copies_per_swab_med, copies_per_swab_orig_med, copies_per_swab_LM_med) |> 
       pivot_longer(
         cols = c(copies_per_swab_med, copies_per_swab_orig_med, copies_per_swab_LM_med),
-        names_to = "type",
+        names_to = "calibration",
         names_pattern = "copies_per_swab_(.*)_med",
         values_to = "copies_per_swab_med"
       ) |>
       mutate(
-        type = type |> str_replace_na("LL3"),
+        calibration = calibration |> str_replace_na("LL3"),
         assay = "weekly qPCR"
         )
   ) |> 
@@ -97,7 +99,7 @@ qpcr_16S <-
     by = join_by(uid)
     ) |>
   dplyr::filter(sample_type == "Clinical sample") |> 
-  mutate(type = type |> fct_inorder())
+  mutate(calibration = calibration |> fct_inorder())
 
 ```
 
@@ -110,7 +112,7 @@ qpcr_16S |>
   filter(randomized, study_day > -10) |> 
   ggplot() +
   aes(x = study_day, y = copies_per_swab_med, color = assay) +
-  facet_grid(site ~ type, 
+  facet_grid(site ~ calibration, 
     scales = "free_y", space = "free_y", labeller = label_both
     ) +
   geom_line(aes(group = interaction(pid, assay)), alpha = 0.2) +
@@ -137,11 +139,11 @@ tmp <-
  full_join(
    selected_time_points |> 
      filter(assay == "weekly qPCR") |> 
-     dplyr::select(type, copies_per_swab_med, pid, study_day, site) |> 
+     dplyr::select(calibration, copies_per_swab_med, pid, study_day, site) |> 
      dplyr::rename(copies_per_swab_med_weekly = copies_per_swab_med),
    selected_time_points |> 
      filter(assay == "daily qPCR")  |> 
-     dplyr::select(copies_per_swab_med, pid, study_day, site) |> 
+     dplyr::select(calibration, copies_per_swab_med, pid, study_day, site) |> 
      distinct() |> 
      dplyr::rename(copies_per_swab_med_daily = copies_per_swab_med)
  )
@@ -151,23 +153,202 @@ tmp <-
 
 
 ```{r}
+#| fig-width: 8
+#| fig-height: 6
 
 tmp |> 
   ggplot() +
-  aes(x = copies_per_swab_med_daily, y = copies_per_swab_med_weekly, col = study_day) +
+  aes(x = copies_per_swab_med_daily, y = copies_per_swab_med_weekly, col = calibration) +
   facet_grid(
-    site ~ type, labeller = label_both
+    site ~ calibration, labeller = label_both
     ) +
   geom_abline(slope = 1, intercept = 0, color = "black") +
   geom_point(alpha = 0.5, size = 0.5) +
-  scale_x_log10() +
+  scale_x_log10("16S copies/swabs - Daily swabs") +
+  scale_y_log10("16S copies/swabs - Weekly swabs") +
+  coord_fixed() +
+  ggtitle("Swabs collected the same day from the same participant")
+
+```
+
+
+## Comparison of LBP strains in weekly *vs* daily samples
+
+```{r}
+
+qpcr_LBP <- 
+  bind_rows(
+    mae[["qPCR_daily"]] |> 
+      as_tibble() |>
+      dplyr::filter(.feature != "16S", !is.na(copies_per_swab_med)) |>
+      select(uid, dilution, target, copies_per_swab_med) |> 
+      mutate(assay = "daily qPCR"),
+    mae[["qPCR"]] |> 
+      as_tibble() |>
+      dplyr::filter(.feature != "16S") |>
+      select(uid, dilution, target, copies_per_swab_med) |>
+      mutate(assay = "weekly qPCR")
+  ) |> 
+  left_join(
+    mae@colData |> 
+      as_tibble() |> 
+      select(
+        uid, pid, visit_code, visit, study_day, sample_type, 
+        site, randomized, arm, ITT, mITT, PP),
+    by = join_by(uid)
+    ) |>
+  dplyr::filter(sample_type == "Clinical sample")
+
+```
+
+
+```{r}
+#| fig-width: 18
+#| fig-height: 8
+  
+qpcr_LBP |>
+  filter(randomized, study_day > -10) |> 
+  ggplot() +
+  aes(x = study_day, y = copies_per_swab_med, color = assay) +
+  facet_grid(site ~ target, 
+    scales = "free_y", space = "free_y", labeller = label_both
+    ) +
+  geom_line(aes(group = interaction(pid, assay)), alpha = 0.2) +
+  geom_point(alpha = 0.5, size = 0.5) +
   scale_y_log10() +
-  scale_color_gradient(low = "dodgerblue1", high = "red") +
+  theme(
+    strip.text.y = element_text(angle = 0)
+  )
+```
+
+```{r}
+#| fig-width: 18
+#| fig-height: 20
+  
+qpcr_LBP |>
+  filter(mITT, study_day > -10, site == "MGH") |> 
+  ggplot() +
+  aes(x = study_day, y = copies_per_swab_med, color = assay) +
+  facet_grid(site + pid ~ target, labeller = label_both) +
+  geom_line(alpha = 0.2) +
+  geom_point(alpha = 0.5, size = 0.5) +
+  scale_y_log10() +
+  theme(
+    strip.text.y = element_text(angle = 0)
+  )
+```
+
+```{r}
+#| fig-width: 18
+#| fig-height: 20
+  
+qpcr_LBP |>
+  filter(mITT, study_day > -10, site == "CAP", arm == "LC-106-o") |> 
+  ggplot() +
+  aes(x = study_day, y = copies_per_swab_med, color = assay) +
+  facet_grid(site + pid ~ target, labeller = label_both) +
+  geom_line(alpha = 0.2) +
+  geom_point(alpha = 0.5, size = 0.5) +
+  scale_y_log10() +
+  theme(
+    strip.text.y = element_text(angle = 0)
+  )
+```
+
+
+```{r}
+#| fig-width: 12
+#| fig-height: 8
+  
+qpcr_LBP |>
+  filter(randomized, study_day > -10) |> 
+  ggplot() +
+  aes(x = assay, y = copies_per_swab_med, color = assay, fill = assay) +
+  facet_grid(site ~ target, 
+    scales = "free_y", space = "free_y", labeller = label_both
+    ) +
+  geom_boxplot(alpha = 0.5) +
+  scale_y_log10() +
+  theme(
+    strip.text.y = element_text(angle = 0),
+    axis.text.x = element_blank(),
+    legend.position = "bottom"
+  )
+```
+
+
+```{r}
+
+
+selected_time_points <- 
+  qpcr_LBP |> 
+  filter(randomized) |> 
+  group_by(pid, study_day) |> 
+  mutate(n_assays = n_distinct(assay)) |>
+  ungroup() |> 
+  dplyr::filter(n_assays == 2) 
+
+tmp <- 
+ full_join(
+   selected_time_points |> 
+     filter(assay == "weekly qPCR") |> 
+     dplyr::select(target, copies_per_swab_med, pid, study_day, site) |> 
+     dplyr::rename(copies_per_swab_med_weekly = copies_per_swab_med),
+   selected_time_points |> 
+     filter(assay == "daily qPCR")  |> 
+     dplyr::select(target, copies_per_swab_med, pid, study_day, site) |> 
+     distinct() |> 
+     dplyr::rename(copies_per_swab_med_daily = copies_per_swab_med)
+ )
+  
+```
+
+
+```{r}
+#| fig-width: 18
+#| fig-height: 3
+
+tmp |> 
+  mutate(
+    study_phase = case_when(
+      study_day <= 0 ~ "pre-MTZ",
+      study_day > 0 & study_day <=7 ~ "Week 1",
+      study_day <= 15 ~ "Week 2",
+      TRUE ~ "Week 3+"
+    ) |> factor(levels = c("pre-MTZ", "Week 1", "Week 2", "Week 3+"))
+  ) |> 
+  ggplot() +
+  aes(x = copies_per_swab_med_daily, y = copies_per_swab_med_weekly, col = study_phase) +
+  facet_grid(
+    site ~ target, labeller = label_both
+    ) +
+  geom_abline(slope = 1, intercept = 0, color = "black") +
+  geom_point(alpha = 0.5, size = 0.5) + # aes(col = study_day), 
+  scale_x_log10("Copies/swabs - Daily swabs") +
+  scale_y_log10("Copies/swabs - Weekly swabs") +
+  # scale_color_gradient(low = "dodgerblue1", high = "red") +
   coord_fixed()
 
 ```
 
 
+```{r}
+#| fig-width: 12
+#| fig-height: 6
+
+tmp |> 
+  ggplot() +
+  aes(x = copies_per_swab_med_daily, y = copies_per_swab_med_weekly, col = site) +
+  ggh4x::facet_nested_wrap(target + site ~ ., ncol = 10) +
+  geom_abline(slope = 1, intercept = 0, color = "black") +
+  geom_point(alpha = 0.5, size = 0.5) + # aes(col = study_day), 
+  scale_x_log10("Copies/swabs - Daily swabs") +
+  scale_y_log10("Copies/swabs - Weekly swabs") +
+  scale_color_manual(values = site_colors) +  
+  coord_fixed() +
+  theme(legend.position = "bottom", axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
 
 
 # Primary outcomes
