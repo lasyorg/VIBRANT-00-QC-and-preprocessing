@@ -86,8 +86,8 @@ colonization_LBP_mg <-
     total_LBP_rel_ab_at = sum(rel_ab),
     max_LBP_rel_ab_at = max(rel_ab),
     n_detected_strains_at = sum(rel_ab > 0),
-    n_detected_LC106_strains_at = sum(rel_ab[LBP == "LC-106 & LC-115"] > 0),
-    n_detected_LC115_only_strains_at = sum(rel_ab[LBP == "LC-115"] > 0)
+    n_detected_LC106_strains_at = sum(rel_ab[LBP == "LC106 & LC115"] > 0),
+    n_detected_LC115_only_strains_at = sum(rel_ab[LBP == "LC115"] > 0)
   ) |> 
   mutate(
     colonized_LBP_at_mg = (total_LBP_rel_ab_at > 0.1) | (max_LBP_rel_ab_at > 0.05)
@@ -477,8 +477,8 @@ colonization_qPCR <-
     total_LBP_rel_ab_at = sum(rel_ab),
     max_LBP_rel_ab_at = max(rel_ab),
     n_detected_strains_at = sum(copies_per_swab_med > 0),
-    n_detected_LC106_strains_at = sum(copies_per_swab_med[LBP == "LC-106 & LC-115"] > 0),
-    n_detected_LC115_only_strains_at = sum(copies_per_swab_med[LBP == "LC-115"] > 0)
+    n_detected_LC106_strains_at = sum(copies_per_swab_med[LBP == "LC106 & LC115"] > 0),
+    n_detected_LC115_only_strains_at = sum(copies_per_swab_med[LBP == "LC115"] > 0)
   ) |> 
   mutate(
     colonized_LBP_at_qpcr = (total_LBP_rel_ab_at > 0.1) | (max_LBP_rel_ab_at > 0.05),

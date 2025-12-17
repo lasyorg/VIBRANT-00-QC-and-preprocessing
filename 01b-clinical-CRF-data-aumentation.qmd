@@ -61,7 +61,8 @@ The purpose of this document is to create
   
   - `visits_variable_dictionary`
   
-
+We will first create the `participants` table with `pid`, `site`, `location`, `randomized` and `arm`, then we will build the visits table because we need the correspondance between `visit_code` and `study_day` for some of the criteria to build
+the population flags (`ITT`, `mITT` and `PP`).
 
 # Load the crf data processed in the previous step `01a clinical CRF data cleaning.qmd`
 
@@ -93,14 +94,16 @@ The `participants` table will contain one row per `pid` for all `pids` identifie
   + one of `NA` if not randomized, 
   + `Blinded` when still blinded,
   + `Pl` if randomized to the Placebo
-  + `LC-106-7` if randomized to 7 days of LC-106 after metronidazole
-  + `LC-106-3` if randomized to 3 days of LC-106 after metronidazole
-  + `LC-106-o` if randomized to 7 days of LC-106 *overlaping* with metronidazole
-  + `LC-115` if randomized to 7 days of LC-115 after metronidazole
+  + `LC106-7` if randomized to 7 days of LC106 after metronidazole
+  + `LC106-3` if randomized to 3 days of LC106 after metronidazole
+  + `LC106-o` if randomized to 7 days of LC106 *overlaping* with metronidazole
+  + `LC115` if randomized to 7 days of LC115 after metronidazole
   
 - `ITT` intention-to-treat population flag (`TRUE` or `FALSE`)
 - `mITT` modified intention-to-treat population flag (`TRUE` or `FALSE`)
 - `PP` per-protocol population flag (`TRUE` or `FALSE`)
+
+
 
 ## All `pid`s
 
@@ -172,12 +175,12 @@ participants <-
   mutate(
     arm = 
       case_when(
-        group4 == "Yes" ~ "LC-106-o",
+        group4 == "Yes" ~ "LC106-o",
         group4 == "No" ~ "Blinded",
         is.na(group4) ~ NA_character_
       ) |> 
       factor(
-        levels = c("Pl", "LC-106-7", "LC-106-3", "LC-106-o", "LC-115", "Blinded")
+        levels = c("Pl", "LC106-7", "LC106-3", "LC106-o", "LC115", "Blinded")
         )
   ) |> 
   select(-group4)
@@ -191,415 +194,6 @@ participants |>
   dplyr::count(site, randomized, arm) |> 
   gt(caption = "Number of randomized participants per site and per arm")
 
-```
-
-
-## Population flags (`ITT`, `mITT` and `PP`)
-
-The study population flags (ITT, mITT, PP) are built using the following steps
-and criteria:
-
-- We define an eligibility flag from CRF7 (we take the last screening visit for participants who came twice);
-
-- We create two variables related to sample collection from CRF35 data (Specimen collection)
-
-    - `n_swabs_post_product` that counts the total number of swabs after product administration (*i.e.,* from the first
-    follow-up visit, which is visit 1200 for all participants, including `LC-106-o` participants)) 
-    
-    - `n_swabs_post_product_prior_week7` that counts the total number of swabs from at clinic visits 1200 to 1500 (incl.).
-
-
-- We identify replaced participants from CRF44 (Replacement) to exclude participants that have been replaced from the PP;
-
-- We determine the number of missed doses from CRF23 (Product Use) and/or our "consolidated" product exposure table to identify participants who took at least one dose of study product (mITT) or 80% of the doses (PP).
-
-
-- Finally, from these variables, we can define:
-
-    -   ITT: 
-    
-        - all randomized participants (have a treatment code in CRF13) 
-    
-    -   mITT:
-
-        -   ITT &
-        
-        -   met eligibility (CRF7) &
-
-        -   `n_product_doses > 0` &
-
-        -   `n_swabs_post_product > 0`
-
-    -   PP:
-        -   ITT &
-        
-        -   not replaced (CRF44) &
-        
-        -   did not meet replacement criteria (CRFXXX, XXX, and XXX) &
-        
-        -   `n_product_doses > 0.8 * max_product_doses` &
-        
-        -   `n_swabs_post_product_prior_week7 > 0`
-        
-We first look at the eligibility from CRF7. 
-
-```{r}
-
-# ELIGIBILITY
-
-# we add information about eligibility (CRF7)
-eligibility <- 
-  crf_clean$crf7 |> 
-  select(pid, dfseq, meet_eligibility) |> 
-  arrange(pid, dfseq) |> 
-  mutate(pid = pid |> as.character()) |> 
-  group_by(pid) |> 
-  summarize(
-    n = n(),
-    meet_eligibility = last(meet_eligibility, order_by = dfseq),
-    eligibility_all = str_c(meet_eligibility |> unique(), collapse = ", ")
-  )
-
-participants <- 
-  participants |>
-  left_join(
-   eligibility |> select(pid, meet_eligibility) |> mutate(meet_eligibility = (meet_eligibility == "Yes")),
-    by = join_by(pid)
-  ) |> 
-  mutate(meet_eligibility = meet_eligibility |> replace_na(FALSE))
-
-rm(eligibility)
-
-
-participants |> dplyr::count(meet_eligibility, randomized) |> 
-  gt::gt(caption = "All eligible participants were randomized") 
-
-```
-
-Then, we look at the swabs collected at in-person visits from CRF35.
-
-```{r}
-# COLLECTED SWABS
-
-# We add information from CRF35 about collected swabs at in-person visits
-crf35_sub <- 
-  crf_clean$crf35 |>
-  select(pid, dfseq, self_collected_swabs) |>
-  mutate(pid = pid |> as.character()) |> 
-  group_by(pid) |>
-  # we count how many swabs were collected after the end of intervention (i.e., from visit 1200, for all intervention arms) 
-  mutate(
-    n_swabs_post_product = sum(self_collected_swabs[dfseq >= 1200], na.rm = TRUE),
-    n_swabs_post_product_prior_week7 = sum(self_collected_swabs[(dfseq >= 1200) & (dfseq <= 1500)], na.rm = TRUE)
-    ) |>
-  ungroup() |> 
-  select(pid, n_swabs_post_product, n_swabs_post_product_prior_week7) |>
-  distinct()
-
-participants <- 
-  participants |> 
-  select(-any_of(c("n_swabs_post_product", "n_swabs_post_product_prior_week7"))) |>
-  left_join(crf35_sub, by = "pid")  |> 
-  mutate(
-    n_swabs_post_product = n_swabs_post_product |> replace_na(0),
-    n_swabs_post_product_prior_week7 = n_swabs_post_product_prior_week7 |> replace_na(0)
-    )
-rm(crf35_sub)
-
-
-participants |> dplyr::count(randomized, n_swabs_post_product > 0, n_swabs_post_product_prior_week7 > 0) |> gt()
-
-participants |> 
-  filter(randomized, n_swabs_post_product > 0, n_swabs_post_product_prior_week7 == 0) |> 
-  left_join(crf_clean$crf35 |> mutate(pid = pid |> as.character()), by = join_by(pid)) |> 
-  gt::gt(caption = "Participants that had swabs collected in the extended follow-up period but not in the follow-up period.")
-
-```
-
-We then check if the participants have been replaced (CRF44) or met any of the replacement criteria (CFR33 for bleeding, CRF20 for antibiotics, CRF15 for HSIL pap).
-
-```{r}
-# REPLACEMENT
-# we check if participants have been replaced
-
-crf44_sub <- 
-  crf_clean$crf44 |>
-  select(pid, reason_replacement) |> 
-  mutate(replaced = TRUE) 
-
-participants <- 
-  participants |>
-  select(-any_of(c("replaced"))) |>
-  left_join(crf44_sub |> select(pid, replaced) |> mutate(pid = pid |> as.character()), by = "pid") |> 
-  mutate(replaced = replaced |> replace_na(FALSE)) 
-
-rm(crf44_sub)
-
-# or if they met any of the replacement criteria
-# from SAP:
-# 3.6.3	Bleeding
-# If a participant has 3 days of heavy bleeding (i.e. soaking a pad at least once in a day) during study product dosing, or more than 5 days in a row of heavy bleeding during follow-up, an additional participant will be added to that study arm in the remaining randomization matrix.
-# 3.6.4	Antibiotics
-# If a participant needs antibiotic treatment for any reason (recurrent BV, urinary tract infection, other) before the week 5 visit, an additional participant will be added to that study arm in the remaining randomization matrix.
-# 3.6.5	HSIL pap 
-# If the Pap smear obtained at the screening visit is read as HSIL, an additional participant will be added to that study arm in the remaining randomization matrix.
-
-
-# we use CRF 33 (daily diary) for bleeding
-
-crf33_sub <- 
-  crf_clean$crf33 |> 
-  select(pid, visit_code, vaginal_bleeding) |> 
-  left_join(crf_clean$crf13 |> select(pid, group4), by = join_by(pid)) |> 
-  mutate(
-    period = 
-      case_when(
-        (visit_code < 1000) ~ "pre-mtz",
-        (group4 == "No") & (visit_code %in% 1000:1099) ~ "mtz",
-         (group4 == "Yes") & (visit_code %in% 1001:1200) ~ "product",
-        (group4 == "No") & (visit_code %in% 1100:1200) ~ "product",
-        (visit_code %in% 1201:1500) ~ "follow-up",
-        TRUE ~ NA_character_
-      )
-  ) |> 
-  filter(period %in% c("product", "follow-up")) |> 
-  group_by(pid, period) |> 
-  summarize(
-    n_heavy_bleeding = sum(vaginal_bleeding == "Yes - Heavy", na.rm = TRUE), 
-    n_max_consecutive_heavy_bleeding = 
-      max(
-        rle(vaginal_bleeding == "Yes - Heavy")$lengths[rle(vaginal_bleeding == "Yes - Heavy")$values],
-        na.rm = TRUE
-      ),
-    .groups = "drop"
-    ) |> 
-  mutate(
-    replacement_criteria_bleeding = 
-      case_when(
-        (period == "product" & n_heavy_bleeding >= 3) ~ TRUE,
-        (period == "follow-up" & n_max_consecutive_heavy_bleeding >= 5) ~ TRUE,
-        TRUE ~ FALSE
-      )
-  ) |> 
-  group_by(pid) |> 
-  summarise(
-    replacement_criteria_bleeding = any(replacement_criteria_bleeding, na.rm = TRUE),
-    .groups = "drop"
-  ) 
-
-
-
-
-# 3.6.4	Antibiotics
-# If a participant needs antibiotic treatment for any reason (recurrent BV, urinary tract infection, other) before the week 5 visit, an additional participant will be added to that study arm in the remaining randomization matrix.
-
-# we use CRF 20 (follow-up questionnaire) for antibiotics
-crf20_sub <- 
-  crf_clean$crf20 |> 
-  select(pid, visit_code, used_during_past_week) |> 
-  filter(visit_code > 1000, visit_code <= 1500) |> 
-  group_by(pid) |> 
-  summarize(
-    any_antibiotics = any(str_detect(used_during_past_week, "antibiotic"))
-  )
-
-
-# 3.6.5	HSIL pap 
-# If the Pap smear obtained at the screening visit is read as HSIL, an additional participant will be added to that study arm in the remaining randomization matrix
-
-# we use CRF 15 (pap smear and blood) for HSIL pap 
-crf15_sub <- 
-  crf_clean$crf15 |> 
-  select(pid, visit_code, pap_smear_results) |> 
-  filter(visit_code <= 1000) |> 
-  group_by(pid) |> 
-  summarize(
-    any_HSIL = any(str_detect(pap_smear_results, "HSIL"))
-  )
-
-
-participants <- 
-  participants |>
-  select(-any_of(c("replacement_criteria_bleeding"))) |>
-  left_join(crf33_sub, by = "pid") |> 
-  mutate(replacement_criteria_bleeding = replacement_criteria_bleeding |> replace_na(FALSE)) |> 
-  select(-any_of(c("any_antibiotics"))) |>
-  left_join(crf20_sub, by = "pid") |> 
-  mutate(any_antibiotics = any_antibiotics |> replace_na(FALSE)) |> 
-  select(-any_of(c("any_HSIL"))) |>
-  left_join(crf15_sub, by = "pid") |>
-  mutate(any_HSIL = any_HSIL |> replace_na(FALSE)) |> 
-  mutate(meets_replacement_criteria = replacement_criteria_bleeding | any_antibiotics | any_HSIL) 
-
-participants |> 
-  dplyr::count(randomized, replaced, meets_replacement_criteria) |> 
-  gt(caption = "Replacement criteria")
-
-```
-
-We finally look at the product use from CRF23 (Product Use) and/or our "consolidated" product exposure table to identify participants who took at least one dose of study product (mITT) or 80% of the doses (PP).
-
-```{r}
-# PRODUCT USE
-# we add information about product use
-
-# two ways: 1 = CRF23 aggregation
-crf23_sub <- 
-  crf_clean$crf23 |>
-  select(pid, dfseq, n_missed_days) |> 
-  group_by(pid) |> 
-  summarize(
-    n_missed_days = 
-      case_when(
-        all(is.na(n_missed_days)) ~ NA_integer_,
-        TRUE ~ sum(n_missed_days, na.rm = TRUE)
-      )
-    ) |> 
-  mutate(n_study_product_doses = 7 - n_missed_days)
-
-# 2. exposures table
-# we use exposures table to get the number of study product doses
-exposures_studyproduct_summary <- 
-  exposures |> 
-  mutate(pid = pid |> as.character()) |> 
-  group_by(pid) |> 
-  summarise(
-    n_study_product_doses = sum(as.numeric(study_product), na.rm = TRUE),
-  ) |> 
-  mutate(
-    n_missed_days = 7 - n_study_product_doses
-  )
-
-full_join(
-  crf23_sub,
-  exposures_studyproduct_summary,
-  by = "pid"
-) |> 
-  filter(
-    is.na(n_study_product_doses.x) | 
-       is.na(n_study_product_doses.y) |
-    (n_study_product_doses.x != n_study_product_doses.y)
-    ) |> 
-  left_join(
-    participants |> select(pid, randomized, arm),
-    by = "pid"
-  ) |> 
-  gt(
-    caption = "Disagreement between CRF23 and exposures table"
-  )
-  
-
-participants <- 
-  participants |> 
-  select(-any_of(c("n_study_product_doses_crf23", "n_study_product_doses_exposures"))) |>
-  left_join(
-    crf23_sub |> 
-      mutate(n_study_product_doses_crf23 = n_study_product_doses) |> 
-      select(pid, n_study_product_doses_crf23),
-    by = "pid"
-  ) |> 
-  left_join(
-    exposures_studyproduct_summary |> 
-      mutate(n_study_product_doses_exposures = pmin(7, n_study_product_doses)) |> 
-      select(pid, n_study_product_doses_exposures),
-    by = "pid"
-  ) |> 
-  mutate(
-    n_study_product_doses_crf23 = n_study_product_doses_crf23 |> replace_na(0),
-    n_study_product_doses_exposures = n_study_product_doses_exposures |> replace_na(0)
-  )
-
-participants |> 
-  dplyr::count(
-    randomized, 
-    arm,
-    n_study_product_doses_crf23 > 1, 
-    n_study_product_doses_exposures  > 1
-  ) |> 
-  gt(caption = "Number of participants with more than 1 dose according to CRF23 or exposures table")
-
-
-participants |> 
-  dplyr::count(
-    randomized, 
-    arm,
-    n_study_product_doses_crf23 > 5, 
-    n_study_product_doses_exposures > 5
-  ) |> 
-  gt(caption = "Number of participants with more than 5 doses according to CRF23 or exposures table")
-
-```
-
-We create the population flags. 
-
-```{r}
-# create the flag 
-participants <- 
-  participants |> 
-  mutate(
-    ITT = randomized,
-    mITT = ITT & meet_eligibility & (n_study_product_doses_crf23 > 0) & (n_swabs_post_product > 0),
-    PP = ITT & !replaced & !meets_replacement_criteria & (n_study_product_doses_crf23 > 0.8 * 7) & (n_swabs_post_product_prior_week7 > 0)
-  )
-```
-
-```{r}
-
-participants |> 
-  dplyr::count(randomized, ITT, mITT, PP) |> 
-  gt()
-
-```
-
-
-```{r}
-
-participants <- 
-  participants |> 
-  select(pid, site, location, randomized, arm, ITT, mITT, PP, everything()) 
-
-```
-
-
-## Dictionary
-
-```{r}
-
-
-participants_variable_dictionary <- 
-  tibble(
-    variable = colnames(participants)
-  ) |> 
-  mutate(
-    description = 
-      case_when(
-        variable == "pid" ~ "Participant ID",
-        variable == "site" ~ "Study site (MGH or CAP)",
-        variable == "location" ~ "Location of the participant (US or SA)",
-        variable == "randomized" ~ "Randomized participant (TRUE or FALSE)",
-        variable == "arm" ~ "Randomization arm",
-        variable == "ITT" ~ "Intention-to-treat population flag (TRUE or FALSE)",
-        variable == "mITT" ~ "Modified intention-to-treat population flag (TRUE or FALSE)",
-        variable == "PP" ~ "Per-protocol population flag (TRUE or FALSE)",
-        variable == "meet_eligibility" ~ "Eligibility flag (TRUE or FALSE): whether participant met eligibility criteria at their last screening visit",
-        variable == "n_swabs_post_product" ~ "Number of swabs collected from visit 1200 (incl.)",
-        variable == "n_swabs_post_product_prior_week7" ~ "Number of swabs collected from visit 1200 to 1500 (incl.)",
-        variable == "replaced" ~ "Replacement flag (TRUE or FALSE): whether participant was replaced",
-        variable == "replacement_criteria_bleeding" ~ "Whether participant met replacement criteria related to bleeding.",
-        variable == "any_antibiotics" ~ "Whether participant used any antibiotics before visit 1500.",
-        variable == "any_HSIL" ~ "Whether participant had HSIL pap at screening visit.",
-        variable == "meets_replacement_criteria" ~ "Whether participant meets any of the replacement criteria (bleeding, antibiotics, HSIL pap)",
-        variable == "n_study_product_doses_crf23" ~ "Number of doses taken (as reported in CRF23; missing values imputed to 0)",
-        variable == "n_study_product_doses_exposures" ~ "Number of doses taken (as reported in exposures table)",
-        
-        TRUE ~ "???"
-      )
-  )
-
-```
-
-```{r}
-participants_variable_dictionary |> gt()
 ```
 
 
@@ -711,7 +305,7 @@ g_randomized <-
   ggplot() +
   aes(x = study_day, y = pid, col = n_distinct_study_days |> factor()) +
   geom_point(size = 0.5, alpha = 0.5) +
-  facet_grid(site + randomized ~ visit_code, scales = "free", space = "free") + 
+  facet_grid(~ visit_code , scales = "free", space = "free") + 
   scale_color_manual(values = c("steelblue1", colorRampPalette(c("red","black"))(3))) +
   # scale_x_continuous(limits = c(-100, 150)) +
   ggtitle("Randomized participants") +
@@ -1023,6 +617,433 @@ visits_variable_dictionary <-
 ```{r}
 visits_variable_dictionary |> gt()
 ```
+
+
+
+s# Population flags (`ITT`, `mITT` and `PP`)
+
+The study population flags (ITT, mITT, PP) are built using the following steps
+and criteria:
+
+- We define an eligibility flag from CRF7 (we take the last screening visit for participants who came twice);
+
+- We create two variables related to sample collection from CRF35 data (Specimen collection)
+
+    - `n_swabs_post_product` that counts the total number of swabs after product administration (*i.e.,* from the first
+    follow-up visit, which is visit 1200 for all participants, including `LC106-o` participants)) 
+    
+    - `n_swabs_post_product_prior_week7` that counts the total number of swabs from at clinic visits 1200 to 1500 (incl.).
+
+
+- We identify replaced participants from CRF44 (Replacement) to exclude participants that have been replaced from the PP;
+
+- We determine the number of missed doses from CRF23 (Product Use) and/or our "consolidated" product exposure table to identify participants who took at least one dose of study product (mITT) or 80% of the doses (PP).
+
+- We identif participants who take a concomitant antibiotics (ciprofloxacin, fosfomycin or metonidazole) betweenn day 7 and day 35 from CRF31 to exclude them from the PP;
+
+
+- Finally, from these variables, we can define:
+
+    -   ITT: 
+    
+        - all randomized participants (have a treatment code in CRF13) 
+    
+    -   mITT:
+
+        -   ITT &
+        
+        -   met eligibility (CRF7) &
+
+        -   `n_product_doses > 0` &
+
+        -   `n_swabs_post_product > 0`
+
+    -   PP:
+        -   ITT &
+        
+        -   not replaced (CRF44) &
+        
+        -   did not meet replacement criteria (CRF33, 20, 31 and 15) &
+        
+        -   `n_product_doses > 0.8 * max_product_doses` &
+        
+        -   `n_swabs_post_product_prior_week7 > 0`
+        
+We first look at the eligibility from CRF7. 
+
+```{r}
+
+# ELIGIBILITY
+
+# we add information about eligibility (CRF7)
+eligibility <- 
+  crf_clean$crf7 |> 
+  select(pid, dfseq, meet_eligibility) |> 
+  arrange(pid, dfseq) |> 
+  mutate(pid = pid |> as.character()) |> 
+  group_by(pid) |> 
+  summarize(
+    n = n(),
+    meet_eligibility = last(meet_eligibility, order_by = dfseq),
+    eligibility_all = str_c(meet_eligibility |> unique(), collapse = ", ")
+  )
+
+participants <- 
+  participants |>
+  left_join(
+   eligibility |> select(pid, meet_eligibility) |> mutate(meet_eligibility = (meet_eligibility == "Yes")),
+    by = join_by(pid)
+  ) |> 
+  mutate(meet_eligibility = meet_eligibility |> replace_na(FALSE))
+
+rm(eligibility)
+
+
+participants |> dplyr::count(meet_eligibility, randomized) |> 
+  gt::gt(caption = "All eligible participants were randomized") 
+
+```
+
+Then, we look at the swabs collected at in-person visits from CRF35.
+
+```{r}
+# COLLECTED SWABS
+
+# We add information from CRF35 about collected swabs at in-person visits
+crf35_sub <- 
+  crf_clean$crf35 |>
+  select(pid, dfseq, self_collected_swabs) |>
+  mutate(pid = pid |> as.character()) |> 
+  group_by(pid) |>
+  # we count how many swabs were collected after the end of intervention (i.e., from visit 1200, for all intervention arms) 
+  mutate(
+    n_swabs_post_product = sum(self_collected_swabs[dfseq >= 1200], na.rm = TRUE),
+    n_swabs_post_product_prior_week7 = sum(self_collected_swabs[(dfseq >= 1200) & (dfseq <= 1500)], na.rm = TRUE)
+    ) |>
+  ungroup() |> 
+  select(pid, n_swabs_post_product, n_swabs_post_product_prior_week7) |>
+  distinct()
+
+participants <- 
+  participants |> 
+  select(-any_of(c("n_swabs_post_product", "n_swabs_post_product_prior_week7"))) |>
+  left_join(crf35_sub, by = "pid")  |> 
+  mutate(
+    n_swabs_post_product = n_swabs_post_product |> replace_na(0),
+    n_swabs_post_product_prior_week7 = n_swabs_post_product_prior_week7 |> replace_na(0)
+    )
+rm(crf35_sub)
+
+
+participants |> dplyr::count(randomized, n_swabs_post_product > 0, n_swabs_post_product_prior_week7 > 0) |> gt()
+
+participants |> 
+  filter(randomized, n_swabs_post_product > 0, n_swabs_post_product_prior_week7 == 0) |> 
+  left_join(crf_clean$crf35 |> mutate(pid = pid |> as.character()), by = join_by(pid)) |> 
+  gt::gt(caption = "Participants that had swabs collected in the extended follow-up period but not in the follow-up period.")
+
+```
+
+We then check if the participants have been replaced (CRF44) or met any of the replacement criteria (CFR33 for bleeding, CRF20/31 for antibiotics), CRF15 for HSIL pap).
+
+```{r}
+# REPLACEMENT
+# we check if participants have been replaced
+
+crf44_sub <- 
+  crf_clean$crf44 |>
+  select(pid, reason_replacement) |> 
+  mutate(replaced = TRUE) 
+
+participants <- 
+  participants |>
+  select(-any_of(c("replaced"))) |>
+  left_join(crf44_sub |> select(pid, replaced) |> mutate(pid = pid |> as.character()), by = "pid") |> 
+  mutate(replaced = replaced |> replace_na(FALSE)) 
+
+rm(crf44_sub)
+
+# or if they met any of the replacement criteria
+# from SAP:
+# 3.6.3	Bleeding
+# If a participant has 3 days of heavy bleeding (i.e. soaking a pad at least once in a day) during study product dosing, or more than 5 days in a row of heavy bleeding during follow-up, an additional participant will be added to that study arm in the remaining randomization matrix.
+# 3.6.4	Antibiotics
+# If a participant needs antibiotic treatment for any reason (recurrent BV, urinary tract infection, other) before the week 5 visit, an additional participant will be added to that study arm in the remaining randomization matrix.
+# 3.6.5	HSIL pap 
+# If the Pap smear obtained at the screening visit is read as HSIL, an additional participant will be added to that study arm in the remaining randomization matrix.
+
+
+# we use CRF 33 (daily diary) for bleeding
+
+crf33_sub <- 
+  crf_clean$crf33 |> 
+  select(pid, visit_code, vaginal_bleeding) |> 
+  left_join(crf_clean$crf13 |> select(pid, group4), by = join_by(pid)) |> 
+  mutate(
+    period = 
+      case_when(
+        (visit_code < 1000) ~ "pre-mtz",
+        (group4 == "No") & (visit_code %in% 1000:1099) ~ "mtz",
+         (group4 == "Yes") & (visit_code %in% 1001:1200) ~ "product",
+        (group4 == "No") & (visit_code %in% 1100:1200) ~ "product",
+        (visit_code %in% 1201:1500) ~ "follow-up",
+        TRUE ~ NA_character_
+      )
+  ) |> 
+  filter(period %in% c("product", "follow-up")) |> 
+  group_by(pid, period) |> 
+  summarize(
+    n_heavy_bleeding = sum(vaginal_bleeding == "Yes - Heavy", na.rm = TRUE), 
+    n_max_consecutive_heavy_bleeding = 
+      max(
+        rle(vaginal_bleeding == "Yes - Heavy")$lengths[rle(vaginal_bleeding == "Yes - Heavy")$values],
+        na.rm = TRUE
+      ),
+    .groups = "drop"
+    ) |> 
+  mutate(
+    replacement_criteria_bleeding = 
+      case_when(
+        (period == "product" & n_heavy_bleeding >= 3) ~ TRUE,
+        (period == "follow-up" & n_max_consecutive_heavy_bleeding >= 5) ~ TRUE,
+        TRUE ~ FALSE
+      )
+  ) |> 
+  group_by(pid) |> 
+  summarise(
+    replacement_criteria_bleeding = any(replacement_criteria_bleeding, na.rm = TRUE),
+    .groups = "drop"
+  ) 
+
+
+
+
+# 3.6.4	Antibiotics
+# If a participant needs antibiotic treatment for any reason (recurrent BV, urinary tract infection, other) before the week 5 visit, an additional participant will be added to that study arm in the remaining randomization matrix.
+
+# we use CRF 20 (follow-up questionnaire) for antibiotics
+crf20_sub <- 
+  crf_clean$crf20 |> 
+  select(pid, visit_code, used_during_past_week) |> 
+  filter(visit_code > 1000, visit_code <= 1500) |> 
+  group_by(pid) |> 
+  summarize(
+    any_antibiotics = any(str_detect(used_during_past_week, "antibiotic"))
+  )
+
+# we use CRF 31 (concomitant medications) for antibiotics, we filter participants who take ciprofloxacin, fosfomycin or metronidazole before study_day 35
+
+crf31_sub <- 
+  crf_clean$crf31 |> 
+  select(pid, med_start_relative_date, medication) |> 
+  left_join(visits |> filter(visit_code == "1500") |> select(pid, visit_code, study_day), by = "pid") |> 
+  filter(str_detect(medication, regex("METRONIDAZOLE|FLAGYL|FOSFOMYCIN|CIPROFLOXACIN|CIPROBAY", ignore_case = TRUE))) |>
+  filter(med_start_relative_date < study_day) |> #  med_start_relative_date > 7 
+  mutate(
+    any_antibiotics_crf31 = TRUE
+  ) |> 
+    select(pid, any_antibiotics_crf31)
+
+# 3.6.5	HSIL pap 
+# If the Pap smear obtained at the screening visit is read as HSIL, an additional participant will be added to that study arm in the remaining randomization matrix
+
+# we use CRF 15 (pap smear and blood) for HSIL pap 
+crf15_sub <- 
+  crf_clean$crf15 |> 
+  select(pid, visit_code, pap_smear_results) |> 
+  filter(visit_code <= 1000) |> 
+  group_by(pid) |> 
+  summarize(
+    any_HSIL = any(str_detect(pap_smear_results, "HSIL"))
+  )
+
+
+participants <- 
+  participants |>
+  select(-any_of(c("replacement_criteria_bleeding"))) |>
+  left_join(crf33_sub, by = "pid") |> 
+  mutate(replacement_criteria_bleeding = replacement_criteria_bleeding |> replace_na(FALSE)) |> 
+  select(-any_of(c("any_antibiotics"))) |>
+  left_join(crf20_sub, by = "pid") |> 
+  mutate(any_antibiotics = any_antibiotics |> replace_na(FALSE)) |> 
+  left_join(crf31_sub, by = "pid") |>
+  mutate(any_antibiotics_crf31 = any_antibiotics_crf31 |> replace_na(FALSE)) |>
+  select(-any_of(c("any_HSIL"))) |>
+  left_join(crf15_sub, by = "pid") |>
+  mutate(any_HSIL = any_HSIL |> replace_na(FALSE)) |> 
+  mutate(meets_replacement_criteria = replacement_criteria_bleeding | any_antibiotics | any_antibiotics_crf31 | any_HSIL) 
+
+participants |> 
+  dplyr::count(randomized, replaced, meets_replacement_criteria) |> 
+  gt(caption = "Replacement criteria")
+
+```
+
+We finally look at the product use from CRF23 (Product Use) and/or our "consolidated" product exposure table to identify participants who took at least one dose of study product (mITT) or 80% of the doses (PP).
+
+```{r}
+# PRODUCT USE
+# we add information about product use
+
+# two ways: 1 = CRF23 aggregation
+crf23_sub <- 
+  crf_clean$crf23 |>
+  select(pid, dfseq, n_missed_days) |> 
+  group_by(pid) |> 
+  summarize(
+    n_missed_days = 
+      case_when(
+        all(is.na(n_missed_days)) ~ NA_integer_,
+        TRUE ~ sum(n_missed_days, na.rm = TRUE)
+      )
+    ) |> 
+  mutate(n_study_product_doses = 7 - n_missed_days)
+
+# 2. exposures table
+# we use exposures table to get the number of study product doses
+exposures_studyproduct_summary <- 
+  exposures |> 
+  mutate(pid = pid |> as.character()) |> 
+  group_by(pid) |> 
+  summarise(
+    n_study_product_doses = sum(as.numeric(study_product), na.rm = TRUE),
+  ) |> 
+  mutate(
+    n_missed_days = 7 - n_study_product_doses
+  )
+
+full_join(
+  crf23_sub,
+  exposures_studyproduct_summary,
+  by = "pid"
+) |> 
+  filter(
+    is.na(n_study_product_doses.x) | 
+       is.na(n_study_product_doses.y) |
+    (n_study_product_doses.x != n_study_product_doses.y)
+    ) |> 
+  left_join(
+    participants |> select(pid, randomized, arm),
+    by = "pid"
+  ) |> 
+  gt(
+    caption = "Disagreement between CRF23 and exposures table"
+  )
+  
+
+participants <- 
+  participants |> 
+  select(-any_of(c("n_study_product_doses_crf23", "n_study_product_doses_exposures"))) |>
+  left_join(
+    crf23_sub |> 
+      mutate(n_study_product_doses_crf23 = n_study_product_doses) |> 
+      select(pid, n_study_product_doses_crf23),
+    by = "pid"
+  ) |> 
+  left_join(
+    exposures_studyproduct_summary |> 
+      mutate(n_study_product_doses_exposures = pmin(7, n_study_product_doses)) |> 
+      select(pid, n_study_product_doses_exposures),
+    by = "pid"
+  ) |> 
+  mutate(
+    n_study_product_doses_crf23 = n_study_product_doses_crf23 |> replace_na(0),
+    n_study_product_doses_exposures = n_study_product_doses_exposures |> replace_na(0)
+  )
+
+participants |> 
+  dplyr::count(
+    randomized, 
+    arm,
+    n_study_product_doses_crf23 > 1, 
+    n_study_product_doses_exposures  > 1
+  ) |> 
+  gt(caption = "Number of participants with more than 1 dose according to CRF23 or exposures table")
+
+
+participants |> 
+  dplyr::count(
+    randomized, 
+    arm,
+    n_study_product_doses_crf23 > 5, 
+    n_study_product_doses_exposures > 5
+  ) |> 
+  gt(caption = "Number of participants with more than 5 doses according to CRF23 or exposures table")
+
+```
+
+We create the population flags. 
+
+```{r}
+# create the flag 
+participants <- 
+  participants |> 
+  mutate(
+    ITT = randomized,
+    mITT = ITT & meet_eligibility & (n_study_product_doses_crf23 > 0) & (n_swabs_post_product > 0),
+    PP = ITT & !replaced & !meets_replacement_criteria & (n_study_product_doses_crf23 > 0.8 * 7) & (n_swabs_post_product_prior_week7 > 0)
+  )
+```
+
+```{r}
+
+participants |> 
+  dplyr::count(randomized, ITT, mITT, PP) |> 
+  gt()
+
+```
+
+
+```{r}
+
+participants <- 
+  participants |> 
+  select(pid, site, location, randomized, arm, ITT, mITT, PP, everything()) 
+
+```
+
+
+## Dictionary
+
+```{r}
+
+
+participants_variable_dictionary <- 
+  tibble(
+    variable = colnames(participants)
+  ) |> 
+  mutate(
+    description = 
+      case_when(
+        variable == "pid" ~ "Participant ID",
+        variable == "site" ~ "Study site (MGH or CAP)",
+        variable == "location" ~ "Location of the participant (US or SA)",
+        variable == "randomized" ~ "Randomized participant (TRUE or FALSE)",
+        variable == "arm" ~ "Randomization arm",
+        variable == "ITT" ~ "Intention-to-treat population flag (TRUE or FALSE)",
+        variable == "mITT" ~ "Modified intention-to-treat population flag (TRUE or FALSE)",
+        variable == "PP" ~ "Per-protocol population flag (TRUE or FALSE)",
+        variable == "meet_eligibility" ~ "Eligibility flag (TRUE or FALSE): whether participant met eligibility criteria at their last screening visit",
+        variable == "n_swabs_post_product" ~ "Number of swabs collected from visit 1200 (incl.)",
+        variable == "n_swabs_post_product_prior_week7" ~ "Number of swabs collected from visit 1200 to 1500 (incl.)",
+        variable == "replaced" ~ "Replacement flag (TRUE or FALSE): whether participant was replaced",
+        variable == "replacement_criteria_bleeding" ~ "Whether participant met replacement criteria related to bleeding.",
+        variable == "any_antibiotics" ~ "Whether participant used any antibiotics before visit 1500.",
+        variable == "any_HSIL" ~ "Whether participant had HSIL pap at screening visit.",
+        variable == "meets_replacement_criteria" ~ "Whether participant meets any of the replacement criteria (bleeding, antibiotics, HSIL pap)",
+        variable == "n_study_product_doses_crf23" ~ "Number of doses taken (as reported in CRF23; missing values imputed to 0)",
+        variable == "n_study_product_doses_exposures" ~ "Number of doses taken (as reported in exposures table)",
+        
+        TRUE ~ "???"
+      )
+  )
+
+```
+
+```{r}
+participants_variable_dictionary |> gt()
+```
+
 
 
 # Exports

@@ -1251,7 +1251,7 @@ visits_crfs_merged |>
 
 ```{r}
 visits_crfs_merged |> 
-  select(pid, visit_code, new_sex_partner) |> View()
+  select(pid, visit_code, new_sex_partner)
 ```
 
 # Exports

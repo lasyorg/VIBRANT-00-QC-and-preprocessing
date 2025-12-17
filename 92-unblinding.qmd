@@ -90,10 +90,10 @@ mgh_arm_data <-
   mutate(
     treatment_code = PHARMCODE,
     arm = case_when(
-      TREATMENT == "LC-106 daily for 7d after metronidazole treatment" ~ "LC-106-7",
-      TREATMENT == "LC-106 daily for 3d + 4 d of placebo, starting after metronidazole treatment" ~ "LC-106-3",
-      TREATMENT == "LC-106 daily for 7d, starting on day 3 of metronidazole treatment" ~ "LC-106-o",
-      TREATMENT == "LC-115 daily for 7d after metronidazole treatment" ~ "LC-115",
+      TREATMENT == "LC-106 daily for 7d after metronidazole treatment" ~ "LC106-7",
+      TREATMENT == "LC-106 daily for 3d + 4 d of placebo, starting after metronidazole treatment" ~ "LC106-3",
+      TREATMENT == "LC-106 daily for 7d, starting on day 3 of metronidazole treatment" ~ "LC106-o",
+      TREATMENT == "LC-115 daily for 7d after metronidazole treatment" ~ "LC115",
       TREATMENT == "Placebo daily for 7d after metronidazole treatment (Control for LC-106)" ~ "Pl",
       TRUE ~ NA_character_
     )
@@ -108,10 +108,10 @@ cap_arm_data <-
   mutate(
     treatment_code = PHARM_CODE,
     arm = case_when(
-      TREATMENT_NAME == "LC-106 daily for 7d after metronidazole treatment" ~ "LC-106-7",
-      TREATMENT_NAME == "LC-106 daily for 3d + 4 d of placebo, starting after metronidazole treatment" ~ "LC-106-3",
-      TREATMENT_NAME == "LC-106 daily for 7d, starting on day 3 of metronidazole treatment" ~ "LC-106-o",
-      TREATMENT_NAME == "LC-115 daily for 7d after metronidazole treatment" ~ "LC-115",
+      TREATMENT_NAME == "LC-106 daily for 7d after metronidazole treatment" ~ "LC106-7",
+      TREATMENT_NAME == "LC-106 daily for 3d + 4 d of placebo, starting after metronidazole treatment" ~ "LC106-3",
+      TREATMENT_NAME == "LC-106 daily for 7d, starting on day 3 of metronidazole treatment" ~ "LC106-o",
+      TREATMENT_NAME == "LC-115 daily for 7d after metronidazole treatment" ~ "LC115",
       TREATMENT_NAME == "Placebo daily for 7d after metronidazole treatment (Control for LC-106)" ~ "Pl",
       TRUE ~ NA_character_
     )
@@ -127,8 +127,8 @@ cap_arm_data <-
 ```{r}
 #| eval: false
 
-all(mgh_arm_data$arm[mgh_arm_data$group4 == "Yes"] == "LC-106-o", na.rm = TRUE)
-all(cap_arm_data$arm[cap_arm_data$group4 == "Yes"] == "LC-106-o", na.rm = TRUE)
+all(mgh_arm_data$arm[mgh_arm_data$group4 == "Yes"] == "LC106-o", na.rm = TRUE)
+all(cap_arm_data$arm[cap_arm_data$group4 == "Yes"] == "LC106-o", na.rm = TRUE)
 
 ```
 
@@ -143,7 +143,7 @@ arm_data <-
     arm = 
       arm |> 
       factor(
-        levels = c("Pl", "LC-106-7", "LC-106-3", "LC-106-o", "LC-115", "Blinded")
+        levels = c("Pl", "LC106-7", "LC106-3", "LC106-o", "LC115", "Blinded")
       )
   )
   
