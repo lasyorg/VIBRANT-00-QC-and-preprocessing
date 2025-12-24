@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="Laura Vermeren, Laura Symul">
-<meta name="dcterms.date" content="2025-11-15">
+<meta name="dcterms.date" content="2025-12-24">
 
 <title>VIBRANT subsetting MAE</title>
 <style>
@@ -2208,7 +2208,7 @@ vertical-align: -.125em;
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">November 15, 2025</p>
+      <p class="date">December 24, 2025</p>
     </div>
   </div>
   
@@ -2281,7 +2281,7 @@ Note
 <span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">str_c</span>(<span class="st">&quot;Loading the RDS file containing the unblinded VIBRANT MAE: /&quot;</span>, mae_file <span class="sc">|&gt;</span> <span class="fu">str_remove</span>(<span class="fu">data_dir</span>()), <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>Loading the RDS file containing the unblinded VIBRANT MAE: /04 unblinded MAEs/mae_full_20251115.rds</code></pre>
+<pre><code>Loading the RDS file containing the unblinded VIBRANT MAE: /04 unblinded MAEs/mae_full_20251224.rds</code></pre>
 </div>
 <details class="code-fold">
 <summary>Code</summary>
@@ -2352,56 +2352,62 @@ Functionality:
 <span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>  <span class="at">experiments =</span> selected_experiments,</span>
 <span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>  <span class="at">colData =</span> <span class="fu">colData</span>(mae_randomized),</span>
 <span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>  <span class="at">metadata =</span> <span class="fu">metadata</span>(mae_randomized)</span>
-<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a><span class="co"># Meta data </span></span>
-<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a><span class="do">## filtering partcipant_crfs_merged</span></span>
-<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>vars_participant <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">&quot;pid&quot;</span>, <span class="st">&quot;site&quot;</span>, <span class="st">&quot;age&quot;</span>, <span class="st">&quot;race&quot;</span>, <span class="st">&quot;ethn&quot;</span>, <span class="st">&quot;cut_size_meals&quot;</span>, <span class="st">&quot;eat_less&quot;</span>, <span class="st">&quot;hungry_did_not_eat&quot;</span>,</span>
-<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>                      <span class="st">&quot;sexual_partners_lifetime&quot;</span>, <span class="st">&quot;sexual_partners_past_month&quot;</span>, <span class="st">&quot;contraception_method&quot;</span>,</span>
-<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>                      <span class="st">&quot;used_applicators&quot;</span>, <span class="st">&quot;number_applicators&quot;</span>, <span class="st">&quot;applicator_stain_positive&quot;</span>,</span>
-<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>                      <span class="st">&quot;applicator_stain_negative&quot;</span>, <span class="st">&quot;applicator_stain_indeterminant&quot;</span>,</span>
-<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>                      <span class="st">&quot;total_applicators_stained&quot;</span>, <span class="st">&quot;proportion_positive_applicators&quot;</span>, <span class="st">&quot;total&quot;</span>)</span>
-<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a><span class="do">## filtering visits_crfs_merged</span></span>
-<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a>vars_visits <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">&quot;pid&quot;</span>, <span class="st">&quot;visit_code&quot;</span>, <span class="st">&quot;study_day&quot;</span>, </span>
-<span id="cb7-25"><a href="#cb7-25" aria-hidden="true" tabindex="-1"></a>                 <span class="st">&quot;past_week_sex_partner&quot;</span>, <span class="st">&quot;insert_study_product_time&quot;</span>, <span class="st">&quot;nugent_total_score&quot;</span>)</span>
-<span id="cb7-26"><a href="#cb7-26" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-27"><a href="#cb7-27" aria-hidden="true" tabindex="-1"></a><span class="do">## new metadata</span></span>
-<span id="cb7-28"><a href="#cb7-28" aria-hidden="true" tabindex="-1"></a>new_metadata <span class="ot">&lt;-</span> </span>
-<span id="cb7-29"><a href="#cb7-29" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(</span>
-<span id="cb7-30"><a href="#cb7-30" aria-hidden="true" tabindex="-1"></a>    <span class="at">participant_crfs_merged =</span> <span class="fu">metadata</span>(mae_1)<span class="sc">$</span>participant_crfs_merged[, vars_participant],</span>
-<span id="cb7-31"><a href="#cb7-31" aria-hidden="true" tabindex="-1"></a>    <span class="at">visits_crfs_merged =</span> <span class="fu">metadata</span>(mae_1)<span class="sc">$</span>visits_crfs_merged[, vars_visits],</span>
-<span id="cb7-32"><a href="#cb7-32" aria-hidden="true" tabindex="-1"></a>    <span class="at">exposures =</span> <span class="fu">metadata</span>(mae_1)<span class="sc">$</span>exposures  </span>
-<span id="cb7-33"><a href="#cb7-33" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb7-34"><a href="#cb7-34" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-35"><a href="#cb7-35" aria-hidden="true" tabindex="-1"></a><span class="fu">metadata</span>(mae_1) <span class="ot">&lt;-</span> new_metadata</span>
-<span id="cb7-36"><a href="#cb7-36" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-37"><a href="#cb7-37" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-38"><a href="#cb7-38" aria-hidden="true" tabindex="-1"></a><span class="co"># filtering coldata</span></span>
-<span id="cb7-39"><a href="#cb7-39" aria-hidden="true" tabindex="-1"></a>vars_coldata <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">&quot;ITT&quot;</span>, <span class="st">&quot;mITT&quot;</span>, <span class="st">&quot;PP&quot;</span>, <span class="st">&quot;PIPV&quot;</span>, <span class="st">&quot;randomized&quot;</span>, </span>
-<span id="cb7-40"><a href="#cb7-40" aria-hidden="true" tabindex="-1"></a>                  <span class="st">&quot;site&quot;</span>, <span class="st">&quot;location&quot;</span>, <span class="st">&quot;arm&quot;</span>, </span>
-<span id="cb7-41"><a href="#cb7-41" aria-hidden="true" tabindex="-1"></a>                  <span class="st">&quot;visit_code&quot;</span>, <span class="st">&quot;visit_type&quot;</span>, <span class="st">&quot;study_week&quot;</span>)</span>
-<span id="cb7-42"><a href="#cb7-42" aria-hidden="true" tabindex="-1"></a><span class="fu">colData</span>(mae_randomized) <span class="ot">&lt;-</span> <span class="fu">colData</span>(mae_randomized)[, vars_coldata]</span>
-<span id="cb7-43"><a href="#cb7-43" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-44"><a href="#cb7-44" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-45"><a href="#cb7-45" aria-hidden="true" tabindex="-1"></a><span class="co"># filtering the SE </span></span>
-<span id="cb7-46"><a href="#cb7-46" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-47"><a href="#cb7-47" aria-hidden="true" tabindex="-1"></a><span class="co"># 1. mg </span></span>
-<span id="cb7-48"><a href="#cb7-48" aria-hidden="true" tabindex="-1"></a><span class="fu">assays</span>(mae_1[[<span class="st">&quot;mg&quot;</span>]]) <span class="ot">&lt;-</span> <span class="fu">assays</span>(mae_1[[<span class="st">&quot;mg&quot;</span>]])[<span class="fu">c</span>(<span class="st">&quot;rel_ab_all&quot;</span>, <span class="st">&quot;rel_ab_bact&quot;</span>, <span class="st">&quot;rel_ab&quot;</span>)]</span>
-<span id="cb7-49"><a href="#cb7-49" aria-hidden="true" tabindex="-1"></a><span class="fu">colData</span>(mae_1[[<span class="st">&quot;mg&quot;</span>]]) <span class="ot">&lt;-</span> <span class="fu">colData</span>(mae_1[[<span class="st">&quot;mg&quot;</span>]])[, <span class="fu">c</span>(<span class="st">&quot;uid&quot;</span>, <span class="st">&quot;poor_quality_mg_data&quot;</span>)]</span>
-<span id="cb7-50"><a href="#cb7-50" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-51"><a href="#cb7-51" aria-hidden="true" tabindex="-1"></a><span class="co"># 2. qPCR</span></span>
-<span id="cb7-52"><a href="#cb7-52" aria-hidden="true" tabindex="-1"></a><span class="fu">assays</span>(mae[[<span class="st">&quot;qPCR&quot;</span>]]) <span class="ot">&lt;-</span> <span class="fu">assays</span>(mae[[<span class="st">&quot;qPCR&quot;</span>]])[<span class="fu">c</span>(<span class="st">&quot;copies_per_swab_med&quot;</span>)]</span>
-<span id="cb7-53"><a href="#cb7-53" aria-hidden="true" tabindex="-1"></a><span class="fu">colData</span>(mae[[<span class="st">&quot;qPCR&quot;</span>]]) <span class="ot">&lt;-</span> <span class="fu">colData</span>(mae[[<span class="st">&quot;qPCR&quot;</span>]])[, <span class="fu">c</span>(<span class="st">&quot;uid&quot;</span>, <span class="st">&quot;qpcr_sample_type&quot;</span>)]</span>
-<span id="cb7-54"><a href="#cb7-54" aria-hidden="true" tabindex="-1"></a><span class="fu">rowData</span>(mae[[<span class="st">&quot;qPCR&quot;</span>]]) <span class="ot">&lt;-</span> <span class="fu">rowData</span>(mae[[<span class="st">&quot;qPCR&quot;</span>]])[, <span class="fu">c</span>(<span class="st">&quot;taxon_label&quot;</span>, <span class="st">&quot;LBP&quot;</span>, <span class="st">&quot;strain_origin&quot;</span>)]</span>
-<span id="cb7-55"><a href="#cb7-55" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-56"><a href="#cb7-56" aria-hidden="true" tabindex="-1"></a><span class="co"># 3. qPCR_daily</span></span>
-<span id="cb7-57"><a href="#cb7-57" aria-hidden="true" tabindex="-1"></a><span class="fu">assays</span>(mae[[<span class="st">&quot;qPCR_daily&quot;</span>]]) <span class="ot">&lt;-</span> <span class="fu">assays</span>(mae[[<span class="st">&quot;qPCR_daily&quot;</span>]])[<span class="fu">c</span>(<span class="st">&quot;copies_per_swab_med&quot;</span>)]</span>
-<span id="cb7-58"><a href="#cb7-58" aria-hidden="true" tabindex="-1"></a><span class="fu">colData</span>(mae[[<span class="st">&quot;qPCR_daily&quot;</span>]]) <span class="ot">&lt;-</span> <span class="fu">colData</span>(mae[[<span class="st">&quot;qPCR_daily&quot;</span>]])[, <span class="fu">c</span>(<span class="st">&quot;uid&quot;</span>, <span class="st">&quot;qpcr_sample_type&quot;</span>)]</span>
-<span id="cb7-59"><a href="#cb7-59" aria-hidden="true" tabindex="-1"></a><span class="fu">rowData</span>(mae[[<span class="st">&quot;qPCR_daily&quot;</span>]]) <span class="ot">&lt;-</span> <span class="fu">rowData</span>(mae[[<span class="st">&quot;qPCR_daily&quot;</span>]])[, <span class="fu">c</span>(<span class="st">&quot;taxon_label&quot;</span>, <span class="st">&quot;LBP&quot;</span>, <span class="st">&quot;strain_origin&quot;</span>)]</span>
-<span id="cb7-60"><a href="#cb7-60" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-61"><a href="#cb7-61" aria-hidden="true" tabindex="-1"></a><span class="co"># 4. col_LBP_mg, col_LBP_qPCR, col_crispatus_mg : no changes</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stderr">
+<pre><code>harmonizing input:
+  removing 870 colData rownames not in sampleMap &#39;primary&#39;</code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Meta data </span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="do">## filtering partcipant_crfs_merged</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>vars_participant <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">&quot;pid&quot;</span>, <span class="st">&quot;site&quot;</span>, <span class="st">&quot;age&quot;</span>, <span class="st">&quot;race&quot;</span>, <span class="st">&quot;ethn&quot;</span>, <span class="st">&quot;cut_size_meals&quot;</span>, <span class="st">&quot;eat_less&quot;</span>, <span class="st">&quot;hungry_did_not_eat&quot;</span>,</span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>                      <span class="st">&quot;sexual_partners_lifetime&quot;</span>, <span class="st">&quot;sexual_partners_past_month&quot;</span>, <span class="st">&quot;contraception_method&quot;</span>,</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>                      <span class="st">&quot;used_applicators&quot;</span>, <span class="st">&quot;number_applicators&quot;</span>, <span class="st">&quot;applicator_stain_positive&quot;</span>,</span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>                      <span class="st">&quot;applicator_stain_negative&quot;</span>, <span class="st">&quot;applicator_stain_indeterminant&quot;</span>,</span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>                      <span class="st">&quot;total_applicators_stained&quot;</span>, <span class="st">&quot;proportion_positive_applicators&quot;</span>, <span class="st">&quot;total&quot;</span>)</span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a><span class="do">## filtering visits_crfs_merged</span></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>vars_visits <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">&quot;pid&quot;</span>, <span class="st">&quot;visit_code&quot;</span>, <span class="st">&quot;study_day&quot;</span>, </span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>                 <span class="st">&quot;past_week_sex_partner&quot;</span>, <span class="st">&quot;insert_study_product_time&quot;</span>, <span class="st">&quot;nugent_total_score&quot;</span>)</span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a><span class="do">## new metadata</span></span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a>new_metadata <span class="ot">&lt;-</span> </span>
+<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(</span>
+<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a>    <span class="at">participant_crfs_merged =</span> <span class="fu">metadata</span>(mae_1)<span class="sc">$</span>participant_crfs_merged[, vars_participant],</span>
+<span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a>    <span class="at">visits_crfs_merged =</span> <span class="fu">metadata</span>(mae_1)<span class="sc">$</span>visits_crfs_merged[, vars_visits],</span>
+<span id="cb9-19"><a href="#cb9-19" aria-hidden="true" tabindex="-1"></a>    <span class="at">exposures =</span> <span class="fu">metadata</span>(mae_1)<span class="sc">$</span>exposures  </span>
+<span id="cb9-20"><a href="#cb9-20" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb9-21"><a href="#cb9-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-22"><a href="#cb9-22" aria-hidden="true" tabindex="-1"></a><span class="fu">metadata</span>(mae_1) <span class="ot">&lt;-</span> new_metadata</span>
+<span id="cb9-23"><a href="#cb9-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-24"><a href="#cb9-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-25"><a href="#cb9-25" aria-hidden="true" tabindex="-1"></a><span class="co"># filtering coldata</span></span>
+<span id="cb9-26"><a href="#cb9-26" aria-hidden="true" tabindex="-1"></a>vars_coldata <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">&quot;ITT&quot;</span>, <span class="st">&quot;mITT&quot;</span>, <span class="st">&quot;PP&quot;</span>, <span class="st">&quot;PIPV&quot;</span>, <span class="st">&quot;randomized&quot;</span>, </span>
+<span id="cb9-27"><a href="#cb9-27" aria-hidden="true" tabindex="-1"></a>                  <span class="st">&quot;site&quot;</span>, <span class="st">&quot;location&quot;</span>, <span class="st">&quot;arm&quot;</span>, </span>
+<span id="cb9-28"><a href="#cb9-28" aria-hidden="true" tabindex="-1"></a>                  <span class="st">&quot;visit_code&quot;</span>, <span class="st">&quot;visit_type&quot;</span>, <span class="st">&quot;study_week&quot;</span>)</span>
+<span id="cb9-29"><a href="#cb9-29" aria-hidden="true" tabindex="-1"></a><span class="fu">colData</span>(mae_randomized) <span class="ot">&lt;-</span> <span class="fu">colData</span>(mae_randomized)[, vars_coldata]</span>
+<span id="cb9-30"><a href="#cb9-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-31"><a href="#cb9-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-32"><a href="#cb9-32" aria-hidden="true" tabindex="-1"></a><span class="co"># filtering the SE </span></span>
+<span id="cb9-33"><a href="#cb9-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-34"><a href="#cb9-34" aria-hidden="true" tabindex="-1"></a><span class="co"># 1. mg </span></span>
+<span id="cb9-35"><a href="#cb9-35" aria-hidden="true" tabindex="-1"></a><span class="fu">assays</span>(mae_1[[<span class="st">&quot;mg&quot;</span>]]) <span class="ot">&lt;-</span> <span class="fu">assays</span>(mae_1[[<span class="st">&quot;mg&quot;</span>]])[<span class="fu">c</span>(<span class="st">&quot;rel_ab_all&quot;</span>, <span class="st">&quot;rel_ab_bact&quot;</span>, <span class="st">&quot;rel_ab&quot;</span>)]</span>
+<span id="cb9-36"><a href="#cb9-36" aria-hidden="true" tabindex="-1"></a><span class="fu">colData</span>(mae_1[[<span class="st">&quot;mg&quot;</span>]]) <span class="ot">&lt;-</span> <span class="fu">colData</span>(mae_1[[<span class="st">&quot;mg&quot;</span>]])[, <span class="fu">c</span>(<span class="st">&quot;uid&quot;</span>, <span class="st">&quot;poor_quality_mg_data&quot;</span>)]</span>
+<span id="cb9-37"><a href="#cb9-37" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-38"><a href="#cb9-38" aria-hidden="true" tabindex="-1"></a><span class="co"># 2. qPCR</span></span>
+<span id="cb9-39"><a href="#cb9-39" aria-hidden="true" tabindex="-1"></a><span class="fu">assays</span>(mae[[<span class="st">&quot;qPCR&quot;</span>]]) <span class="ot">&lt;-</span> <span class="fu">assays</span>(mae[[<span class="st">&quot;qPCR&quot;</span>]])[<span class="fu">c</span>(<span class="st">&quot;copies_per_swab_med&quot;</span>)]</span>
+<span id="cb9-40"><a href="#cb9-40" aria-hidden="true" tabindex="-1"></a><span class="fu">colData</span>(mae[[<span class="st">&quot;qPCR&quot;</span>]]) <span class="ot">&lt;-</span> <span class="fu">colData</span>(mae[[<span class="st">&quot;qPCR&quot;</span>]])[, <span class="fu">c</span>(<span class="st">&quot;uid&quot;</span>, <span class="st">&quot;qpcr_sample_type&quot;</span>)]</span>
+<span id="cb9-41"><a href="#cb9-41" aria-hidden="true" tabindex="-1"></a><span class="fu">rowData</span>(mae[[<span class="st">&quot;qPCR&quot;</span>]]) <span class="ot">&lt;-</span> <span class="fu">rowData</span>(mae[[<span class="st">&quot;qPCR&quot;</span>]])[, <span class="fu">c</span>(<span class="st">&quot;taxon_label&quot;</span>, <span class="st">&quot;LBP&quot;</span>, <span class="st">&quot;strain_origin&quot;</span>)]</span>
+<span id="cb9-42"><a href="#cb9-42" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-43"><a href="#cb9-43" aria-hidden="true" tabindex="-1"></a><span class="co"># 3. qPCR_daily</span></span>
+<span id="cb9-44"><a href="#cb9-44" aria-hidden="true" tabindex="-1"></a><span class="fu">assays</span>(mae[[<span class="st">&quot;qPCR_daily&quot;</span>]]) <span class="ot">&lt;-</span> <span class="fu">assays</span>(mae[[<span class="st">&quot;qPCR_daily&quot;</span>]])[<span class="fu">c</span>(<span class="st">&quot;copies_per_swab_med&quot;</span>)]</span>
+<span id="cb9-45"><a href="#cb9-45" aria-hidden="true" tabindex="-1"></a><span class="fu">colData</span>(mae[[<span class="st">&quot;qPCR_daily&quot;</span>]]) <span class="ot">&lt;-</span> <span class="fu">colData</span>(mae[[<span class="st">&quot;qPCR_daily&quot;</span>]])[, <span class="fu">c</span>(<span class="st">&quot;uid&quot;</span>, <span class="st">&quot;qpcr_sample_type&quot;</span>)]</span>
+<span id="cb9-46"><a href="#cb9-46" aria-hidden="true" tabindex="-1"></a><span class="fu">rowData</span>(mae[[<span class="st">&quot;qPCR_daily&quot;</span>]]) <span class="ot">&lt;-</span> <span class="fu">rowData</span>(mae[[<span class="st">&quot;qPCR_daily&quot;</span>]])[, <span class="fu">c</span>(<span class="st">&quot;taxon_label&quot;</span>, <span class="st">&quot;LBP&quot;</span>, <span class="st">&quot;strain_origin&quot;</span>)]</span>
+<span id="cb9-47"><a href="#cb9-47" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-48"><a href="#cb9-48" aria-hidden="true" tabindex="-1"></a><span class="co"># 4. col_LBP_mg, col_LBP_qPCR, col_crispatus_mg : no changes</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
 </section>
@@ -2411,13 +2417,13 @@ Functionality:
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="fu">saveRDS</span>(</span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>  mae_1, </span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">str_c</span>(</span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">get_05_output_dir</span>(),  </span>
-<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;mae_1_&quot;</span>, <span class="fu">today</span>() <span class="sc">|&gt;</span> <span class="fu">str_remove_all</span>(<span class="st">&quot;-&quot;</span>), <span class="st">&quot;.rds&quot;</span></span>
-<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="fu">saveRDS</span>(</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>  mae_1, </span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">str_c</span>(</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">get_05_output_dir</span>(),  </span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;mae_1_&quot;</span>, <span class="fu">today</span>() <span class="sc">|&gt;</span> <span class="fu">str_remove_all</span>(<span class="st">&quot;-&quot;</span>), <span class="st">&quot;.rds&quot;</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
 </section>

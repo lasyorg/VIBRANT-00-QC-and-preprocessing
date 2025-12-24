@@ -90,10 +90,10 @@ qpcr_16S <-
         assay = "weekly qPCR"
         )
   ) |> 
-  left_join(
+  dplyr::left_join(
     mae@colData |> 
       as_tibble() |> 
-      select(
+      dplyr::select(
         uid, pid, visit_code, visit, study_day, sample_type, 
         site, randomized, arm, ITT, mITT, PP),
     by = join_by(uid)
@@ -136,7 +136,7 @@ selected_time_points <-
   dplyr::filter(n_assays == 2) 
 
 tmp <- 
- full_join(
+ dplyr::full_join(
    selected_time_points |> 
      filter(assay == "weekly qPCR") |> 
      dplyr::select(calibration, copies_per_swab_med, pid, study_day, site) |> 
@@ -189,10 +189,10 @@ qpcr_LBP <-
       select(uid, dilution, target, copies_per_swab_med) |>
       mutate(assay = "weekly qPCR")
   ) |> 
-  left_join(
+  dplyr::left_join(
     mae@colData |> 
       as_tibble() |> 
-      select(
+      dplyr::select(
         uid, pid, visit_code, visit, study_day, sample_type, 
         site, randomized, arm, ITT, mITT, PP),
     by = join_by(uid)
@@ -239,6 +239,7 @@ qpcr_LBP |>
 ```
 
 ```{r}
+#| eval: false
 #| fig-width: 18
 #| fig-height: 20
   
@@ -246,13 +247,14 @@ qpcr_LBP |>
   filter(mITT, study_day > -10, site == "CAP", arm == "LC-106-o") |> 
   ggplot() +
   aes(x = study_day, y = copies_per_swab_med, color = assay) +
-  facet_grid(site + pid ~ target, labeller = label_both) +
+  ggplot2::facet_grid(pid ~ target) + #    , labeller = label_both
   geom_line(alpha = 0.2) +
   geom_point(alpha = 0.5, size = 0.5) +
   scale_y_log10() +
   theme(
     strip.text.y = element_text(angle = 0)
   )
+
 ```
 
 
@@ -289,7 +291,7 @@ selected_time_points <-
   dplyr::filter(n_assays == 2) 
 
 tmp <- 
- full_join(
+ dplyr::full_join(
    selected_time_points |> 
      filter(assay == "weekly qPCR") |> 
      dplyr::select(target, copies_per_swab_med, pid, study_day, site) |> 
@@ -371,7 +373,7 @@ If the total relative abundance of all LBP strains is larger than 0.1 or the max
 colonization_LBP_mg <- 
   mae[["mg"]] |> 
   as_tibble() |>
-  left_join(mae@colData |> as_tibble()) |> 
+  dplyr::left_join(mae@colData |> as_tibble()) |> 
   dplyr::filter(sample_type == "Clinical sample", !poor_quality_mg_data) |> 
   dplyr::filter(!is.na(LBP)) |> 
   group_by(.sample) |> 
@@ -380,8 +382,8 @@ colonization_LBP_mg <-
     total_LBP_rel_ab_at = sum(rel_ab),
     max_LBP_rel_ab_at = max(rel_ab),
     n_detected_strains_at = sum(rel_ab > 0),
-    n_detected_LC106_strains_at = sum(rel_ab[LBP == "LC-106 & LC-115"] > 0),
-    n_detected_LC115_only_strains_at = sum(rel_ab[LBP == "LC-115"] > 0)
+    n_detected_LC106_strains_at = sum(rel_ab[LBP == "LC106 & LC115"] > 0),
+    n_detected_LC115_only_strains_at = sum(rel_ab[LBP == "LC115"] > 0)
   ) |> 
   mutate(
     colonized_LBP_at_mg = (total_LBP_rel_ab_at > 0.1) | (max_LBP_rel_ab_at > 0.05)
@@ -520,7 +522,7 @@ If the total relative abundance of *L. crispatus* strains is larger than 50%, we
 colonization_crispatus_mg <- 
   mae[["mg"]] |> 
   as_tibble() |>
-  left_join(mae@colData |> as_tibble()) |>
+  dplyr::left_join(mae@colData |> as_tibble()) |>
   dplyr::filter(sample_type == "Clinical sample", !poor_quality_mg_data) |> 
   dplyr::filter(species == "crispatus") |> 
   group_by(.sample) |> 
@@ -771,8 +773,8 @@ colonization_qPCR <-
     total_LBP_rel_ab_at = sum(rel_ab),
     max_LBP_rel_ab_at = max(rel_ab),
     n_detected_strains_at = sum(copies_per_swab_med > 0),
-    n_detected_LC106_strains_at = sum(copies_per_swab_med[LBP == "LC-106 & LC-115"] > 0),
-    n_detected_LC115_only_strains_at = sum(copies_per_swab_med[LBP == "LC-115"] > 0)
+    n_detected_LC106_strains_at = sum(copies_per_swab_med[LBP == "LC106 & LC115"] > 0),
+    n_detected_LC115_only_strains_at = sum(copies_per_swab_med[LBP == "LC115"] > 0)
   ) |> 
   mutate(
     colonized_LBP_at_qpcr = (total_LBP_rel_ab_at > 0.1) | (max_LBP_rel_ab_at > 0.05),
@@ -1191,7 +1193,7 @@ worry_matrix_CAP <-
 
 upset(
   worry_matrix_CAP,
-  nsets = ncol(worry_matrix),
+  nsets = ncol(worry_matrix_CAP),
   nintersects = NA,
   keep.order = TRUE,
   order.by = "freq",
@@ -1212,7 +1214,7 @@ worry_matrix_MGH <-
 
 upset(
   worry_matrix_MGH,
-  nsets = ncol(worry_matrix),
+  nsets = ncol(worry_matrix_MGH),
   nintersects = NA,
   keep.order = TRUE,
   order.by = "freq",
@@ -1440,6 +1442,7 @@ mae@metadata$exposures |>
     na.value = "lightgray",
     values = c("0" = "red", "1" = "purple", "2" = "blue")
   ) +
+  geom_point()
   
 
 ```

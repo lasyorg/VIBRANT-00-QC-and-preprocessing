@@ -1,6 +1,6 @@
 ---
 title: "VIBRANT clinical data - merging CRFs data into wide tables"
-author: Laura Vermeren, Lara Wautier, Céline Bugli, Laura Symul
+author: Laura Vermeren, Laura Symul
 date: today
 format: 
   html:
@@ -338,7 +338,7 @@ other_cols <- setdiff(names(participants_crf[["crf2"]]), c("pid", worry_cols))
 
 participants_crf[["crf2"]] <- 
   participants_crf[["crf2"]] |>
-  filter(str_starts(pid, "06820")) |> # keep only MGH participants
+  filter(str_starts(pid, "06810")) |> # keep only MGH participants
   group_by(pid) |>
   summarise(
     across(all_of(other_cols), ~ dplyr::first(.x)),
@@ -374,7 +374,7 @@ participants_crf[["crf102"]] |>
 
 participants_crf[["crf102"]] <-
   participants_crf[["crf102"]] |>
-  filter(str_starts(pid, "06810")) |> # keep only CAP participants
+  filter(str_starts(pid, "06820")) |> # keep only CAP participants
   group_by(pid) |>
   arrange(-dfseq) |> 
   slice_head(n = 1) |> 
@@ -1002,6 +1002,111 @@ visdat::vis_dat(participant_crfs_merged, sort_type = FALSE) +
 
 
 
+## Some QC
+
+### BV diagnosed and treatment types
+
+```{r}
+#| fig-width: 8
+#| fig-height: 9
+
+participant_crfs_merged |>
+  mutate(
+    site = ifelse(str_detect(pid, "06810"), "MGH", "CAP"),
+    metronidazole = case_when(
+      str_detect(antibiotic_type, "metronidazole") ~ "metronidazole",
+      antibiotic_type %in% c(NA, "none", "do_not_know", "do_not_know, no") ~ "None / unknown",
+      TRUE  ~ "No metronidazole"
+    ), 
+    diagnosed_bv = case_when(
+      diagnosed_bv == "Yes" ~ "Diagnosed", 
+      diagnosed_bv == "No" ~ "Not\ndiagnosed", 
+      TRUE~diagnosed_bv
+    )
+  ) |> 
+  ggplot() + 
+  aes(y = antibiotic_type) + 
+  geom_bar(color="darkblue", fill="cornflowerblue") + 
+  geom_text(
+        stat = "count",
+        aes(label = ..count..),
+        hjust = -0.2,           
+        color = "black",
+        size = 3
+    ) +
+  ggh4x::facet_nested(
+    cols = vars(site), 
+    rows = vars(metronidazole, diagnosed_bv), 
+    scales = "free"
+  ) +
+  #facet_grid(diagnosed_bv~site, scale = "free") + 
+  labs(y="Antibiotic Type") +
+  scale_x_continuous(expand = expansion(mult = c(0, 0.5)))
+  
+```
+
+```{r}
+participant_crfs_merged |>
+  mutate(
+    site = ifelse(str_detect(pid, "06810"), "MGH", "CAP"),
+    metronidazole = case_when(
+      str_detect(antibiotic_type, "metronidazole") ~ "metronidazole",
+      antibiotic_type %in% c(NA, "none", "do_not_know", "do_not_know, no") ~ "None / unknown",
+      TRUE  ~ "No metronidazole"
+    ), 
+    diagnosed_bv = case_when(
+      diagnosed_bv == "Yes" ~ "Diagnosed", 
+      diagnosed_bv == "No" ~ "Not\ndiagnosed", 
+      TRUE ~ diagnosed_bv
+    )
+  ) |> 
+  ggplot() + 
+  aes(y = antibiotic_type, fill = diagnosed_bv) + 
+  geom_bar() + 
+  geom_text(
+    stat = "count",
+    aes(label = ..count..),
+    position = position_stack(vjust = 0.5),
+    #hjust = -0.1,
+    color = "black",
+    size = 2
+  ) +
+  facet_grid(metronidazole ~ site, scale = "free") + 
+  labs(y = "Antibiotic Type") +
+  scale_x_continuous(expand = expansion(mult = c(0, 0.1)))
+
+```
+### BV diagnosed and other treatment type 
+
+```{r}
+participant_crfs_merged |>
+  mutate(
+    site = ifelse(str_detect(pid, "06810"), "MGH", "CAP"),
+    diagnosed_bv = case_when(
+      diagnosed_bv == "Yes" ~ "Diagnosed", 
+      diagnosed_bv == "No" ~ "Not\ndiagnosed", 
+      TRUE ~ diagnosed_bv
+    )
+  ) |> 
+  ggplot() + 
+  aes(y = treatment_type, fill = diagnosed_bv) + 
+  geom_bar() + 
+  geom_text(
+    stat = "count",
+    aes(label = ..count..),
+    position = position_stack(vjust = 0.5),
+    #hjust = -0.1,
+    color = "black",
+    size = 2
+  ) +
+  facet_grid(~ site, scale = "free") + 
+  labs(y = "Antibiotic Type") +
+  scale_x_continuous(expand = expansion(mult = c(0, 0.1)))
+```
+
+
+
+
 # `visits_crfs_merged` table
 
 We call "visit CRFs" any CRFs that was not present in the "participants CRFs" list. These CRFs were expected to contain potentially time-varying variables collected at multiple visits.
@@ -1160,7 +1265,12 @@ visits_crfs_merged |>
   dplyr::filter(n > 1)
 ```
 
+## New sexual partner
 
+```{r}
+visits_crfs_merged |> 
+  select(pid, visit_code, new_sex_partner)
+```
 
 # Exports
 

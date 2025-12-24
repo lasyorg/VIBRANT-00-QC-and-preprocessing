@@ -38,6 +38,7 @@ library(patchwork)
 library(SummarizedExperiment)
 library(tidySummarizedExperiment)
 library(phyloseq)
+#BiocManager::install("mia")
 library(mia)
 
 

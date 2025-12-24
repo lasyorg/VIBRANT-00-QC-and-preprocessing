@@ -758,7 +758,7 @@ LBP_strain_info <-
   LBP_strain_info |> 
   mutate(
     strain_id = `VMRC ID`, 
-    LBP = ifelse(is.na(LC106), "LC-115", "LC-106 & LC-115") |> factor(), 
+    LBP = ifelse(is.na(LC106), "LC115", "LC106 & LC115") |> factor(), 
     strain_origin = `Geographic source` |> factor()
   ) |>
   dplyr::rename(Biose_ID = `Biose ID`) |> #VMRC_ID = `VMRC ID` 
