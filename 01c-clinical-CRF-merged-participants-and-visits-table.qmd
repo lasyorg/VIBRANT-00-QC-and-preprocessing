@@ -1,6 +1,6 @@
 ---
 title: "VIBRANT clinical data - merging CRFs data into wide tables"
-author: Laura Vermeren, Lara Wautier, Céline Bugli, Laura Symul
+author: Laura Vermeren, Laura Symul
 date: today
 format: 
   html:
