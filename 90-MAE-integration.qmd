@@ -38,6 +38,20 @@ theme_set(theme_light())
 ```
 
 
+The purpose of this document is to create a `MultiAssayExperiment` object containing all assays and clinical data generated in the context of the VIBRANT trial at the participant x visit resolution (which means that duplicates were aggregated in previous steps such that for a given assay/variable, there is a single value for each participant and visit combination).
+
+The document is organised as follow:
+
+- First, we load and minimally transform the "clinical" data (*i.e.*, data collected through CRFs).
+
+- Next, we load and minimally transform the `SummarizedExperiment` objects for each assay (metagenomics, qPCR, 16S amplicon sequencing, Luminex, and flow cytometry).
+
+- Finally, we create the `MultiAssayExperiment` object by combining the clinical data and assay data. This entails several steps, including creating a `mae_colData` table that combines the clinical data and assay sample information, ensuring that the `uid`s (unique identifiers) are consistent across all data tables.
+
+At the end, we document which assays are available (= have data) for which participants and visits.
+
+
+
 # Clinical data (CRF data)
 
 
@@ -1164,9 +1178,9 @@ mae_sample_map |>
 
 
 
-# Subsetting and saving the `MultiAssayExperiment` objects
+# Saving the `MultiAssayExperiment` objects
 
-We save the "master" MAE (with all assays); but if needed for publication, we can subset the MAE to only include the assays/data of interest.
+We export the full `MultiAssayExperiment` object as an `.rds` file for further analyses.
 
 ```{r}
 

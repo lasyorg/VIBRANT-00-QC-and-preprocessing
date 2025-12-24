@@ -39,6 +39,15 @@ theme_set(theme_light())
 
 ```
 
+This document presents the QC and data preparation steps performed on the **daily** qPCR data for the 15 LBP strains and total 16S rRNA gene quantification. It is mostly inspired from the code developed in the `03_qPCR.Qmd` script which pertained to the qPCR data performed on the "weekly swabs" (*i.e.*, the swabs collected at the weekly in-clinic visits) while here, the qPCR data were generated on the "daily swabs, (*i.e.*, swabs collected daily at home).
+
+
+:::callout-important
+This data was generated in summer 2025, *after* the arm unblinding. While the assay was performed by technicians not otherwise involved in the study, and while the data preparation code this code was developed exclusively using blinded data, we cannot fully exclude that some steps were subconsciously influenced by knowledge of the unblinded data.
+:::
+
+
+
 ## Loading and cleaning the data
 
 ```{r}
@@ -598,6 +607,8 @@ We see that all samples have the exact same locations across plates, so we assum
 
 :::callout-important
 @Michael: can you confirm that this is a safe assumption?
+
+→ Michael confirmed orally during a Teams meeting.
 :::
 
 We thus create a dictionary of the positions (`pcr_plate_id` and `well`) for each "`vibr_sample_id`" based on the plates where the `vibr_sample_id` was available, and then use this dictionary to fill in the missing `vibr_sample_id` values.

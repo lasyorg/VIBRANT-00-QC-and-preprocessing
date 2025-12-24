@@ -62,6 +62,17 @@ if (!dir.exists(output_dir)){
 
 ```
 
+This document describes the processing of the flow cytometry data from both MGH and CAP sites. The processing consists of the following steps:
+
+1. Creating the file inventory: This step involves parsing the directory structure to identify relevant WSP and FCS files for analysis.
+2. Verifying file data: This step checks the consistency between the expected samples (based on sample lists) and the actual files found in the inventory.
+3. Extracting gating structure: This step involves applying the gating strategy defined in the WSP files to the corresponding FCS files to extract cell population data.
+
+These steps are done separately for samples from each site (MGH and CAP). Once this is done, the results are combined into a single dataset, from which a `SummarizedExperiment` object is created and exported for further analysis.
+
+Finally, we perform some basic data quality control checks to document the integrity of the data.
+
+
 :::callout-important
 The extraction functions will need to be modified to extract the number of total immune cells and compute the percentages of children populations out of total immune cells.
 This will be done later.
@@ -460,7 +471,7 @@ write.csv(inventory_cleaned, str_c(out_dir, "/mgh_sample_inventory_cleaned.csv")
 rm(
   inventory, inventory_standardized, inventory_processed, inventory_parsed, 
   inventory_folders, inventory_cleaned,
-  mgh_samples, mgh_expected, 
+  mgh_expected, # mgh_samples, 
   missing_samples, found_samples, comparison, matched_samples
    )
 

@@ -38,6 +38,15 @@ theme_set(theme_light())
 
 ```
 
+
+The purpose of this document is to unblind the study arms. This means that we will replace the `arm` column in the `mae@colData` with the actual treatment arms based on the randomization codes. These codes were stored in separate files, prepared completely independently from the study clinical and analytical staff. 
+
+They were sent by email after the clinical data and assay data had been checked, and formatted for downstream analyses.
+
+This document loads these files and add the study arm to the MAE via merging by randomization code.
+
+
+
 # Loading the `MultiAssayExperiment` object
 
 ```{r}
@@ -197,7 +206,7 @@ mae@colData |>
 
 # Saving the `MultiAssayExperiment` objects
 
-We save the "master" MAE (with all assays); but if needed for publication, we can subset the MAE to only include the assays/data of interest.
+The unblided `MAE` object is saved to disk as an `.rds` file that can be loaded for downstream analyses.
 
 ```{r}
 

@@ -10,7 +10,7 @@ format:
     theme: journal
     embed-resources: true
 execute:
-  cache: true # refresh true false
+  cache: refresh # refresh true false
 project:
   execute-dir: project
 editor: 
@@ -40,9 +40,9 @@ theme_set(theme_bw())
 
 The purpose of this document is to create
 
-- a `participants` table with critical participant-invariant information (arm, site, etc.), including the population flags along with a 
+- a `participants` table with study-level participant-invariant information (*e.g.*, arm, site, etc.), including the population flags along with a 
 
-  + `participants_variable_dictionary`
+  + `participants_variable_dictionary`, a table describing the variables contained in the `participants` table
 
 - a `visits_long` table with the `visit_code` and `study_day` for each participant and each CRFs. This table is used to identify residual discrepancies between CRFs in `visit_code` and `study_day` (and harmonize them if needed).
 
@@ -64,7 +64,7 @@ The purpose of this document is to create
 We will first create the `participants` table with `pid`, `site`, `location`, `randomized` and `arm`, then we will build the visits table because we need the correspondance between `visit_code` and `study_day` for some of the criteria to build
 the population flags (`ITT`, `mITT` and `PP`).
 
-# Load the crf data processed in the previous step `01a clinical CRF data cleaning.qmd`
+# Loading the CRF data processed in the previous step (`01a clinical CRF data cleaning.qmd`)
 
 ```{r}
 
@@ -139,7 +139,16 @@ participants <-
 
 ## Randomization (`randomized` and `arm`)
 
-Randomization data is available in CRF13. Randomized participants are participants with a `treatment_code`.
+Randomization data is available in CRF13. 
+
+:::callout-important
+This code, along with all assay QCs, was written and executed **before** arm unblinding, which happened on June 17th, 2025. Consequently, here, we only have data related to *whether* a participant was randomized (`randomized`), and if so, whether they were in the only open (unblinded) arm (`group4`, arm LC-106-o in which participants received the LBP before finishing their course of metronidazole), and what their randomization code (`treatment_code`) was, but we do not yet know the actual arm of the participant (`arm`). We still define a placeholder `arm` column that will be updated after unblinding. 
+
+Unblinding itself is done in the script `92-unblinding.qmd`, after all data QC has been performed and that a `MultiAssayExperiment` object has been created.
+:::
+
+
+We look at CRF13 to identify randomized participants: randomized participants are participants with a `treatment_code`.
 
 
 ```{r}
@@ -620,7 +629,7 @@ visits_variable_dictionary |> gt()
 
 
 
-s# Population flags (`ITT`, `mITT` and `PP`)
+# Population flags (`ITT`, `mITT` and `PP`)
 
 The study population flags (ITT, mITT, PP) are built using the following steps
 and criteria:
@@ -639,7 +648,7 @@ and criteria:
 
 - We determine the number of missed doses from CRF23 (Product Use) and/or our "consolidated" product exposure table to identify participants who took at least one dose of study product (mITT) or 80% of the doses (PP).
 
-- We identif participants who take a concomitant antibiotics (ciprofloxacin, fosfomycin or metonidazole) betweenn day 7 and day 35 from CRF31 to exclude them from the PP;
+- We identify participants who take a concomitant antibiotics (ciprofloxacin, fosfomycin or metonidazole) betweenn day 7 and day 35 from CRF31 to exclude them from the PP;
 
 
 - Finally, from these variables, we can define:

@@ -10,7 +10,7 @@ format:
     theme: journal
     embed-resources: true
 execute:
-  cache: true # refresh true false
+  cache: refresh # refresh true false
 project:
   execute-dir: project
 editor: 
@@ -39,20 +39,20 @@ Sys.setlocale("LC_TIME", "C") #LV
 
 
 :::callout-note
-The purpose of this document is to clean, format, and QC the CRF data.
+The purpose of this document is to clean, format, check, and correct/harmonized when needed the data collected via the VIBRANT CRFs.
 
-At the end of this document, 2 lists are provided:
+From the "raw" data provided as an `R list` by the CAPRISA data team, we create two output lists:
 
-- `crf_raw` which contains one element (a `tibble`) per CRF with the "raw" (= not altered) CRF data but from which "sensitive information" (such as visit dates, comments, etc.) have been removed and from which we have also removed information about "data checks" performed by the CAPRISA data team.
+- `crf_raw`, a `list` very similar to the raw data and which contains one element (a `tibble`) per CRF but from which "sensitive information" (such as visit dates, comments, etc.) and metadata pertaining to the quality checks performed by the CAPRISA data team have been removed.
 
-- `crf_clean` which also contains one element per CRF, but where the columns have been formatted, QCed, cleaned, and prepared for downstream analyses.
+- `crf_clean` which also contains one element per CRF, but where the columns have been formatted, transformed, cleaned, and prepared for downstream analyses.
 :::
 
-After loading the raw data, we perform a few automatic cleaning actions on all CRF tables, then, go through each CRF one by one to perform cleaning actions specific to that CRF.
+The document is organized as follow: after loading the raw data, we perform a few automatic cleaning actions on all CRF tables, then, go through each CRF one by one to perform cleaning actions specific to that CRF.
 
 # Raw data
 
-We load the raw CRF data shared by Lara Lewis on May 7th 2025.
+We load the raw CRF data shared by Lara Lewis on August 7th 2025.
 
 ```{r}
 
@@ -61,22 +61,27 @@ data_dir |> fs::dir_ls(regexp = "RData") |> basename()
 
 ```
 
-We use the `Rdata` file: `cap068_ecrf_data_final.Rdata`.
-
-That file contains a list with the data from all CRFs + data dictionaries:
 
 ```{r}
 
 load(str_c(data_dir, "cap068_ecrf_data_final.RData"), verbose = TRUE) #cap068_ecrf_data.Rdata
 raw_data_list <- ecrf_data_list
 # rm(ecrf_data_list)
+
+```
+
+
+That file contains a list with the data from all CRFs + data dictionaries:
+
+```{r}
+
 raw_data_list |> names()
 
 ```
 
 # CRF-wide harmonizations
 
-In this section, we perform harmonisations that apply to all CRFs.
+In this section, we perform harmonization that apply to all CRFs.
 
 We begin by converting them to `tibble`. 
 
@@ -116,9 +121,9 @@ raw_data_list <- raw_data_list |> map(pid_harmonization)
 In this section, we process the visit dates throughout all CRF to
 
 - rename the original `vdate` column as `vdate_original`;
-- transform the `vdate` into an actual date (and not a character string);
-- define a `study_day` variable that provides a relative date from V1 (Enrollment visit, day 0) - to do so, we define a table with the V1 date for each participant (see below);
-- define a `flag_date` variable that flags visits that may have mistakes in their visit dates (e.g, they occur before the study even started or after the study ended, or for that participant, outside their enrollment window).
+- transform the `vdate` from a `character` variable into a `date`,
+- define a `study_day` variable that provides a relative date from visit V1 (Enrollment visit, day 0) - to do so, we define a table with the V1 date for each participant (see below);
+- define a `flag_date` variable that flags visits that may have mistakes in their visit dates (*e.g*, they occurred before the study started or after it ended, or for a given participant, outside their enrollment window).
 
 The flagged dates are then reviewed and corrected when possible.
 
@@ -128,7 +133,7 @@ We study start date is "2023-10-19" and the study end date is "2025-02-18".
 
 ```{r}
 
-study_start_date <- as.Date("2023-10-19") # The official study start was 2024-02-01 https://clinicaltrials.gov/study/NCT06135974?term=NCT06135974&rank=1
+study_start_date <- as.Date("2023-10-19") # The official study start was 2024-02-01 https://clinicaltrials.gov/study/NCT06135974?term=NCT06135974&rank=1 but a few participants were enrolled prior to that date.
 study_end_date <- as.Date("2025-02-18")
 
 ```
@@ -653,6 +658,8 @@ We need, however, to first recompute the enrollment dates as it may have changed
 #### (Re-)defining `day_0_dates` and expected end dates for each participant
 
 
+Since some dates were fixed, we recompute the `day_0_dates` table as we'll use it downstream.
+
 ```{r}
 
 # for randomized participants
@@ -771,7 +778,9 @@ all_visit_dates |>
 ```
 
 
-#### Focus on the relative study day of daily visits
+#### Relative study day of daily visits
+
+We check that computed relative study days are consistent with our expectations given the study design and protocol.
 
 
 ```{r}
@@ -991,7 +1000,7 @@ plot_marginal_dist <- function(crf){
       } else {
         plots[[var]]  <-
           tmp |> ggplot(aes(x = var)) + 
-          geom_histogram(binwidth = 1, color="darkblue", fill="cornflowerblue") + 
+          geom_histogram(binwidth = 1, color="white", fill="cornflowerblue") + 
           ylab("nb of entries") +
           xlab(var) + 
           ggtitle(var)

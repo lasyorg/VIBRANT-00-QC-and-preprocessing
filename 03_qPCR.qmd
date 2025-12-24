@@ -11,7 +11,7 @@ format:
      toc-depth: 5
      embed-resources: true
 execute:
-  cache: refresh # true refresh false
+  cache: true # true refresh false
   warning: false
 knitr:
   opts_chunk:
@@ -38,6 +38,11 @@ rm(tmp)
 theme_set(theme_light())
 
 ```
+
+
+The purpose of this document is to perform various quality check on the qPCR data generated on "weekly swabs" from the VIBRANT clinical study. "Weekly swabs" are swab samples collected at their weekly in-clinic visits.
+
+
 
 ## Loading the data
 
@@ -209,6 +214,52 @@ dictionary <-
   mutate(name = colnames(qpcr)) |> 
   select(name, everything())
 ```
+
+
+```{r}
+
+# reordering the columns so that they follow a more logical order
+
+qpcr <- 
+  qpcr |> 
+  dplyr::select(
+    data_row, 
+    pcr_plate_id,
+    well,
+    content,
+    replicate,
+    sample, 
+    target,
+    fluor,
+    cq,
+    cq_mean,
+    starting_quantity,
+    dilution_factor,
+    quant_adjusted,
+    copies_per_swab,
+    target_type,
+    strain_group_qpcr,
+    group_fluor,
+    vibr_sample_id,
+    ext_lib_plate_nb,
+    ext_lib_plate_id,
+    ext_lib_position,
+    in_redos,
+    everything()
+  )
+
+```
+
+```{r}
+dictionary <- 
+  dictionary |> 
+  mutate(
+    name = name |> factor(levels = colnames(qpcr))
+  ) |>
+  arrange(name)
+```
+
+
 
 
 The new column names are:
@@ -1086,7 +1137,7 @@ qpcr <-
   mutate(
     copies_per_swab = 
       case_when(
-        (qpcr_sample_type != "Standard") & 
+        # (qpcr_sample_type != "Standard") & 
           (target == "16S") & 
           (ext_lib_plate_nb < 12) ~ 
           copies_per_swab / 2,
@@ -1149,7 +1200,7 @@ qpcr |>
 ## Exploratory & QC analyses
 
 
-### CQ and Copies per swabs per well
+### Cq and Copies per swabs per well
 
 
 ```{r}
@@ -1212,8 +1263,36 @@ From these visualizations of the raw data, something looks weird with the `cq` a
 
 
 
+### Cq and total number of copies per swab per sample type
 
-### Total number of copies per swab per sample type
+
+
+
+```{r}
+#| fig-width: 12
+#| fig-height: 15
+
+qpcr |> 
+  arrange(sample_type) |> 
+  mutate(
+    observed = ifelse(is.na(cq), "No Cq", "Observed Cq"),
+    cq = cq |> replace_na(45)
+  ) |> 
+  ggplot() +
+  aes(x = sample_type, y = cq, col = sample_type, shape = observed) +
+  ggh4x::facet_nested(cols = vars(ext_lib_plate_nb), rows = vars(strain_group_qpcr, target), scales = "free_x", space = "free_x") +
+  geom_hline(yintercept = 43, linetype = "dashed", col = "red3") +
+  ggbeeswarm::geom_quasirandom(alpha = 0.5) +
+  scale_shape_manual(
+    name = "",
+    values = c(4, 16)
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+  
+
+```
 
 
 ```{r}
@@ -1292,7 +1371,7 @@ From the plots above, it looks like the empty and water samples have non-zero va
 
 plot_qpcr_empties <- function(qpcr, color_by = "qpcr_sample_type") {
   qpcr |> 
-    dplyr::filter(qpcr_sample_type %in% c("Empty", "Water")) |> 
+    dplyr::filter(qpcr_sample_type %in% c("Empty", "Water", "Water or empty")) |> 
     group_by(sample, pcr_plate_id, ext_lib_plate_nb, target) |>
     mutate(replicate_nb = row_number()) |> 
     ungroup() |> 
@@ -1320,10 +1399,19 @@ plot_qpcr_empties(qpcr |> mutate(zero_copies = (copies_per_swab == 0)), color_by
 ```
 
 ```{r}
+#| eval: false
+qpcr |> 
+  dplyr::filter(target == "16S", qpcr_sample_type %in% c("Empty", "Water", "Water or empty")) |> 
+  dplyr::select(target, ext_lib_plate_nb, sample_type, vibr_sample_id, qpcr_sample_type, cq, starting_quantity, copies_per_swab)
+```
+
+
+
+```{r}
 
 prob_target <-
   qpcr |> 
-  select(target) |> 
+  dplyr::select(target) |> 
   distinct() |> 
   mutate(prob_target = (target %in% c("C0022A1", "C0059E1", "C0175A1")))
   
@@ -1489,7 +1577,635 @@ qpcr |>
 
 ```
 
-This shows again the issues with the first 3 plates of VMRC group 1.
+This shows again the issues with the first 3 plates of VMRC group 1, and highlight potential 16S contaminations in all plates.
+
+#### Recalibrating for total 16S
+
+
+As observed above and in contrast to all other targets, the 16S qPCR standards curves do not appear to follow the expected linear relationship between the log-concentrations (expected concentrations) and observed Cq. It looks like the linearity assumption is correct for the high-concentration standards (the last four-five standards), but not for the low-concentration standards (the first three-four standards). 
+
+
+However, because standards are expected to follow a linear relationship, calibrations curves were fitted assuming linearity for all targets, including 16S, which, given the observations likely leads to biases in the estimated concentrations.
+
+
+```{r}
+#| fig-width: 12
+#| fig-height: 6
+
+qpcr |> 
+  dplyr::filter(target == "16S") |>
+  arrange(sample_type) |> 
+  ggplot() +
+  aes(x = starting_quantity, y = cq) +
+  facet_wrap(. ~ ext_lib_plate_nb , ncol = 6) +
+  geom_smooth(method = "lm", formula = "y ~ x", se = FALSE, col = "black", size = 0.5) +
+  geom_point(
+    aes(col = (sample_type == "Standard"), size = (sample_type == "Standard")), 
+    alpha = 0.5
+    ) +
+  geom_rug(aes(col = (sample_type == "Standard")), alpha = 0.2) +
+  scale_x_log10() +
+  scale_color_manual(
+    name = "",
+    values = c("red3", "black"),
+    labels = c("Samples", "Standards")
+  ) +
+  scale_size_manual(
+    name = "",
+    values = c(0.5, 2),
+    labels = c("Samples", "Standards")
+  ) +
+  theme(
+    legend.position = "top"
+  )
+  
+
+```
+
+
+This deviation from the linear relationship for the 16S target could be explained by several scenarios, including errors during the preparation of the standards dilutions, or some general low-level contamination which would affect the low-concentration standards, but much less the high-concentration standards.
+
+The way to correct for this issue depends on the assumed scenario.
+
+If there is a problem with the standards, then, we should likely re-fit a linear models on the high-concentrations only. However, if there is general low-level contamination, then, it is likely more advisable to fit a non-linear model on all standards.
+
+
+We can check the observed qC in the negative control samples and check the plate layout to help us decide which scenario is more likely.
+
+
+```{r}
+#| fig-width: 12
+#| fig-height: 6
+
+qpcr |> 
+  dplyr::filter(target == "16S") |>
+  arrange(sample_type) |> 
+  mutate(
+    observed = ifelse(is.na(cq), "No Cq", "Observed Cq"),
+    cq = cq |> replace_na(45)
+  ) |> 
+  ggplot() +
+  aes(x = sample_type, y = cq, col = content, shape = observed) +
+  facet_wrap(. ~ ext_lib_plate_nb , ncol = 6) +
+  ggbeeswarm::geom_quasirandom(alpha = 0.5) +
+  scale_shape_manual(
+    name = "",
+    values = c(1, 16)
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+  
+
+```
+
+
+```{r}
+#| fig-width: 17
+#| fig-height: 10
+
+qpcr |> 
+  dplyr::filter(target == "16S") |> 
+  dplyr::select(ext_lib_plate_nb, pcr_plate_id, well_col, well_row, qpcr_sample_type, qpcr_sample_id, cq) |>
+  distinct() |>
+  ggplot() +
+  aes(x =  well_row |> factor(), y = well_col |> factor() |> fct_rev(), col = qpcr_sample_type) +
+  facet_wrap(~ ext_lib_plate_nb + pcr_plate_id, ncol = 4) +
+  geom_tile(aes(fill = cq), linewidth = 0.5) +
+  geom_path(aes(group = qpcr_sample_id, col = qpcr_sample_type), alpha = 0.5, linewidth = 1) +
+  geom_point(size = 1) +
+  scale_fill_gradient(low = "red", high = "white") +
+  scale_color_manual(values = qpcr_sample_type_colors) +
+  xlab("Well column") + ylab("Well row") +
+  labs(caption = "Lines connect replicates") 
+  
+```
+
+
+
+
+These point towards a general low-level contamination affecting all plates.
+
+For sake of comparison, we will still fit both a linear model on the high-concentration standards only, and a non-linear model on all standards:
+
+- The new linear calibration curve is fitted using a classical linear model (OLS) only the 4 standards with the highest concentrations (*i.e.*, excluding the 4 low-concentration standards);
+
+- The non-linear calibration curve is fitted on all standards, but given that the variability between replicates is much much lower in the high-concentration standards, we give more weight to the 4 standards with the highest concentrations less weight to the 3 low-concentrations standards. Given the visual appearance of the deviation from linearity, we use a 3-parameters logistic model (`LL.3` function from the `drc` package) to fit the non-linear calibration curve such that we have a "linear range" for the high-concentration standards and allow for a "non-linear saturation effect" at low-concentrations. 
+
+
+
+```{r}
+
+# linear calibration 
+
+lm_16S <- 
+  map(
+    .x = unique(qpcr$ext_lib_plate_nb),
+    .f = \(plate_nb) {
+      current_curve <- 
+        qpcr |> 
+        dplyr::filter(
+          target == "16S",
+          ext_lib_plate_nb == plate_nb
+        ) |>
+        lm(cq ~ log10(starting_quantity), data = _)
+      
+      new_curve <- 
+        qpcr |> 
+        dplyr::filter(
+          target == "16S",
+          sample_type == "Standard",
+          ext_lib_plate_nb == plate_nb
+        ) |>
+        mutate(std_nb = content |> str_remove("Std-") |> parse_number()) |>
+        dplyr::filter(std_nb <= 10) |> 
+        lm(cq ~ log10(starting_quantity), data = _)
+      
+      tibble(
+        ext_lib_plate_nb = plate_nb,
+        curve = 
+          c(
+            "linear calibration on all standards\n(original calibration)", 
+            "linear calibration on high-concentration standards only"
+            ),
+        intercept = c(coef(current_curve)[1], coef(new_curve)[1]),
+        slope = c(coef(current_curve)[2], coef(new_curve)[2])
+      )
+    }
+  ) |> 
+  bind_rows()
+
+```
+
+
+```{r}
+#| warning: false
+
+# non-linear calibration
+
+LL3_models_16S <- 
+  map(
+    .x = unique(qpcr$ext_lib_plate_nb),
+    .f = \(plate_nb) {
+      
+      calibration_data <- 
+        qpcr |> 
+        dplyr::filter(
+          target == "16S",
+          sample_type == "Standard",
+          ext_lib_plate_nb == plate_nb
+        ) |> 
+        mutate(
+          log10_sq = -log10(starting_quantity) + 10,
+          std_nb = content |> str_remove("Std-") |> parse_number(),
+          wt = 
+            case_when(
+              std_nb <= 8 ~ 2,
+              std_nb == 10 ~ 1,
+              TRUE ~ 0.5
+            )
+          ) |> 
+        dplyr::select(starting_quantity, log10_sq, cq, wt, std_nb)
+      ll3 <- 
+        drc::drm(cq ~ log10_sq, weights = wt, data = calibration_data, fct = drc::LL.3())
+      
+      # summary(ll3)
+      # modelFit(ll3)
+      # plot(ll3, type = "bars")
+      # points(calibration_data$log10_sq, calibration_data$cq, col = "red", pch = 4)
+      
+      ll3
+    }
+  ) 
+
+```
+
+```{r}
+
+LL3_curves_16S <- 
+  imap(
+    .x = LL3_models_16S,
+    .f = \(model, idx) {
+      newdata <- 
+        tibble(
+          ext_lib_plate_nb = idx,
+          starting_quantity = 10^seq(-7, 7, by = 0.05)
+        ) |> 
+        mutate(
+          log10_sq = -log10(starting_quantity) + 10
+        )
+      newdata$cq <- predict(model, newdata = newdata |> as.data.frame())
+      newdata
+    }
+  ) |> 
+  bind_rows()
+
+```
+
+
+```{r}
+
+all_curves <-
+  bind_rows(
+    LL3_curves_16S |> 
+      left_join(
+        lm_16S |> dplyr::filter(curve == "linear calibration on all standards\n(original calibration)"),
+        by = join_by(ext_lib_plate_nb)
+      ) |> 
+      mutate(
+        cq = intercept + slope * log10(starting_quantity)
+      ) |> 
+      dplyr::select(-intercept, -slope),
+    LL3_curves_16S |> 
+      left_join(
+        lm_16S |> dplyr::filter(curve == "linear calibration on high-concentration standards only"),
+        by = join_by(ext_lib_plate_nb)
+      ) |> 
+      mutate(
+        cq = intercept + slope * log10(starting_quantity)
+      ) |> 
+      dplyr::select(-intercept, -slope),
+    LL3_curves_16S |> mutate(curve = "3-parameters logistic calibration on all standards")
+  ) |> 
+  mutate(curve = curve |> fct_inorder())
+  
+
+```
+
+
+
+
+
+
+```{r}
+#| fig-width: 12
+#| fig-height: 8
+
+qpcr |> 
+  dplyr::filter(target == "16S") |>
+  arrange(sample_type) |> 
+  ggplot() +
+  aes(x = starting_quantity, y = cq) +
+  facet_wrap(. ~ ext_lib_plate_nb , ncol = 4) +
+  # geom_abline(data = lm_16S, aes(intercept = intercept, slope = slope, col = curve), size = 0.5) +
+  geom_line(
+    data = all_curves, aes(col = curve)
+  ) +
+  scale_color_discrete(name = "Calibration model") +
+  ggnewscale::new_scale_color() +
+  # geom_smooth(method = "lm", formula = "y ~ x", se = FALSE, col = "black", size = 0.5) +
+  geom_point(
+    aes(col = (sample_type == "Standard"), size = (sample_type == "Standard")), 
+    alpha = 0.5
+    ) +
+  geom_rug(aes(col = (sample_type == "Standard")), alpha = 0.2) +
+  scale_x_log10() +
+  scale_color_manual(
+    name = "",
+    values = c("red3", "black"),
+    labels = c("Samples", "Standards")
+  ) +
+  scale_size_manual(
+    name = "",
+    values = c(0.5, 2),
+    labels = c("Samples", "Standards")
+  ) 
+  
+
+```
+
+
+```{r}
+#| fig-width: 12
+#| fig-height: 8
+
+qpcr |> 
+  dplyr::filter(target == "16S", sample_type == "Standard") |>
+  arrange(sample_type) |> 
+  ggplot() +
+  aes(x = starting_quantity, y = cq) +
+  facet_wrap(. ~ ext_lib_plate_nb , ncol = 4) +
+  geom_line(
+    data = all_curves, aes(col = curve)
+  ) +
+  geom_point(alpha = 0.5, size = 2) +
+  scale_color_discrete(name = "Calibration model") +
+  scale_x_log10()
+  
+
+```
+
+
+#### Inverse predictions for re-estimating `copies_per_swabs`
+
+
+
+
+```{r}
+
+# qpcr_orig <- qpcr
+# pcqr <- qpcr_orig
+
+qpcr <- 
+  qpcr |> 
+  dplyr::rename(
+    starting_quantity_orig = starting_quantity,
+    quant_adjusted_orig = quant_adjusted,
+    copies_per_swab_orig = copies_per_swab
+  ) 
+
+```
+
+
+
+
+```{r}
+#| eval: false
+
+# same starting quantities everywhere?
+
+qpcr |> 
+  dplyr::filter(target == "16S", sample_type == "Standard") |>
+  dplyr::select(ext_lib_plate_nb, content, starting_quantity_orig) |> 
+  mutate(std_nb = content |> str_remove("Std-") |> parse_number()) |>
+  ggplot() +
+  aes(x = starting_quantity_orig, y = ext_lib_plate_nb |> factor()) +
+  geom_label(aes(label = std_nb), size = 3) +
+  scale_x_log10()
+
+
+qpcr |> 
+  dplyr::filter(target == "16S", sample_type == "Standard") |>
+  dplyr::select(ext_lib_plate_nb, content, starting_quantity_orig) |> 
+  mutate(log10_sq = log10(starting_quantity_orig) |> round(3)) |>
+  dplyr::count(log10_sq) 
+
+
+# Yes
+
+```
+
+
+
+
+##### LL3
+
+
+```{r}
+
+inv_pred <- 
+  map(
+  seq_along(LL3_models_16S),
+  .f = \(plate_nb) {
+    
+    bind_rows(
+      qpcr |> 
+        dplyr::filter(
+          target == "16S",
+          ext_lib_plate_nb == plate_nb,
+          sample_type != "Standard"
+        ) |> 
+        dplyr::select(cq) |> 
+        distinct() |>
+        mutate(type = "observed"),
+      LL3_curves_16S |> 
+        dplyr::filter(
+          ext_lib_plate_nb == plate_nb
+        ) |> 
+        dplyr::select(cq, starting_quantity) |> 
+        distinct() |> 
+        mutate(type = "fitted", log10_quantity = log10(starting_quantity))
+    ) |> 
+      arrange(cq) |> 
+      mutate(
+        log10_quantity_imp = 
+          approx(
+                x = cq[type == "fitted"],
+                y = log10_quantity[type == "fitted"],
+                xout = cq,
+                rule = 2
+              )$y,
+        starting_quantity = 10^log10_quantity_imp,
+        ext_lib_plate_nb = plate_nb
+      )
+    
+  }
+  
+) |> 
+  bind_rows()
+
+```
+
+
+
+```{r}
+
+inv_pred |> 
+  ggplot() +
+  aes(x = starting_quantity, y = cq, col = type) +
+  facet_wrap(. ~ ext_lib_plate_nb , ncol = 4) +
+  geom_point(size = 0.5) +
+  scale_x_log10()
+
+
+```
+
+
+
+
+```{r}
+
+
+qpcr <- 
+  qpcr |> 
+  left_join(
+    inv_pred |> 
+      mutate(target = "16S") |> 
+      dplyr::filter(type == "observed") |> 
+      dplyr::select(target, ext_lib_plate_nb, cq, starting_quantity) |> 
+      dplyr::rename(starting_quantity_LL3 = starting_quantity),
+    by = join_by(target, ext_lib_plate_nb, cq)
+  ) |> 
+  dplyr::relocate(starting_quantity_LL3, .after = starting_quantity_orig) |> 
+  mutate(
+    starting_quantity_LL3 = 
+      case_when(
+        (target != "16S") | (sample_type == "Standard") ~ starting_quantity_orig,
+        TRUE ~ starting_quantity_LL3
+      ),
+    quant_adjusted_LL3 = starting_quantity_LL3 * dilution_factor,
+    copies_per_swab_LL3 = quant_adjusted_LL3 * 250
+  ) |> 
+  dplyr::relocate(quant_adjusted_LL3, .after = quant_adjusted_orig) |> 
+  dplyr::relocate(copies_per_swab_LL3, .after = copies_per_swab_orig)
+
+```
+
+
+
+
+```{r}
+
+qpcr |> 
+  ggplot() +
+  aes(x = copies_per_swab_orig, y = copies_per_swab_LL3, col = sample_type) +
+  facet_wrap(target ~ .) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", col = "black") +
+  geom_point(alpha = 0.5, size = 0.5) +
+    scale_x_log10() +
+    scale_y_log10() 
+
+```
+
+
+
+
+##### Linear regression on high-conc standards
+
+
+
+```{r}
+
+inv_pred <- 
+  map(
+  qpcr$ext_lib_plate_nb |> unique() |> sort(),
+  .f = \(plate_nb) {
+    
+    bind_rows(
+      qpcr |> 
+        dplyr::filter(
+          target == "16S",
+          ext_lib_plate_nb == plate_nb,
+          sample_type != "Standard"
+        ) |> 
+        dplyr::select(cq) |> 
+        distinct() |>
+        mutate(type = "observed"),
+      all_curves |> 
+        dplyr::filter(
+          ext_lib_plate_nb == plate_nb,
+          curve == "linear calibration on high-concentration standards only"
+        ) |> 
+        dplyr::select(cq, starting_quantity) |> 
+        distinct() |> 
+        mutate(type = "fitted", log10_quantity = log10(starting_quantity))
+    ) |> 
+      arrange(cq) |> 
+      mutate(
+        log10_quantity_imp = 
+          approx(
+                x = cq[type == "fitted"],
+                y = log10_quantity[type == "fitted"],
+                xout = cq,
+                rule = 2
+              )$y,
+        starting_quantity = 10^log10_quantity_imp,
+        ext_lib_plate_nb = plate_nb
+      )
+  }
+) |> 
+  bind_rows()
+
+```
+
+
+
+
+```{r}
+
+inv_pred |> 
+  ggplot() +
+  aes(x = starting_quantity, y = cq, col = type) +
+  facet_wrap(. ~ ext_lib_plate_nb , ncol = 4) +
+  geom_point(size = 0.5) +
+  scale_x_log10()
+
+
+```
+
+
+
+
+```{r}
+
+
+qpcr <- 
+  qpcr |> 
+  left_join(
+    inv_pred |> 
+      mutate(target = "16S") |> 
+      dplyr::filter(type == "observed") |> 
+      dplyr::select(target, ext_lib_plate_nb, cq, starting_quantity) |> 
+      dplyr::rename(starting_quantity_LM = starting_quantity),
+    by = join_by(target, ext_lib_plate_nb, cq)
+  ) |> 
+  dplyr::relocate(starting_quantity_LM, .after = starting_quantity_LL3) |> 
+  mutate(
+    starting_quantity_LM = 
+      case_when(
+        (target != "16S") | (sample_type == "Standard") ~ starting_quantity_orig,
+        TRUE ~ starting_quantity_LM
+      ),
+    quant_adjusted_LM = starting_quantity_LM * dilution_factor,
+    copies_per_swab_LM = quant_adjusted_LM * 250
+  ) |> 
+  dplyr::relocate(quant_adjusted_LM, .after = quant_adjusted_LL3) |> 
+  dplyr::relocate(copies_per_swab_LM, .after = copies_per_swab_LL3)
+
+```
+
+
+
+
+```{r}
+
+qpcr |> 
+  ggplot() +
+  aes(x = copies_per_swab_orig, y = copies_per_swab_LM, col = sample_type) +
+  facet_wrap(target ~ .) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", col = "black") +
+  geom_point(alpha = 0.5, size = 0.5) +
+    scale_x_log10() +
+    scale_y_log10() 
+
+```
+
+
+
+
+```{r}
+
+qpcr |> 
+  ggplot() +
+  aes(x = copies_per_swab_LL3, y = copies_per_swab_LM, col = sample_type) +
+  facet_wrap(target ~ .) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", col = "black") +
+  geom_point(alpha = 0.5, size = 0.5) +
+  scale_x_log10() +
+  scale_y_log10() 
+
+```
+
+##### Renaming
+
+```{r}
+
+qpcr <- 
+  qpcr |> 
+  dplyr::mutate(
+    starting_quantity = starting_quantity_LL3,
+    quant_adjusted = quant_adjusted_LL3,
+    copies_per_swab = copies_per_swab_LL3
+  ) |> 
+  dplyr::relocate(starting_quantity, .before = starting_quantity_orig) |>
+  dplyr::relocate(quant_adjusted, .before = quant_adjusted_orig) |>
+  dplyr::relocate(copies_per_swab, .before = copies_per_swab_orig)
+
+  
+```
+
+
+
 
 ### Clinical samples
 
@@ -1749,7 +2465,7 @@ We create a new column `copies_per_swab_adj` that is set to `0` if the `cq_imp` 
 qpcr <- 
   qpcr |> 
   mutate(
-    copies_per_swab_adj = 
+    copies_per_swab = 
       case_when(
         (target != "16S") & (cq_imp >= threshold_cq) ~ 0,
         TRUE ~ copies_per_swab
@@ -1768,13 +2484,13 @@ qpcr |>
   group_by(qpcr_sample_id, sample, pcr_plate_id, ext_lib_plate_nb, target) |>
   mutate(
     replicate_nb = row_number(),
-    median_cps = median(copies_per_swab_adj, na.rm = TRUE),
-    mean_cps = mean(copies_per_swab_adj, na.rm = TRUE)
+    median_cps = median(copies_per_swab, na.rm = TRUE),
+    mean_cps = mean(copies_per_swab, na.rm = TRUE)
     ) |> 
   ungroup() |> 
   mutate(qpcr_sample_id = qpcr_sample_id |> fct_reorder(mean_cps)) |>
   ggplot() +
-  aes(x = qpcr_sample_id, y = copies_per_swab_adj, label = replicate_nb, col = replicate_nb |> factor()) +
+  aes(x = qpcr_sample_id, y = copies_per_swab, label = replicate_nb, col = replicate_nb |> factor()) +
   geom_line(aes(group = qpcr_sample_id), col = "black", linewidth = 0.1) +
   geom_text(size = 3) +
   scale_y_log10() +
@@ -1787,9 +2503,12 @@ qpcr |>
   )
 
 ```
+
+
 This does not fully solve the problem, but I hope that at the "aggregation" step, taking the median value would remove a lot of false positive.
 
 If not, a more stringent threshold could potentially be used, or these samples would have to be excluded from the analysis.
+
 
 ## Aggregation across replicates
 
@@ -1799,9 +2518,9 @@ qpcr <-
   qpcr |> 
   group_by(qpcr_sample_id, target) |> 
   mutate(
-    copies_per_swab_raw_median = median(copies_per_swab, na.rm = TRUE),
-    copies_per_swab_adj_median = median(copies_per_swab_adj, na.rm = TRUE),
-    copies_per_swab_adj_range = max(copies_per_swab_adj, na.rm = TRUE) - min(copies_per_swab_adj, na.rm = TRUE),
+    copies_per_swab_raw_median = median(copies_per_swab_orig, na.rm = TRUE),
+    copies_per_swab_adj_median = median(copies_per_swab, na.rm = TRUE),
+    copies_per_swab_adj_range = max(copies_per_swab, na.rm = TRUE) - min(copies_per_swab, na.rm = TRUE),
   ) |> 
   ungroup()
 
@@ -1993,7 +2712,7 @@ tmp <-
 ```
 
 ```{r}
-#| fig-width: 8
+#| fig-width: 10
 #| fig-height: 4
 
 tmp |> 
@@ -2006,7 +2725,7 @@ tmp |>
   scale_color_discrete("Control type") + xlab("") +
   ggbeeswarm::geom_quasirandom(size = 0.7, alpha = 0.8) +
   theme(
-    #strip.text.x = element_text(angle = 90),
+    strip.text.x = element_text(angle = 90),
     axis.text.x = element_blank()
   )
 
@@ -2154,15 +2873,28 @@ We create two `Summarized Experiment` objects:
 We create a `SummarizedExperiment` object with the following assays:
 
   + `dilution_factor`
-  + `cq` 
-  + `starting_quantity`
-  + `cq_mean`
-  + `quant_adjusted`
-  + `copies_per_swab_raw` (current `copies_per_swab` column)
-  + `copies_per_swab` (current `copies_per_swab_adj` column)
+  + `cq` (observed Cq values - raw data, as provided by Ravel's lab)
+  + `copies_per_swab` (estimated copies per swabs - adjusted from the raw data provided by Ravel's lab to attempt correction for low-level contamination)
+  
+  We also provide the following additional assays:
+  
+  + `cq_mean` (mean Cq values across replicates)
+
+  
+  + `starting_quantity_orig` (starting quantities as estimated using inverse prediction from the standard calibration lines - raw data, as provided by Ravel's lab, using linear calibration models on all standards)
+  + `starting_quantity_LL3` (starting quantities as estimated using LL3 calibration on the 16S standard. For all other targets, this is identical to `starting_quantity_orig`)
+  + `starting_quantity_LM` (starting quantities as estimated using the linear model calibration on the high-concentrations 16S standard. For all other targets, this is identical to `starting_quantity_orig`)
+  
+  + `quant_adjusted_orig` (quantities adjusted by the dilution factors, raw data, as provided by Ravel's lab)
+  + `quant_adjusted_LL3` (see above)
+  + `quant_adjusted_LM` (see above)
+  
+  + `copies_per_swab_orig` (copies per swabs, estimated from the ajusted quantities and an estimate of the # of bacteria per concentration unit - raw data, as provided by Ravel's lab)
+  + `copies_per_swab_LL3` (see above)
+  + `copies_per_swab_LM` (see above)
   
   
-The "samples" are defined by the `qpcr_uid` column (one per well and plate) and the "features" are defined by the `target` column (*i.e.*, the LBP taxa).
+The "samples" are defined by the `qpcr_uid` column (one per well and qPCR plate) and the "features" are defined by the `target` column (*i.e.*, the LBP taxa).
   
 The `colData` contains the following columns: 
   
@@ -2233,64 +2965,18 @@ make_raw_qpcr_SE <- function(qpcr){
     arrange(qpcr_uid, target)
     
   # ASSAYS
-  
-  dilution_assay <- 
+  make_assay <- function(qpcr, assay_col){
     qpcr |>
-    select(qpcr_uid, target, dilution_factor) |> 
-    arrange() |> 
-    pivot_wider(names_from = qpcr_uid, values_from = dilution_factor) |> 
-    as.data.frame() |> 
-    column_to_rownames("target") 
+      dplyr::select(qpcr_uid, target, all_of(assay_col)) |> 
+      arrange() |> 
+      pivot_wider(names_from = qpcr_uid, values_from = all_of(assay_col)) |> 
+      as.data.frame() |> 
+      column_to_rownames("target") |> 
+      as.matrix()
+  }
+
   
-  cq_assay <- 
-    qpcr |>
-    select(qpcr_uid, target, cq) |> 
-    arrange() |> 
-    pivot_wider(names_from = qpcr_uid, values_from = cq) |> 
-    as.data.frame() |> 
-    column_to_rownames("target") 
-  
-  starting_quantity_assay <- 
-    qpcr |>
-    select(qpcr_uid, target, starting_quantity) |> 
-    arrange() |> 
-    pivot_wider(names_from = qpcr_uid, values_from = starting_quantity) |> 
-    as.data.frame() |> 
-    column_to_rownames("target")
-  
-   cq_mean_assay <- 
-    qpcr |>
-    select(qpcr_uid, target, cq_mean) |> 
-    arrange() |> 
-    pivot_wider(names_from = qpcr_uid, values_from = cq_mean) |> 
-    as.data.frame() |> 
-    column_to_rownames("target")
-   
-   quant_adjusted_assay <- 
-     qpcr |>
-     select(qpcr_uid, target, quant_adjusted) |> 
-     arrange() |> 
-     pivot_wider(names_from = qpcr_uid, values_from = quant_adjusted) |> 
-     as.data.frame() |> 
-     column_to_rownames("target")
-   
-   copies_per_swab_raw_assay <- 
-     qpcr |>
-     select(qpcr_uid, target, copies_per_swab) |> 
-     arrange() |> 
-     pivot_wider(names_from = qpcr_uid, values_from = copies_per_swab) |> 
-     as.data.frame() |> 
-     column_to_rownames("target")
-   
-  copies_per_swab_assay <- 
-    qpcr |>
-    select(qpcr_uid, target, copies_per_swab_adj) |> 
-    arrange() |> 
-    pivot_wider(names_from = qpcr_uid, values_from = copies_per_swab_adj) |> 
-    as.data.frame() |> 
-    column_to_rownames("target")
-  
-    # COLDATA
+  # COLDATA
    coldata <- 
      qpcr |> 
      select(
@@ -2337,13 +3023,19 @@ make_raw_qpcr_SE <- function(qpcr){
    
    SE <- SummarizedExperiment(
      assays = list(
-       dilution = dilution_assay |> as.matrix(),
-       cq = cq_assay |> as.matrix(),
-       cq_mean = cq_mean_assay |> as.matrix(),
-       starting_quantity = starting_quantity_assay |> as.matrix(),
-       quant_adjusted = quant_adjusted_assay |> as.matrix(),
-       copies_per_swab_raw = copies_per_swab_raw_assay |>  as.matrix(),
-       copies_per_swab = copies_per_swab_assay |> as.matrix()
+       dilution = make_assay(qpcr, assay_col = "dilution_factor"),
+       cq = make_assay(qpcr, assay_col = "cq"),
+       copies_per_swab = make_assay(qpcr, assay_col = "copies_per_swab"),
+       cq_mean = make_assay(qpcr, assay_col = "cq_mean"),
+       starting_quantity_orig = make_assay(qpcr, assay_col = "starting_quantity_orig"),
+       starting_quantity_LL3 = make_assay(qpcr, assay_col = "starting_quantity_LL3"),
+       starting_quantity_LM = make_assay(qpcr, assay_col = "starting_quantity_LM"),
+       quant_adjusted_orig = make_assay(qpcr, assay_col = "quant_adjusted_orig"),
+       quant_adjusted_LL3 = make_assay(qpcr, assay_col = "quant_adjusted_LL3"),
+       quant_adjusted_LM = make_assay(qpcr, assay_col = "quant_adjusted_LM"),
+       copies_per_swab_orig = make_assay(qpcr, assay_col = "copies_per_swab_orig"),
+       copies_per_swab_LL3 = make_assay(qpcr, assay_col = "copies_per_swab_LL3"),
+       copies_per_swab_LM = make_assay(qpcr, assay_col = "copies_per_swab_LM")
      ),
      colData = coldata,
      rowData = rowdata,
@@ -2354,6 +3046,7 @@ make_raw_qpcr_SE <- function(qpcr){
      )
    )
    
+  
    SE
   
 }
@@ -2380,6 +3073,14 @@ We create a `SummarizedExperiment` object with summarized values (aggregated acr
   + `copies_per_swab_med` (the median `copies_per_swab` across replicates)
   + `copies_per_swab_mean` (the mean `copies_per_swab` across replicates)
   + `copies_per_swab_cv` (the coefficient of variation of `copies_per_swab` across replicates)
+  
+In addition, we also provide the following assay:
+  
+  + `copies_per_swab_orig_med` (the median of the original `copies_per_swab` (= as provided by Ravel's lab) across replicates)
+  + `copies_per_swab_LL3_med` (see above)
+  + `copies_per_swab_LM_med` (see above)
+  
+  
 
 The `colData` contains the same columns as above (except for those that are replicate-specific)
 
@@ -2408,11 +3109,27 @@ agg_qpcr_SE <- function(SE_qPCR_raw){
       copies_per_swab_mean = mean(copies_per_swab, na.rm = TRUE),
       copies_per_swab_sd = sd(copies_per_swab, na.rm = TRUE),
       copies_per_swab_range = max(copies_per_swab, na.rm = TRUE) - min(copies_per_swab, na.rm = TRUE),
+      copies_per_swab_orig_med = median(copies_per_swab_orig, na.rm = TRUE),
+      copies_per_swab_LL3_med = median(copies_per_swab_LL3, na.rm = TRUE),
+      copies_per_swab_LM_med = median(copies_per_swab_LM, na.rm = TRUE),
       .groups = "drop"
     ) |> 
     mutate(
       copies_per_swab_cv = ifelse(copies_per_swab_sd == 0, 0, copies_per_swab_sd / copies_per_swab_mean)
     ) 
+  
+  
+  # ASSAYS
+  make_assay <- 
+    function(summarized_qpcr, assay_col){
+      summarized_qpcr |>
+        dplyr::select(uid, target, all_of(assay_col)) |> 
+        arrange() |> 
+        pivot_wider(id_cols = target, names_from = uid, values_from = all_of(assay_col)) |> 
+        as.data.frame() |> 
+        column_to_rownames("target") |> 
+        as.matrix()
+    }
 
   # COLDATA
   coldata <- 
@@ -2455,36 +3172,14 @@ agg_qpcr_SE <- function(SE_qPCR_raw){
     
    SE <- SummarizedExperiment(
      assays = list(
-       n_non_na = 
-         summarized_qpcr |> 
-         pivot_wider(id_cols = target, names_from = uid, values_from = n_non_na) |> 
-         as.data.frame() |> 
-         column_to_rownames("target") |> 
-         as.matrix(),
-        dilution = 
-         summarized_qpcr |> 
-         pivot_wider(id_cols = target, names_from = uid, values_from = dilution) |> 
-         as.data.frame() |> 
-         column_to_rownames("target") |> 
-         as.matrix(),
-       copies_per_swab_med = 
-         summarized_qpcr |> 
-         pivot_wider(id_cols = target, names_from = uid, values_from = copies_per_swab_med) |> 
-         as.data.frame() |> 
-         column_to_rownames("target") |> 
-         as.matrix(),
-       copies_per_swab_mean = 
-         summarized_qpcr |> 
-         pivot_wider(id_cols = target, names_from = uid, values_from = copies_per_swab_mean) |> 
-         as.data.frame() |> 
-         column_to_rownames("target") |> 
-         as.matrix(),
-       copies_per_swab_cv = 
-         summarized_qpcr |> 
-         pivot_wider(id_cols = target, names_from = uid, values_from = copies_per_swab_cv) |> 
-         as.data.frame() |> 
-         column_to_rownames("target") |> 
-         as.matrix()
+       n_non_na = make_assay(summarized_qpcr, assay_col = "n_non_na"),
+       dilution = make_assay(summarized_qpcr, assay_col = "dilution"),
+       copies_per_swab_med = make_assay(summarized_qpcr, assay_col = "copies_per_swab_med"),
+       copies_per_swab_mean = make_assay(summarized_qpcr, assay_col = "copies_per_swab_mean"),
+       copies_per_swab_cv = make_assay(summarized_qpcr, assay_col = "copies_per_swab_cv"),
+       copies_per_swab_orig_med = make_assay(summarized_qpcr, assay_col = "copies_per_swab_orig_med"),
+       copies_per_swab_LL3_med = make_assay(summarized_qpcr, assay_col = "copies_per_swab_LL3_med"),
+       copies_per_swab_LM_med = make_assay(summarized_qpcr, assay_col = "copies_per_swab_LM_med")
      ),
      colData = coldata,
      rowData = rowdata,
@@ -2508,6 +3203,65 @@ SE_qPCR_agg <- agg_qpcr_SE(SE_qPCR_raw = SE_qPCR_raw)
 SE_qPCR_agg
 
 ```
+
+```{r}
+
+tmp <- 
+  SE_qPCR_agg |> 
+  as_tibble() |> 
+  dplyr::filter(.feature == "16S", sample_type == "Clinical sample") |> 
+  mutate(
+    pid = .sample |> str_split_fixed("_",2) |> extract(,1),
+    visit_code = .sample |> str_split_fixed("_",2)|> extract(,2),
+    site = case_when(
+      str_detect(.sample, "06810") ~ "MGH",
+      str_detect(.sample, "06820") ~ "CAP",
+      TRUE ~ "Other"
+    )
+  ) |> 
+  filter(str_sub(visit_code, 4,4) == 0, visit_code != "0010") |> 
+  select(site, pid, visit_code, matches("copies_per_swab.*_med")) |>
+  pivot_longer(
+    cols = starts_with("copies_per_swab"),
+    names_pattern = "copies_per_swab_(.*)_med",
+    names_to = "transformation",
+    values_to = "copies_per_swab"
+  ) |>
+  mutate(
+    transformation = transformation |> str_replace_na("final") |> fct_inorder()
+  ) 
+
+```
+
+
+```{r}
+
+
+tmp |> 
+  ggplot() +
+  aes(x = visit_code, y = copies_per_swab, col = site) +
+  facet_grid(. ~ transformation) +
+  geom_line(aes(group = pid), alpha = 0.3) +
+  geom_point() +
+  scale_y_log10() +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
+  ) 
+
+
+tmp |> 
+  ggplot() +
+  aes(x = visit_code, y = pid, fill = log10(copies_per_swab)) +
+  facet_grid(. ~ transformation) +
+  geom_tile() +
+  scale_fill_gradient(low = "gray90", high = "dodgerblue4", na.value = "white") 
+
+
+
+```
+
+
+
 
 
 ## Save `SummarizedExperiment` objects
