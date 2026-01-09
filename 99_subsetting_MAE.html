@@ -2398,29 +2398,32 @@ Functionality:
 <span id="cb7-49"><a href="#cb7-49" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb7-50"><a href="#cb7-50" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb7-51"><a href="#cb7-51" aria-hidden="true" tabindex="-1"></a><span class="co"># filtering coldata</span></span>
-<span id="cb7-52"><a href="#cb7-52" aria-hidden="true" tabindex="-1"></a>vars_coldata <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">&quot;ITT&quot;</span>, <span class="st">&quot;mITT&quot;</span>, <span class="st">&quot;PP&quot;</span>, <span class="st">&quot;PIPV&quot;</span>, <span class="st">&quot;randomized&quot;</span>, </span>
-<span id="cb7-53"><a href="#cb7-53" aria-hidden="true" tabindex="-1"></a>                  <span class="st">&quot;site&quot;</span>, <span class="st">&quot;location&quot;</span>, <span class="st">&quot;arm&quot;</span>, </span>
-<span id="cb7-54"><a href="#cb7-54" aria-hidden="true" tabindex="-1"></a>                  <span class="st">&quot;visit_code&quot;</span>, <span class="st">&quot;visit_type&quot;</span>, <span class="st">&quot;study_week&quot;</span>)</span>
-<span id="cb7-55"><a href="#cb7-55" aria-hidden="true" tabindex="-1"></a><span class="fu">colData</span>(mae_1) <span class="ot">&lt;-</span> <span class="fu">colData</span>(mae_1)[, vars_coldata]</span>
-<span id="cb7-56"><a href="#cb7-56" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-57"><a href="#cb7-57" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-58"><a href="#cb7-58" aria-hidden="true" tabindex="-1"></a><span class="co"># filtering the SE </span></span>
+<span id="cb7-52"><a href="#cb7-52" aria-hidden="true" tabindex="-1"></a>vars_coldata <span class="ot">&lt;-</span> <span class="fu">c</span>(</span>
+<span id="cb7-53"><a href="#cb7-53" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;uid&quot;</span>, <span class="st">&quot;pid&quot;</span>, <span class="st">&quot;visit_code&quot;</span>,</span>
+<span id="cb7-54"><a href="#cb7-54" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;randomized&quot;</span>, <span class="st">&quot;ITT&quot;</span>, <span class="st">&quot;mITT&quot;</span>, <span class="st">&quot;PP&quot;</span>, <span class="st">&quot;site&quot;</span>, <span class="st">&quot;location&quot;</span>, <span class="st">&quot;arm&quot;</span>, </span>
+<span id="cb7-55"><a href="#cb7-55" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;visit&quot;</span>, <span class="st">&quot;visit_number&quot;</span>, <span class="st">&quot;visit_type&quot;</span>, <span class="st">&quot;study_week&quot;</span>, <span class="st">&quot;study_day&quot;</span>, <span class="st">&quot;PIPV&quot;</span>, </span>
+<span id="cb7-56"><a href="#cb7-56" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;visit_attended&quot;</span>, <span class="st">&quot;visit_planned&quot;</span>, <span class="st">&quot;screening_visit&quot;</span></span>
+<span id="cb7-57"><a href="#cb7-57" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb7-58"><a href="#cb7-58" aria-hidden="true" tabindex="-1"></a><span class="fu">colData</span>(mae_1) <span class="ot">&lt;-</span> <span class="fu">colData</span>(mae_1)[, vars_coldata]</span>
 <span id="cb7-59"><a href="#cb7-59" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-60"><a href="#cb7-60" aria-hidden="true" tabindex="-1"></a><span class="co"># 1. mg </span></span>
-<span id="cb7-61"><a href="#cb7-61" aria-hidden="true" tabindex="-1"></a><span class="fu">assays</span>(mae_1[[<span class="st">&quot;mg&quot;</span>]]) <span class="ot">&lt;-</span> <span class="fu">assays</span>(mae_1[[<span class="st">&quot;mg&quot;</span>]])[<span class="fu">c</span>(<span class="st">&quot;rel_ab_all&quot;</span>, <span class="st">&quot;rel_ab_bact&quot;</span>, <span class="st">&quot;rel_ab&quot;</span>)]</span>
-<span id="cb7-62"><a href="#cb7-62" aria-hidden="true" tabindex="-1"></a><span class="fu">colData</span>(mae_1[[<span class="st">&quot;mg&quot;</span>]]) <span class="ot">&lt;-</span> <span class="fu">colData</span>(mae_1[[<span class="st">&quot;mg&quot;</span>]])[, <span class="fu">c</span>(<span class="st">&quot;uid&quot;</span>, <span class="st">&quot;poor_quality_mg_data&quot;</span>)]</span>
-<span id="cb7-63"><a href="#cb7-63" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-64"><a href="#cb7-64" aria-hidden="true" tabindex="-1"></a><span class="co"># # 2. qPCR</span></span>
-<span id="cb7-65"><a href="#cb7-65" aria-hidden="true" tabindex="-1"></a><span class="co"># assays(mae[[&quot;qPCR&quot;]]) &lt;- assays(mae[[&quot;qPCR&quot;]])[c(&quot;copies_per_swab_med&quot;)]</span></span>
-<span id="cb7-66"><a href="#cb7-66" aria-hidden="true" tabindex="-1"></a><span class="co"># colData(mae[[&quot;qPCR&quot;]]) &lt;- colData(mae[[&quot;qPCR&quot;]])[, c(&quot;uid&quot;, &quot;qpcr_sample_type&quot;)]</span></span>
-<span id="cb7-67"><a href="#cb7-67" aria-hidden="true" tabindex="-1"></a><span class="co"># rowData(mae[[&quot;qPCR&quot;]]) &lt;- rowData(mae[[&quot;qPCR&quot;]])[, c(&quot;taxon_label&quot;, &quot;LBP&quot;, &quot;strain_origin&quot;)]</span></span>
-<span id="cb7-68"><a href="#cb7-68" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-69"><a href="#cb7-69" aria-hidden="true" tabindex="-1"></a><span class="co"># # 3. qPCR_daily</span></span>
-<span id="cb7-70"><a href="#cb7-70" aria-hidden="true" tabindex="-1"></a><span class="co"># assays(mae[[&quot;qPCR_daily&quot;]]) &lt;- assays(mae[[&quot;qPCR_daily&quot;]])[c(&quot;copies_per_swab_med&quot;)]</span></span>
-<span id="cb7-71"><a href="#cb7-71" aria-hidden="true" tabindex="-1"></a><span class="co"># colData(mae[[&quot;qPCR_daily&quot;]]) &lt;- colData(mae[[&quot;qPCR_daily&quot;]])[, c(&quot;uid&quot;, &quot;qpcr_sample_type&quot;)]</span></span>
-<span id="cb7-72"><a href="#cb7-72" aria-hidden="true" tabindex="-1"></a><span class="co"># rowData(mae[[&quot;qPCR_daily&quot;]]) &lt;- rowData(mae[[&quot;qPCR_daily&quot;]])[, c(&quot;taxon_label&quot;, &quot;LBP&quot;, &quot;strain_origin&quot;)]</span></span>
-<span id="cb7-73"><a href="#cb7-73" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-74"><a href="#cb7-74" aria-hidden="true" tabindex="-1"></a><span class="co"># 4. col_LBP_mg, col_LBP_qPCR, col_crispatus_mg : no changes</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb7-60"><a href="#cb7-60" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-61"><a href="#cb7-61" aria-hidden="true" tabindex="-1"></a><span class="co"># filtering the SE </span></span>
+<span id="cb7-62"><a href="#cb7-62" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-63"><a href="#cb7-63" aria-hidden="true" tabindex="-1"></a><span class="co"># 1. mg </span></span>
+<span id="cb7-64"><a href="#cb7-64" aria-hidden="true" tabindex="-1"></a><span class="fu">assays</span>(mae_1[[<span class="st">&quot;mg&quot;</span>]]) <span class="ot">&lt;-</span> <span class="fu">assays</span>(mae_1[[<span class="st">&quot;mg&quot;</span>]])[<span class="fu">c</span>(<span class="st">&quot;rel_ab_all&quot;</span>, <span class="st">&quot;rel_ab_bact&quot;</span>, <span class="st">&quot;rel_ab&quot;</span>)]</span>
+<span id="cb7-65"><a href="#cb7-65" aria-hidden="true" tabindex="-1"></a><span class="fu">colData</span>(mae_1[[<span class="st">&quot;mg&quot;</span>]]) <span class="ot">&lt;-</span> <span class="fu">colData</span>(mae_1[[<span class="st">&quot;mg&quot;</span>]])[, <span class="fu">c</span>(<span class="st">&quot;uid&quot;</span>, <span class="st">&quot;poor_quality_mg_data&quot;</span>)]</span>
+<span id="cb7-66"><a href="#cb7-66" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-67"><a href="#cb7-67" aria-hidden="true" tabindex="-1"></a><span class="co"># # 2. qPCR</span></span>
+<span id="cb7-68"><a href="#cb7-68" aria-hidden="true" tabindex="-1"></a><span class="co"># assays(mae[[&quot;qPCR&quot;]]) &lt;- assays(mae[[&quot;qPCR&quot;]])[c(&quot;copies_per_swab_med&quot;)]</span></span>
+<span id="cb7-69"><a href="#cb7-69" aria-hidden="true" tabindex="-1"></a><span class="co"># colData(mae[[&quot;qPCR&quot;]]) &lt;- colData(mae[[&quot;qPCR&quot;]])[, c(&quot;uid&quot;, &quot;qpcr_sample_type&quot;)]</span></span>
+<span id="cb7-70"><a href="#cb7-70" aria-hidden="true" tabindex="-1"></a><span class="co"># rowData(mae[[&quot;qPCR&quot;]]) &lt;- rowData(mae[[&quot;qPCR&quot;]])[, c(&quot;taxon_label&quot;, &quot;LBP&quot;, &quot;strain_origin&quot;)]</span></span>
+<span id="cb7-71"><a href="#cb7-71" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-72"><a href="#cb7-72" aria-hidden="true" tabindex="-1"></a><span class="co"># # 3. qPCR_daily</span></span>
+<span id="cb7-73"><a href="#cb7-73" aria-hidden="true" tabindex="-1"></a><span class="co"># assays(mae[[&quot;qPCR_daily&quot;]]) &lt;- assays(mae[[&quot;qPCR_daily&quot;]])[c(&quot;copies_per_swab_med&quot;)]</span></span>
+<span id="cb7-74"><a href="#cb7-74" aria-hidden="true" tabindex="-1"></a><span class="co"># colData(mae[[&quot;qPCR_daily&quot;]]) &lt;- colData(mae[[&quot;qPCR_daily&quot;]])[, c(&quot;uid&quot;, &quot;qpcr_sample_type&quot;)]</span></span>
+<span id="cb7-75"><a href="#cb7-75" aria-hidden="true" tabindex="-1"></a><span class="co"># rowData(mae[[&quot;qPCR_daily&quot;]]) &lt;- rowData(mae[[&quot;qPCR_daily&quot;]])[, c(&quot;taxon_label&quot;, &quot;LBP&quot;, &quot;strain_origin&quot;)]</span></span>
+<span id="cb7-76"><a href="#cb7-76" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-77"><a href="#cb7-77" aria-hidden="true" tabindex="-1"></a><span class="co"># 4. col_LBP_mg, col_LBP_qPCR, col_crispatus_mg : no changes</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
 </section>

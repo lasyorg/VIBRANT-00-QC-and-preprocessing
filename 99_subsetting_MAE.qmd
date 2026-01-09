@@ -172,9 +172,12 @@ metadata(mae_1) <- new_metadata
 
 
 # filtering coldata
-vars_coldata <- c("ITT", "mITT", "PP", "PIPV", "randomized", 
-                  "site", "location", "arm", 
-                  "visit_code", "visit_type", "study_week")
+vars_coldata <- c(
+  "uid", "pid", "visit_code",
+  "randomized", "ITT", "mITT", "PP", "site", "location", "arm", 
+  "visit", "visit_number", "visit_type", "study_week", "study_day", "PIPV", 
+  "visit_attended", "visit_planned", "screening_visit"
+  )
 colData(mae_1) <- colData(mae_1)[, vars_coldata]
 
 
