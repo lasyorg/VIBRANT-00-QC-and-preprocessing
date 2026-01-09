@@ -65,8 +65,17 @@ get_04_output_dir <- function(){
 }
 
 get_05_output_dir <- function(){
-  get_output_dir() |> str_c("05 subsetted MAEs/")
+  get_output_dir() |> str_c("05 augmented MAEs/")
 }
+
+get_06_output_dir <- function(){
+  get_output_dir() |> str_c("06 subsetted MAEs/")
+}
+
+get_07_output_dir <- function(){
+  get_output_dir() |> str_c("07 Zenodo exports/")
+}
+
 
 
 

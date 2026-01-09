@@ -1101,6 +1101,13 @@ mae <- c(
 
 # Calculated variables
 
+```{r}
+mae@metadata$calc_vars_pid <- 
+  tibble(pid = mae@colData |> as_tibble() |> pull(pid) |> unique())
+```
+
+
+
 ## Education - can we harmonize between sites ?
 
 ```{r}
@@ -1447,9 +1454,126 @@ mae@metadata$exposures |>
 
 ```
 
+## Study product exposure related variables
 
 
+### Number of self-reported study product doses taken
 
+
+```{r}
+
+n_self_reported_doses <- 
+  metadata(mae)$exposures |>
+  group_by(pid) |>
+  summarize(
+    n_product_doses = sum(study_product |> as.integer(), na.rm = TRUE),
+    n_product_doses_PP = sum(study_product_PP, na.rm = TRUE),
+    comments_studyproduct = str_c(comments_studyproduct[!is.na(comments_studyproduct)], collapse = "; "),
+    .groups = "drop"
+  )
+
+
+mae@metadata$calc_vars_pid <- 
+  mae@metadata$calc_vars_pid |> 
+  left_join(n_self_reported_doses, by = join_by(pid))
+
+rm(n_self_reported_doses)
+
+```
+
+
+### Time since last self-reported study product doses at Week 2 in-clinic visit
+
+
+We document the time between the last dose taken prior to the in-person visit at week 2 and the swab collected at that visit. This is relevant because the primary outcome is detection of the LBP strain at the week 2 visit, and the time since last dose may influence the likelihood of detection.
+
+Information on the self-reported time of last study product use comes from `exposures`, while the study day of the week 2 in-person visit is taken from `visits_crfs_merged.`
+
+We define the following categories for the timing of the last study product use:
+-   "same day": last dose taken on the same day as the visit (before 6 p.m.)
+-   "day before": last dose taken the day before the visit
+-   "more than 1 day": last dose taken more than one day before the visit
+
+
+```{r}
+
+study_product <-
+  mae@colData |>
+  as_tibble() |>
+  select(pid, site, randomized, arm, ITT, mITT, PP) |>
+  distinct() |>
+  filter(randomized, mITT) |>
+  left_join(
+    metadata(mae)$exposures |> select(pid, visit_code, study_product),
+    by = "pid"
+  ) |>
+  left_join(
+    metadata(mae)$visits_crfs_merged |> as_tibble() |> select(pid, visit_code, study_day, insert_study_product_time),
+    by = (c("pid", "visit_code"))) |>
+  dplyr::rename(
+    study_day_product = study_day,
+    visit_code_product = visit_code
+  ) 
+
+# study_day visit 2 in person
+# ! pid 068100026 appear 2 times ! -> removed using filter(!is.na(study_day_visit2))
+visit2_studyday <- 
+  metadata(mae)$visits_crfs_merged |> 
+  as_tibble() |> 
+  select(pid, visit_code, study_day) |> 
+  distinct() |> 
+  filter(visit_code == "1200") |> 
+  dplyr::rename(study_day_v2 = study_day) |> 
+  dplyr::filter(!is.na(study_day_v2))
+
+  
+study_prod_time <- 
+  study_product |> 
+  left_join(visit2_studyday |> select(-visit_code), by = "pid") |> 
+  filter(arm != "Pl") |> 
+  group_by(pid) |> 
+  filter(study_product == "1") |> 
+  filter(study_day_product <= study_day_v2) |>  # only consider doses taken before v2
+  filter(!((study_day_product == study_day_v2) & (insert_study_product_time %in% c("Late evening (9pm-midnight)", "Evening (6pm-9pm)")))) |> 
+  arrange(study_day_product) |> 
+  slice_tail(n = 1) |>              
+  ungroup() 
+
+# create category 
+time_since_last_dose_week2 <- 
+  study_prod_time |> 
+  mutate(
+    last_dose = 
+      case_when(
+        study_day_product == study_day_v2 ~ "same day", 
+        study_day_product == study_day_v2-1 ~ "day before", 
+        study_day_product < study_day_v2-1~ "more than one day"
+      ), 
+    last_dose_at_W2 = factor(last_dose, levels = c("same day", "day before", "more than one day"))
+  ) |> 
+  select(pid, last_dose_at_W2)
+
+
+mae@metadata$calc_vars_pid <- 
+  mae@metadata$calc_vars_pid |> 
+  left_join(time_since_last_dose_week2, by = join_by(pid))
+
+rm(study_product, visit2_studyday, study_prod_time, time_since_last_dose_week2)
+
+```
+
+```{r}
+
+mae@metadata$calc_vars_pid |> 
+  left_join(
+    mae@colData |> as_tibble() |> select(pid, arm, mITT) |> distinct(),
+    by = join_by(pid)
+  ) |>
+  filter(mITT) |> 
+  dplyr::count(arm, last_dose_at_W2) |> 
+  gt::gt()
+
+```
 
 
 

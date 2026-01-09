@@ -10,7 +10,7 @@ format:
     theme: journal
     embed-resources: true
 execute:
-  cache: true # refresh true false
+  cache: refresh # refresh true false
 project:
   execute-dir: project
 editor: 
@@ -72,11 +72,11 @@ At the end of this document, several `MAE` objects will ultimately be created:
 #| eval: true
 
 mae_file <- 
-  fs::dir_ls(str_c(data_dir(), "04 unblinded MAEs/"), regexp = "mae_full_.*\\.rds$") |> 
+  fs::dir_ls(get_05_output_dir(), regexp = "mae_full_.*\\.rds$") |> 
   sort(decreasing = TRUE) |>
   magrittr::extract(1)
 
-cat(str_c("Loading the RDS file containing the unblinded VIBRANT MAE: /", mae_file |> str_remove(data_dir()), "\n"))
+cat(str_c("Loading the RDS file containing the unblinded augmented VIBRANT MAE: /", mae_file |> str_remove(data_dir()), "\n"))
 
 mae <- readRDS(mae_file)
 
@@ -97,11 +97,19 @@ mae
 
 `MAE_1` contains all necessary information for the primary outcome analyses and contains only the randomized participants. 
 
--   `participant_crf_merged` table stored in the metadata of the MAE with the following variable : site, age, race, ethn, cut_size_meals, eat_less, hungry_did_not_eat, sexual_partners_lifetime, sexual_partners_past_month, contraception_method, used_applicators, number_applicators, applicator_stain_positive, applicator_stain_negative, applicator_stain_indeterminant, total_applicators_stained, proportion_positive_applicators, total
+-   `participant_crf_merged` table stored in the `metadata` slot of the MAE with the following variable : site, age, race, ethn, cut_size_meals, eat_less, hungry_did_not_eat, sexual_partners_lifetime, sexual_partners_past_month, contraception_method, used_applicators, number_applicators, applicator_stain_positive, applicator_stain_negative, applicator_stain_indeterminant, total_applicators_stained, proportion_positive_applicators, total
 
--   `visits_crfs_merged` table stored in the metadata of the MAE contains : visit_code, study_day, the participant's partner's gender (past_week_sex_partner), insert_study_product_time, nugent_total_score
+-   `visits_crfs_merged` table stored in the `metadata` slot of the MAE contains : visit_code, study_day, the participant's partner's gender (past_week_sex_partner), insert_study_product_time, nugent_total_score
 
--   `coldata` contains the population flag (`ITT`, `mITT`, `PP`), `PIPV`, if participants is randomized or not (`randomized`), the site, location, arm, visit_code, visit_type, study_week
+-   `calc_vars_pid` table stored in the `metadata` slot of the MAE contains the following participant-level calculated variables: 
+
+    - n_product_doses (number of study product doses that participant reported taking), 
+    - last_dose_at_W2 (time since last study product dose at the Week 2 in-clinic visit), 
+    - pid_exposed_by_qPCR (a logical variable indicating whether the participant was effectively exposed to study product based on qPCR data from daily swabs sampled during expected dosing window), 
+    - n_days_exposed_by_qPCR (number of days the participant was effectively exposed to study product based on qPCR data from daily swabs sampled during expected dosing window), 
+    - n_days_exp_dosed (duration of the expected dosing window - based on participants' study arm).
+
+- the `MAE@colData` contains the population flag (`ITT`, `mITT`, `PP`), `PIPV`, if participants is randomized or not (`randomized`), the site, location, arm, visit_code, visit_type, study_week
 
 The `mae_1`will contains the following assay with the following informations: 
 
@@ -109,24 +117,23 @@ The `mae_1`will contains the following assay with the following informations:
 -   `col_LBP_qPCR` SE contains : .feature, .sample,  outcome
 -   `col_crispatus_mg` SE contains : .feature, .sample, outcome
 -   `mg` SE contains the following : .feature, .sample, uid, LBP, poor_quality_mg_data, rel_ab, rel_ab_bact and the taxonomic table 
--   `qPCR` SE contains : uid, .feature, copies_per_swab_med, taxon_label, LBP, strain_origin
--   `qPCR_daily` SE contains : uid, .feature, copies_per_swab_med, taxon_label, LBP, strain_origin
 
 
 ```{r}
 
 # Randomized participants 
 mae_randomized <- mae[, !is.na(colData(mae)$randomized) & colData(mae)$randomized == TRUE]
+randomized_pids <- unique(colData(mae_randomized)$pid)
 
 # subsetting only necessary SE
-se_names <- c("col_LBP_mg", "col_LBP_qPCR", "col_crispatus_mg", "mg", "qPCR", "qPCR_daily")
+se_names <- c("col_LBP_mg", "col_LBP_qPCR", "col_crispatus_mg", "mg")
 selected_experiments <- experiments(mae_randomized)[se_names]
 
-mae_1 <- MultiAssayExperiment(
-  experiments = selected_experiments,
-  colData = colData(mae_randomized),
-  metadata = metadata(mae_randomized)
-)
+mae_1 <- 
+  MultiAssayExperiment(
+    experiments = selected_experiments,
+    colData = colData(mae_randomized)
+  )
 
 # Meta data 
 
@@ -141,12 +148,24 @@ vars_participant <- c("pid", "site", "age", "race", "ethn", "cut_size_meals", "e
 vars_visits <- c("pid", "visit_code", "study_day", 
                  "past_week_sex_partner", "insert_study_product_time", "nugent_total_score")
 
+calc_vars <- 
+  c(
+    "pid", "n_product_doses", "last_dose_at_W2", 
+    "pid_exposed_by_qPCR", "n_days_exposed_by_qPCR", "n_days_exp_dosed"
+  )
+
 ## new metadata
 new_metadata <- 
   list(
-    participant_crfs_merged = metadata(mae_1)$participant_crfs_merged[, vars_participant],
-    visits_crfs_merged = metadata(mae_1)$visits_crfs_merged[, vars_visits],
-    exposures = metadata(mae_1)$exposures  
+    participant_crfs_merged = 
+      metadata(mae)$participant_crfs_merged[, vars_participant] |> 
+      filter(pid %in% randomized_pids),
+    visits_crfs_merged = 
+      metadata(mae)$visits_crfs_merged[, vars_visits] |> 
+      filter(pid %in% randomized_pids),
+    calc_vars_pid = 
+      metadata(mae)$calc_vars_pid[, calc_vars] |> 
+      filter(pid %in% randomized_pids)
 )
 
 metadata(mae_1) <- new_metadata
@@ -156,7 +175,7 @@ metadata(mae_1) <- new_metadata
 vars_coldata <- c("ITT", "mITT", "PP", "PIPV", "randomized", 
                   "site", "location", "arm", 
                   "visit_code", "visit_type", "study_week")
-colData(mae_randomized) <- colData(mae_randomized)[, vars_coldata]
+colData(mae_1) <- colData(mae_1)[, vars_coldata]
 
 
 # filtering the SE 
@@ -165,15 +184,15 @@ colData(mae_randomized) <- colData(mae_randomized)[, vars_coldata]
 assays(mae_1[["mg"]]) <- assays(mae_1[["mg"]])[c("rel_ab_all", "rel_ab_bact", "rel_ab")]
 colData(mae_1[["mg"]]) <- colData(mae_1[["mg"]])[, c("uid", "poor_quality_mg_data")]
 
-# 2. qPCR
-assays(mae[["qPCR"]]) <- assays(mae[["qPCR"]])[c("copies_per_swab_med")]
-colData(mae[["qPCR"]]) <- colData(mae[["qPCR"]])[, c("uid", "qpcr_sample_type")]
-rowData(mae[["qPCR"]]) <- rowData(mae[["qPCR"]])[, c("taxon_label", "LBP", "strain_origin")]
+# # 2. qPCR
+# assays(mae[["qPCR"]]) <- assays(mae[["qPCR"]])[c("copies_per_swab_med")]
+# colData(mae[["qPCR"]]) <- colData(mae[["qPCR"]])[, c("uid", "qpcr_sample_type")]
+# rowData(mae[["qPCR"]]) <- rowData(mae[["qPCR"]])[, c("taxon_label", "LBP", "strain_origin")]
 
-# 3. qPCR_daily
-assays(mae[["qPCR_daily"]]) <- assays(mae[["qPCR_daily"]])[c("copies_per_swab_med")]
-colData(mae[["qPCR_daily"]]) <- colData(mae[["qPCR_daily"]])[, c("uid", "qpcr_sample_type")]
-rowData(mae[["qPCR_daily"]]) <- rowData(mae[["qPCR_daily"]])[, c("taxon_label", "LBP", "strain_origin")]
+# # 3. qPCR_daily
+# assays(mae[["qPCR_daily"]]) <- assays(mae[["qPCR_daily"]])[c("copies_per_swab_med")]
+# colData(mae[["qPCR_daily"]]) <- colData(mae[["qPCR_daily"]])[, c("uid", "qpcr_sample_type")]
+# rowData(mae[["qPCR_daily"]]) <- rowData(mae[["qPCR_daily"]])[, c("taxon_label", "LBP", "strain_origin")]
 
 # 4. col_LBP_mg, col_LBP_qPCR, col_crispatus_mg : no changes
 
@@ -190,10 +209,24 @@ We export the subsetted `MAE` to disk as `.rds` files.
 saveRDS(
   mae_1, 
   str_c(
-    get_05_output_dir(),  
+    get_06_output_dir(),  
     "mae_1_", today() |> str_remove_all("-"), ".rds"
   )
 )
 
 ```
+
+
+```{r}
+
+export_mae_to_csv(
+  mae_1,
+  dir = str_c(
+    get_07_output_dir(),  
+    "01 Primary Outcome Manuscript/mae_1_csv_export_", today() |> str_remove_all("-"), "/"
+  )
+)
+
+```
+
 
