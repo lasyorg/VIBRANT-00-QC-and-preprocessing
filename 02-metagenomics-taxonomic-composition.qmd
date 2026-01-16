@@ -29,6 +29,7 @@ library(gt)
 library(patchwork)
 library(SummarizedExperiment)
 library(tidySummarizedExperiment)
+library(tidyprint)
 library(labelled)
 library(vegan)
 library(RColorBrewer)
@@ -38,6 +39,7 @@ tmp <- fs::dir_map("../VIBRANT-99-utils/R/", source)
 rm(tmp)
 
 theme_set(theme_light())
+# tidy_print_on()
 ```
 
 
@@ -1318,7 +1320,8 @@ assays(SE_mg) <- assays(SE_mg)[names(assays(SE_mg)) != "rel_ab"]
 
 ```{r}
 # we create a new assay `rel_ab` that contains the relative abundances of the non-MultiGenera bacteria only
-SE_mg <- SE_mg |> mutate(rel_ab = rel_ab_bact * (.feature != "MultiGenera"))
+# SE_mg <- SE_mg |> mutate(rel_ab = rel_ab_bact * (.feature != "MultiGenera"))
+SE_mg <- SE_mg |> mutate(rel_ab = rel_ab_bact * (names(SE_mg) != "MultiGenera"))
 assay(SE_mg, "rel_ab") <- t(t(assay(SE_mg, "rel_ab"))/colSums(assay(SE_mg, "rel_ab")))
 ```
 
@@ -1714,6 +1717,7 @@ vegan::diversity(SE_mg |> assay("rel_ab"), index = "shannon", MARGIN = 2) |>
 
 
 
+
 ### Proportion of LBP strains per sample
 
 We saw above that the LBP strains were detected (as they should have) in the Mock 2 samples.
@@ -1834,7 +1838,6 @@ SE_mg |>
   )
 
 ```
-
 
 
 ### Compositions
