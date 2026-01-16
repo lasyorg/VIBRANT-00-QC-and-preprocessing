@@ -37,7 +37,7 @@ library(gt)
 library(patchwork)
 library(SummarizedExperiment)
 library(tidySummarizedExperiment)
-library(phyloseq)
+library(phyloseq) # devtools::install_github("joey711/phyloseq")
 #BiocManager::install("mia")
 library(mia)
 
