@@ -264,9 +264,7 @@ participants_crf[["crf101"]] |>
   gt(row_group_as_column = TRUE)
 
 # 30 participants with double pid
-
-
-education_levels <- c("Primary school", "Secondary school", "Tertiary education")
+education_levels <- c("No schooling", "Primary school", "Secondary school", "Tertiary education", "Other")
 
 participants_crf[["crf101"]] <- 
   participants_crf[["crf101"]] |>
@@ -278,21 +276,42 @@ participants_crf[["crf101"]] <-
   ) |> 
   group_by(pid) |>
   summarise(
-    across(-c(edu, income_sources), ~ dplyr::first(.x)),
-    edu = edu[which.max(match(edu, education_levels))],
-
-    income_sources = income_sources[which.max(str_count(income_sources, ",") + 1)],
+    # Pour toutes les variables sauf edu et income_sources
+    across(
+      .cols = !any_of(c("edu", "income_sources")),
+      .fns = ~ dplyr::first(.x)
+    ),
+    
+    # Pour edu : prendre le niveau le plus élevé
+    edu = {
+      if (all(is.na(edu))) {
+        NA_character_
+      } else {
+        edu_non_na <- edu[!is.na(edu)]
+        matches <- match(edu_non_na, education_levels)
+        edu_non_na[which.max(matches)]
+      }
+    },
+    
+    # Pour income_sources : prendre la réponse la plus complète
+    income_sources = {
+      if (all(is.na(income_sources))) {
+        NA_character_
+      } else {
+        inc_non_na <- income_sources[!is.na(income_sources)]
+        counts <- stringr::str_count(inc_non_na, ",") + 1
+        inc_non_na[which.max(counts)]
+      }
+    },
     
     .groups = "drop"
   ) |> 
-  mutate(
-    site = "CAP"
-  )
+  mutate(site = "CAP")
 
 rm(pid_temp, education_levels)
 
 ```
- 
+
 We combine the demographics data from `crf1` and `crf101` into a single table called `crf1_101`.
 
 ```{r}

@@ -2368,12 +2368,12 @@ crf12 <- crf12 |> select(-any_of(columns_to_remove_for_clean))
 
 ```{r}
 
-crf12 <- 
-  crf12 |> 
-  #filter(!is.na(date_completed)) |> #datecompleted
-  mutate(
-    cut_size_meals = ifelse(tolower(cut_size_meals) == "yes", often_cut_size_meals, cut_size_meals)
-  )
+# crf12 <- 
+#   crf12 |> 
+#   #filter(!is.na(date_completed)) |> #datecompleted
+#   mutate(
+#     cut_size_meals = ifelse(tolower(cut_size_meals) == "yes", often_cut_size_meals, cut_size_meals)
+#   )
 
 
 ```
