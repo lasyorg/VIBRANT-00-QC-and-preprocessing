@@ -253,6 +253,13 @@ Finally, the `site` variable is set to `"CAP"`
 ```{r}
 # CRF101
 
+# deux participantes MGH sont présentent alors qu'elle ne devrait pas (et n'ont que des missing) --> on les supprime
+
+
+participants_crf[["crf101"]] <- 
+  participants_crf[["crf101"]] |> 
+  filter(!str_starts(pid, "06810")) 
+
 pid_temp <- participants_crf[["crf101"]] |> 
   dplyr::count(pid) |> 
   dplyr::filter(n > 1) |> 
