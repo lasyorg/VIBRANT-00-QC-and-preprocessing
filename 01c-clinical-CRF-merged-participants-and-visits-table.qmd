@@ -254,7 +254,14 @@ Finally, the `site` variable is set to `"CAP"`
 ```{r}
 # CRF101
 
-pid_temp <- participants_crf[["crf101"]] |> 
+# 2 MGH participants are found in the data but should not (CRF101 should only contain data from CAP participants)
+# These two MGH participants have empty entries in CRF101, so we remove these entries
+participants_crf[["crf101"]] <- 
+  participants_crf[["crf101"]] |> 
+  filter(!str_starts(pid, "06810")) 
+
+pid_temp <- 
+  participants_crf[["crf101"]] |> 
   dplyr::count(pid) |> 
   dplyr::filter(n > 1) |> 
   pull(pid)
@@ -267,7 +274,7 @@ participants_crf[["crf101"]] |>
 # 30 participants with double pid
 
 
-education_levels <- c("Primary school", "Secondary school", "Tertiary education")
+education_levels <- c("No schooling", "Primary school", "Secondary school", "Tertiary education", "Other")
 
 participants_crf[["crf101"]] <- 
   participants_crf[["crf101"]] |>
@@ -279,16 +286,37 @@ participants_crf[["crf101"]] <-
   ) |> 
   group_by(pid) |>
   summarise(
-    across(-c(edu, income_sources), ~ dplyr::first(.x)),
-    edu = edu[which.max(match(edu, education_levels))],
-
-    income_sources = income_sources[which.max(str_count(income_sources, ",") + 1)],
+    # For all variables except edu & income_sources, we take the first value
+    across(
+      .cols = !any_of(c("edu", "income_sources")),
+      .fns = ~ dplyr::first(.x)
+    ),
+    
+    # For edu : we take the highest values
+    edu = {
+      if (all(is.na(edu))) {
+        NA_character_
+      } else {
+        edu_non_na <- edu[!is.na(edu)]
+        matches <- match(edu_non_na, education_levels)
+        edu_non_na[which.max(matches)]
+      }
+    },
+    
+    # For income_sources : we take the most complete entry
+    income_sources = {
+      if (all(is.na(income_sources))) {
+        NA_character_
+      } else {
+        inc_non_na <- income_sources[!is.na(income_sources)]
+        counts <- stringr::str_count(inc_non_na, ",") + 1
+        inc_non_na[which.max(counts)]
+      }
+    },
     
     .groups = "drop"
   ) |> 
-  mutate(
-    site = "CAP"
-  )
+  mutate(site = "CAP")
 
 rm(pid_temp, education_levels)
 
