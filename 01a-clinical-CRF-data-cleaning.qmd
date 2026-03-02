@@ -146,6 +146,7 @@ As mentioned above, since we want to define a `study_day` variable that provides
 
 This table will also be used for the `flag_dates` function which flags visits that are before the overall study start date or after the study end date.
 
+
 ```{r}
 
 # for randomized participants
