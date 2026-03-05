@@ -1,0 +1,561 @@
+---
+title: "Calculated variables"
+author: Laura Symul, Laura Vermeren
+date: today
+format: 
+   html:
+     page-layout: full
+     code-fold: true
+     toc: true
+     toc-location: left
+     toc-depth: 5
+     embed-resources: true
+execute:
+  cache: refresh # true refresh false
+  warning: false
+knitr:
+  opts_chunk:
+    out.width: "100%"
+editor: source
+---
+
+```{r}
+#| warning: false
+#| cache: false
+
+library(tidyverse)
+library(magrittr)
+library(gt)
+library(patchwork)
+library(SummarizedExperiment)
+library(tidySummarizedExperiment)
+library(MultiAssayExperiment)
+
+tmp <- fs::dir_map("R scripts/", source)
+tmp <- fs::dir_map("../VIBRANT-99-utils/R/", source)
+rm(tmp)
+theme_set(theme_light())
+```
+
+
+
+```{r}
+
+mae_files <- 
+  fs::dir_ls(
+    get_02_output_dir(),
+    regexp = "mae_full_.*\\.rds$"
+  ) |> 
+  sort(decreasing = TRUE) |>
+  magrittr::extract(1)
+
+mae <- readRDS(mae_files)
+
+rm(mae_files)
+
+```
+
+
+
+> TODO: edit this file (introduction, etc.)
+
+
+The primary purpose of this document is to define and create additional assays to the `MultiAssayExperiment` object that contain the primary and secondary outcomes of the VIBRANT trial.
+
+
+# Calculated variables
+
+```{r}
+mae@metadata$calc_vars_pid <- 
+  tibble(pid = mae@colData |> as_tibble() |> pull(pid) |> unique())
+```
+
+
+
+## Education - can we harmonize between sites ?
+
+```{r}
+
+education <- 
+  bind_rows(
+    mae@metadata$crf_data_clean$crf1 |> 
+      select(uid, pid, visit_code, edu),
+    mae@metadata$crf_data_clean$crf101 |> 
+      select(uid, pid, visit_code, edu)
+  ) |> 
+  left_join(
+    mae@colData |> as_tibble() |> 
+      select(pid, site, randomized) |> 
+      distinct(),
+    by = join_by(pid)
+  )
+
+```
+
+```{r}
+#| fig-width: 8
+#| fig-height: 2.5
+education |> 
+  ggplot() +
+  aes(y = edu, fill = randomized) +
+  facet_wrap(. ~ site, scales = "free") +
+  geom_bar() +
+  xlab("Number of participants") +
+  ylab("") +
+  scale_fill_manual(
+    name = "",
+    values = c("TRUE" = "dodgerblue1", "FALSE" = "gray70"),
+    labels = c("TRUE" = "Randomized", "FALSE" = "Not randomized")
+  ) +
+  theme(legend.position = "top")
+
+
+
+```
+
+```{r}
+#| fig-width: 8
+#| fig-height: 2
+
+education |> 
+  filter(randomized) |> 
+  ggplot() +
+  aes(y = edu) +
+  facet_wrap(. ~ site, scales = "free") +
+  geom_bar(fill = "dodgerblue1") +
+  xlab("Number of participants") +
+  ylab("")
+```
+
+## Economic worry
+
+```{r}
+
+worry <- 
+   bind_rows(
+    mae@metadata$crf_data_clean$crf2 |> 
+      select(uid, pid, visit_code, starts_with("worry_")),
+    mae@metadata$crf_data_clean$crf102 |> 
+      select(uid, pid, visit_code, starts_with("worry_"))
+  ) |> 
+  left_join(
+    mae@colData |> as_tibble() |> 
+      select(pid, site, randomized) |> 
+      distinct(),
+    by = join_by(pid)
+  )
+
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+# create an upset plot to see the combinations of worries
+library(UpSetR)
+# create a binary matrix for the worries
+worry_matrix_CAP <-
+  worry |>
+  filter(randomized, site == "CAP", !is.na(worry_food)) |>
+  select(starts_with("worry_")) |>
+  # remove "worry_" prefix from column names
+  rename_with(~ str_remove_all(., "worry_")) |>
+  mutate(across(everything(), ~ ifelse(. == "Checked", 1, 0))) |>
+  as.data.frame()
+
+upset(
+  worry_matrix_CAP,
+  nsets = ncol(worry_matrix_CAP),
+  nintersects = NA,
+  keep.order = TRUE,
+  order.by = "freq",
+  #text.scale = c(2, 2, 2, 1.5, 2, 2),
+  main.bar.color = "dodgerblue1",
+  sets.bar.color = "gray70",
+  set_size.show = TRUE
+  )
+
+worry_matrix_MGH <-
+  worry |>
+  filter(randomized, site == "MGH", !is.na(worry_food)) |>
+  select(starts_with("worry_")) |>
+  # remove "worry_" prefix from column names
+  rename_with(~ str_remove_all(., "worry_")) |>
+  mutate(across(everything(), ~ ifelse(. == "Checked", 1, 0))) |>
+  as.data.frame()
+
+upset(
+  worry_matrix_MGH,
+  nsets = ncol(worry_matrix_MGH),
+  nintersects = NA,
+  keep.order = TRUE,
+  order.by = "freq",
+  #text.scale = c(2, 2, 2, 1.5, 2, 2),
+  main.bar.color = "dodgerblue1",
+  # sets.bar.color = "gray70",
+  set_size.show = TRUE
+)
+
+```
+
+
+```{r}
+
+
+table1_data <- 
+  metadata(mae)$participant_crfs_merged |> 
+  dplyr::left_join(
+    colData(mae) |> as_tibble() |> select(pid, site, arm, ITT, mITT, PP) |> distinct(), 
+    by = join_by(pid, site)
+    )  |> 
+  filter(mITT) |> 
+  select(pid, site, arm, cut_size_meals, eat_less, hungry_did_not_eat) |> 
+  mutate(
+    food_insecurity = ifelse(
+      cut_size_meals == "Yes" | eat_less == "Yes" | hungry_did_not_eat == "Yes",
+      "Yes",
+      "No"
+    ),
+    food_insecurity = factor(food_insecurity, levels = c("No", "Yes"))
+  ) |> 
+  select(-c(eat_less, cut_size_meals, hungry_did_not_eat))
+
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 8
+
+table1_data |> 
+  left_join(
+    worry |> select(pid, worry_food) |> distinct(),
+    by = join_by(pid)
+  ) |> 
+  dplyr::count(site, food_insecurity, worry_food) |> 
+  ggplot() +
+  aes(x = food_insecurity, y = worry_food, fill = n) +
+  geom_tile() +
+  geom_text(aes(label = n)) +
+  facet_wrap(. ~ site, scales = "free") +
+  scale_fill_gradient(low = "white", high = "dodgerblue1") 
+
+
+
+```
+
+
+
+
+## Pre-existing conditions
+
+```{r}
+
+pre_existing_conditions <- 
+  mae@metadata$crf_data_clean$crf5 |> 
+  select(pid, no_pre_existing_condition, diagnosis) |> 
+  left_join(
+    mae@colData |> as_tibble() |> 
+      select(pid, site, randomized) |> 
+      distinct(),
+    by = join_by(pid)
+  )
+
+```
+
+```{r}
+#| fig-height: 7
+#| 
+pre_existing_conditions |> 
+  filter(randomized) |> 
+  dplyr::mutate(
+    diagnosis = 
+      case_when(
+        no_pre_existing_condition ~ "No pre-existing condition",
+        TRUE ~ diagnosis
+        )
+    ) |> 
+  select(pid, diagnosis, site) |> 
+  distinct() |> 
+  dplyr::count(site, diagnosis) |> 
+  arrange(-n) |> 
+  mutate(diagnosis = diagnosis |> fct_inorder()) |>
+  ggplot() +
+  aes(x = n, y = diagnosis) +
+  facet_grid(. ~ site, scales = "free_x") +
+  geom_col()
+
+```
+## Psychological wellbeing
+
+```{r}
+psych_wellbeing <- 
+  mae@metadata$crf_data_clean$crf11 |> 
+  select(pid, upset:difficulties_piling_up) |>
+  distinct() |> 
+  left_join(
+    mae@colData |> as_tibble() |> 
+      select(pid, site, randomized) |> 
+      distinct(),
+    by = join_by(pid)
+  )
+
+psych_wellbeing_long <- 
+  psych_wellbeing |> 
+  filter(randomized) |>
+  filter(!is.na(upset)) |>
+  pivot_longer(
+    cols = upset:difficulties_piling_up,
+    names_to = "question",
+    values_to = "answer"
+  )
+
+
+
+```
+
+```{r}
+#| fig-height: 10
+#| fig-width: 8
+psych_wellbeing_long |> 
+  group_by(site, pid) |> 
+  mutate(total_score = sum(answer |> as.integer())) |>
+  ungroup() |> 
+  arrange(total_score) |> 
+  mutate(
+    pid = pid |> fct_inorder()
+  ) |>
+  ggplot() +
+  aes(y = pid, x = question, fill = answer) +
+  facet_grid(site ~ ., scales = "free_y", space = "free") +
+  geom_tile() +
+  scale_fill_brewer(type = "div", palette = "PRGn") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text.y = element_text(angle = 0)
+  )
+```
+
+## Sexual behavior
+
+### PSA
+
+```{r}
+
+psa <- 
+  mae@metadata$crf_data_clean$crf45 |> 
+  select(uid, pid, visit_code, psa_results) |> 
+  left_join(
+    mae@colData |> as_tibble() |> 
+      select(pid, site, randomized) |> 
+      distinct(),
+    by = join_by(pid)
+  )
+
+```
+
+```{r}
+#| fig-height: 8
+#| fig-width: 6
+
+
+psa |> 
+  ggplot() +
+  aes(x = visit_code, y = pid) +
+  geom_tile(fill = "lightseagreen")
+
+```
+
+## Metronidazole use
+
+```{r}
+
+mtz_crf_raw <- 
+  mae@metadata$crf_data_raw$crf22 |> 
+  left_join(
+    mae@colData |> as_tibble() |> 
+      select(pid, site, randomized) |> 
+      distinct(),
+    by = join_by(pid)
+  )
+
+mtz_crf_raw |> 
+  dplyr::count(dfseq)
+
+
+mtz_crf_raw |> 
+  filter(randomized) |> 
+  dplyr::count(dfseq)
+
+
+mtz_crf_raw |> 
+  filter(randomized) |> 
+  dplyr::filter(dfseq == 1200) 
+
+mtz_crf_raw |> 
+  filter(randomized) |> 
+  dplyr::count(pid) |> 
+  arrange(-n) |> 
+  dplyr::count(n)
+
+mtz_crf_raw |> 
+  group_by(pid) |> 
+  mutate(min_study_day = min(study_day)) |> 
+  ungroup() |> 
+  mutate(pid = pid |> fct_reorder(min_study_day)) |>
+  ggplot() +
+  aes(x = study_day, y = pid, col = dfseq |> as.character()) +
+  geom_point()
+
+mae@metadata$exposures |> 
+  ggplot() +
+  aes(x = study_day, y = pid, col = metronidazole |> factor()) + geom_point() +
+  scale_color_manual(
+    name = "Metronidazole use",
+    na.value = "lightgray",
+    values = c("0" = "red", "1" = "purple", "2" = "blue")
+  ) +
+  geom_point()
+  
+
+```
+
+## Study product exposure related variables
+
+
+### Number of self-reported study product doses taken
+
+
+```{r}
+
+n_self_reported_doses <- 
+  metadata(mae)$exposures |>
+  group_by(pid) |>
+  summarize(
+    n_product_doses = sum(study_product |> as.integer(), na.rm = TRUE),
+    n_product_doses_PP = sum(study_product_PP, na.rm = TRUE),
+    comments_studyproduct = str_c(comments_studyproduct[!is.na(comments_studyproduct)], collapse = "; "),
+    .groups = "drop"
+  )
+
+
+mae@metadata$calc_vars_pid <- 
+  mae@metadata$calc_vars_pid |> 
+  left_join(n_self_reported_doses, by = join_by(pid))
+
+rm(n_self_reported_doses)
+
+```
+
+
+### Time since last self-reported study product doses at Week 2 in-clinic visit
+
+
+We document the time between the last dose taken prior to the in-person visit at week 2 and the swab collected at that visit. This is relevant because the primary outcome is detection of the LBP strain at the week 2 visit, and the time since last dose may influence the likelihood of detection.
+
+Information on the self-reported time of last study product use comes from `exposures`, while the study day of the week 2 in-person visit is taken from `visits_crfs_merged.`
+
+We define the following categories for the timing of the last study product use:
+-   "same day": last dose taken on the same day as the visit (before 6 p.m.)
+-   "day before": last dose taken the day before the visit
+-   "more than 1 day": last dose taken more than one day before the visit
+
+
+```{r}
+
+study_product <-
+  mae@colData |>
+  as_tibble() |>
+  select(pid, site, randomized, arm, ITT, mITT, PP) |>
+  distinct() |>
+  filter(randomized, mITT) |>
+  left_join(
+    metadata(mae)$exposures |> select(pid, visit_code, study_product),
+    by = "pid"
+  ) |>
+  left_join(
+    metadata(mae)$visits_crfs_merged |> as_tibble() |> select(pid, visit_code, study_day, insert_study_product_time),
+    by = (c("pid", "visit_code"))) |>
+  dplyr::rename(
+    study_day_product = study_day,
+    visit_code_product = visit_code
+  ) 
+
+# study_day visit 2 in person
+# ! pid 068100026 appear 2 times ! -> removed using filter(!is.na(study_day_visit2))
+visit2_studyday <- 
+  metadata(mae)$visits_crfs_merged |> 
+  as_tibble() |> 
+  select(pid, visit_code, study_day) |> 
+  distinct() |> 
+  filter(visit_code == "1200") |> 
+  dplyr::rename(study_day_v2 = study_day) |> 
+  dplyr::filter(!is.na(study_day_v2))
+
+  
+study_prod_time <- 
+  study_product |> 
+  left_join(visit2_studyday |> select(-visit_code), by = "pid") |> 
+  filter(arm != "Pl") |> 
+  group_by(pid) |> 
+  filter(study_product == "1") |> 
+  filter(study_day_product <= study_day_v2) |>  # only consider doses taken before v2
+  filter(!((study_day_product == study_day_v2) & (insert_study_product_time %in% c("Late evening (9pm-midnight)", "Evening (6pm-9pm)")))) |> 
+  arrange(study_day_product) |> 
+  slice_tail(n = 1) |>              
+  ungroup() 
+
+# create category 
+time_since_last_dose_week2 <- 
+  study_prod_time |> 
+  mutate(
+    last_dose = 
+      case_when(
+        study_day_product == study_day_v2 ~ "same day", 
+        study_day_product == study_day_v2-1 ~ "day before", 
+        study_day_product < study_day_v2-1~ "more than one day"
+      ), 
+    last_dose_at_W2 = factor(last_dose, levels = c("same day", "day before", "more than one day"))
+  ) |> 
+  select(pid, last_dose_at_W2)
+
+
+mae@metadata$calc_vars_pid <- 
+  mae@metadata$calc_vars_pid |> 
+  left_join(time_since_last_dose_week2, by = join_by(pid))
+
+rm(study_product, visit2_studyday, study_prod_time, time_since_last_dose_week2)
+
+```
+
+```{r}
+
+mae@metadata$calc_vars_pid |> 
+  left_join(
+    mae@colData |> as_tibble() |> select(pid, arm, mITT) |> distinct(),
+    by = join_by(pid)
+  ) |>
+  filter(mITT) |> 
+  dplyr::count(arm, last_dose_at_W2) |> 
+  gt::gt()
+
+```
+
+
+
+# Saving the `MultiAssayExperiment` objects
+
+We save the MAE for downstream analyses.
+
+```{r}
+
+saveRDS(
+  mae, 
+  str_c(
+    get_03_output_dir(),  
+    "mae_full_", today() |> str_remove_all("-"), ".rds"
+  )
+)
+
+```
+
+
+
