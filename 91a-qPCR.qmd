@@ -361,7 +361,526 @@ tmp |>
 ## Estimation and corrections for the technical biases between the two assays (16S qPCR)
 
 
-> TODO: include code and explanation from M&K's documents
+The goal of this analysis is to correct for the bias in qPCR measurements of bacterial load for both 16S rRNA gene sequencing samples and strains samples; this will be done using a mixed effects model that accounts for technical and sampling noise.
+
+We first load the latest MAE object that contains the qPCR data for both 16S rRNA gene sequencing samples and strains samples, and we extract the relevant data for the qPCR measurements.
+
+```{r}
+
+mae_file <- 
+  fs::dir_ls(str_c(data_dir(), "04 unblinded MAEs/"), regexp = "mae_full_.*\\.rds$") |> 
+  sort(decreasing = TRUE) |>
+  magrittr::extract(1)
+
+
+cat(str_c("Loading MultiAssayExperiment from: Data/", mae_file |> str_remove(data_dir()), "\n"))
+mae <- readRDS(mae_file)
+
+rm(mae_file)
+
+mae
+
+```
+
+### qPCR bias correction for 16S rRNA gene sequencing samples
+
+We will first focus on the qPCR bias correction for 16S rRNA gene sequencing samples. 
+
+We load both weekly and daily qPCR data; processed data are retrieved from from the `mae` object.
+
+```{r}
+
+weekly_qpcr_data <- 
+  mae@ExperimentList$qPCR |>
+  as_tibble()
+
+
+daily_qpcr_data <- 
+  mae@ExperimentList$qPCR_daily |>
+  as_tibble()
+
+```
+
+In the code below, we combine both weekly and daily qPCR data for 16S rRNA gene sequencing samples.
+
+```{r}
+
+tmp_processed <- 
+  bind_rows(
+    weekly_qpcr_data |> 
+      dplyr::filter(
+        .feature == "16S"
+      ) |> 
+      select(.sample, copies_per_swab_med, uid) |> 
+      mutate(type = "weekly"),
+    daily_qpcr_data |> 
+      dplyr::filter(
+        .feature == "16S"
+      ) |> 
+      select(.sample, copies_per_swab_med, uid) |> 
+      mutate(type = "daily")
+  )
+
+```
+
+Next, we join the participant information (pid, study_day, arm, site) to the `tmp_processed` dataframe.
+
+```{r}
+
+tmp_processed <- 
+  tmp_processed |> 
+  select(-any_of(c("pid", "study_day", "arm"))) |> 
+  left_join(
+    mae@colData |> as_tibble() |> select(uid, pid, study_day, arm, site),
+    by = join_by(uid)) |>
+  filter(!is.na(pid))
+
+str(tmp_processed)
+
+```
+
+The bias between sites (CAP or MGH) as well as sample type (weekly or daily) is visualized in the plots below.
+
+```{r}
+
+tmp_processed_wide <- 
+  tmp_processed |>
+  select(pid, study_day, type, copies_per_swab_med, site) |>
+  group_by(pid, study_day, type, site) |>
+  summarise(
+    copies_per_swab_med = mean(copies_per_swab_med), .groups = "drop") |>
+  pivot_wider(
+    names_from = type,
+    values_from = copies_per_swab_med,
+    names_prefix = ""
+  )
+
+```
+
+
+```{r}
+
+tmp_processed_wide |>
+  ggplot() +
+  aes(x = log10(daily), y = log10(weekly), color = site) + 
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "black") +
+  ggh4x::facet_nested_wrap(
+   facets = ~ site,
+  ) +
+  labs(
+    x = "Daily copies_per_swab (log10)",
+    y = "Weekly copies_per_swab (log10)",
+    subtitle = "16S rRNA sequencing copies/swab samples before bias-correction"
+  ) 
+
+```
+
+
+We create a new object `qpcr_same_day` that only keeps samples where both weekly and daily qPCR data are available on the same study day.
+
+```{r}
+
+qpcr_same_day_processed <- 
+  tmp_processed |> 
+  group_by(pid, study_day) |> 
+  mutate(n_assays = type |> unique() |> length()) |> 
+  ungroup() |> 
+  filter(n_assays == 2) |> 
+  arrange(pid, study_day) |>
+  mutate(
+    site = ifelse(startsWith(pid, "0681"), "MGH", "CAP")
+  )
+
+```
+
+We also create another variable `study_day_uid`, which is the concatenation of the participant identifier and study day.
+
+```{r}
+
+qpcr_same_day_processed <-
+  qpcr_same_day_processed |>
+  mutate(
+    pid = pid |> factor(),
+    swab_id = str_c(pid, "_", study_day, "_", type),
+    study_day_uid = str_c(pid, "_", study_day) |> factor()
+  )
+
+```
+
+We will now fit a linear mixed model using `lmer()` from the `lme4` library.
+
+We consider the following:
+
+fixed
+
+-   A: swab type (2 levels: weekly, daily) ($i$)
+
+-   B: study site (2 levels: CAP or MGH) ($j$)
+
+and random factors
+
+-   C: participant, nested within B (study site), crossed with A (swab type) ($k(j)$)
+
+-   D: study day, nested within C (participant), crossed with A (swab type) ($l(k(j))$)
+
+with technical triplicates for the qPCR measurements (*i.e.*, 3 wells from the same swab per visit), which are not explicitly modeled here but are included in the residual term ($m$).
+
+$Y_{ijklm} = \mu + \alpha_i + \beta_j + \gamma_{ij} + C_{k(j)} + D_{l(k(j))} + \epsilon_{ijklm}$
+
+
+::: {.callout-note}
+Based on the discussion from 10 December, we concluded that DNA quality was lower in CAP and weekly swabs, thus motivating the use of MGH and daily swabs as references for correction. Therefore, we will relevel the `site` and `type` variables to set MGH and daily as the reference levels, respectively.
+:::
+
+```{r}
+
+qpcr_same_day_processed$site <- relevel(factor(qpcr_same_day_processed$site), ref = "MGH")
+qpcr_same_day_processed$type <- relevel(factor(qpcr_same_day_processed$type), ref = "daily")
+
+model_processed <- 
+  lmer(
+    log10(copies_per_swab_med) ~ site * type + (1 | pid/study_day_uid),
+    data = qpcr_same_day_processed
+  )
+
+summary(model_processed)
+
+confint(model_processed)
+
+plot(model_processed)
+
+```
+
+From the model summary, we can see that there is a significant difference between weekly and daily qPCR measurements, as well as between sites (within the interaction term). The interaction term is large, indicating that the difference between weekly and daily measurements varies by site.
+
+We also see that there more variability for the `study_day_uid` term than for the `pid` term, which suggests that the within-participant variability is larger than the between-participant variability. This term probably contains both the true biological variability between visits as well as technical variability due to the swabbing procedure. We cannot separate these effects with the current data as we have not performed technical replicates for the swabbing procedure.
+
+We will correct for weekly (processed) qPCR values using `model_processed`. 
+
+```{r}
+
+weekly_swab_effect <- lme4::fixef(model_processed)["typeweekly"]
+weekly_site_interaction_effect <- lme4::fixef(model_processed)["siteCAP:typeweekly"]
+
+qpcr_processed <- tmp_processed |> 
+  mutate(
+    log_copies_per_swab = log10(copies_per_swab_med),
+    copies_per_swab_corrected_log = 
+      log_copies_per_swab -
+      ifelse(type == "weekly", weekly_swab_effect, 0) -
+      ifelse(type == "weekly" & site == "CAP", weekly_site_interaction_effect, 0),
+    copies_per_swab_corrected = 10^(copies_per_swab_corrected_log)
+  )
+
+```
+
+The bias-corrected qPCR values are visualized in the plots below.
+
+```{r}
+
+qpcr_same_day_wide <- qpcr_processed |>
+  select(pid, study_day, type, copies_per_swab_med, copies_per_swab_corrected, site) |>
+  group_by(pid, study_day, type, site) |>
+  summarise(
+    copies_per_swab_med = mean(copies_per_swab_med), 
+    copies_per_swab_corrected = mean(copies_per_swab_corrected), 
+    .groups = "drop") |>
+  pivot_wider(
+    names_from = type,
+    values_from = c(copies_per_swab_med, copies_per_swab_corrected),
+    names_prefix = ""
+  )
+
+```
+
+
+```{r}
+#| fig-height: 4
+#| fig-width: 10
+
+p1 <- qpcr_same_day_wide |>
+  ggplot() +
+  aes(x = log10(copies_per_swab_med_daily), y = log10(copies_per_swab_med_weekly), color = site) + 
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "black") +
+  facet_wrap(~site) +
+  labs(
+    x = "Daily copies_per_swab (log10)",
+    y = "Weekly copies_per_swab (log10)",
+    subtitle = "Before bias-correction"
+  )
+
+p2 <- qpcr_same_day_wide |>
+  ggplot() +
+  aes(x = log10(copies_per_swab_corrected_daily), y = log10(copies_per_swab_corrected_weekly), color = site) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "black") +
+  facet_wrap(~site) +
+  labs(
+    x = "Daily copies_per_swab (log10)",
+    y = "Weekly copies_per_swab (log10)",
+    subtitle = "After bias-correction"
+  )
+
+p1 + p2
+
+```
+
+
+```{r}
+
+line_params_16S <- 
+  qpcr_same_day_wide |>
+  group_by(site) |>
+  summarise(
+    fit = list(lm(log10(copies_per_swab_med_weekly) ~ log10(copies_per_swab_med_daily))),
+    .groups = "drop"
+  ) |>
+  mutate(
+    intercept = map_dbl(fit, ~ coef(.x)[1]),
+    slope = map_dbl(fit, ~ coef(.x)[2])
+  ) |>
+  select(-fit)
+
+```
+
+
+```{r}
+
+qpcr_combined <- bind_rows(
+  qpcr_same_day_wide |>
+    mutate(
+      daily = log10(copies_per_swab_med_daily),
+      weekly = log10(copies_per_swab_med_weekly),
+      type = "Before correction"
+    ),
+  qpcr_same_day_wide |>
+    mutate(
+      daily = log10(copies_per_swab_corrected_daily),
+      weekly = log10(copies_per_swab_corrected_weekly),
+      type = "After correction"
+    )
+)
+
+qpcr_combined |>
+  ggplot() +
+  aes(x = daily, y = weekly, color = type) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE) +
+  facet_wrap(~site) +
+  labs(
+    x = "Daily copies_per_swab (log10)",
+    y = "Weekly copies_per_swab (log10)",
+    color = "Correction",
+    subtitle = "Before and after bias-correction for 16S rRNA sequencing samples"
+  )
+
+```
+
+### qPCR bias correction for strains samples
+
+We combine both weekly and daily qPCR data for strains gene copies, for both raw and processed qPCR data.
+
+```{r}
+
+tmp_processed <- 
+  bind_rows(
+    weekly_qpcr_data |> 
+      dplyr::filter(
+        .feature != "16S"
+      ) |> 
+      select(.feature, .sample, copies_per_swab_med, uid, taxon_label, strain_id, strain_origin, LBP) |> 
+      mutate(type = "weekly"),
+    daily_qpcr_data |> 
+      dplyr::filter(
+        .feature != "16S"
+      ) |> 
+      select(.feature, .sample, copies_per_swab_med, uid, taxon_label, strain_id, strain_origin, LBP) |> 
+      mutate(type = "daily")
+  )
+
+```
+
+Next, we join the participant information (pid, study_day, arm, site) to the `tmp_processed` dataframe.
+
+```{r}
+
+tmp_processed <- 
+  tmp_processed |> 
+  select(-any_of(c("pid", "study_day", "arm"))
+         ) |> 
+  left_join(
+    mae@colData |> as_tibble() |> select(uid, pid, study_day, arm, site),
+    by = join_by(uid)
+    ) |>
+  filter(!is.na(pid))
+
+str(tmp_processed)
+
+```
+
+The bias between sites (CAP or MGH) as well as sample type (weekly or daily) is visualized in the plots below.
+
+```{r}
+
+tmp_processed_wide <- 
+  tmp_processed |>
+  select(pid, study_day, type, .feature, copies_per_swab_med, site) |>
+  group_by(pid, study_day, type, site, .feature) |>
+  summarise(
+    copies_per_swab_med = mean(copies_per_swab_med), .groups = "drop") |>
+  pivot_wider(
+    names_from = type,
+    values_from = copies_per_swab_med,
+    names_prefix = ""
+  )
+
+```
+
+
+```{r}
+
+strain_centroid <- tmp_processed_wide |>
+  group_by(site) |>
+  summarise(
+    x_mean = mean(log10(daily + 1), na.rm = TRUE),
+    y_mean = mean(log10(weekly + 1), na.rm = TRUE)
+  ) |>
+  ungroup()
+
+bias_line_on_strain <- strain_centroid |>
+  mutate(
+    slope = 1,
+    intercept = (y_mean - x_mean) + case_when(
+      site == "MGH" ~ weekly_swab_effect, # 0.9279943
+      site == "CAP" ~ weekly_swab_effect + weekly_site_interaction_effect # 0.9279943 + (-1.352144)
+    )
+  )
+
+```
+
+
+```{r}
+
+tmp_processed_wide |>
+  ggplot() +
+  aes(x = log10(daily + 1), y = log10(weekly + 1), color = site) + 
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "black") +
+  ggh4x::facet_nested_wrap(
+   facets = ~ site,
+  ) +
+  labs(
+    x = "Daily copies_per_swab",
+    y = "Weekly copies_per_swab",
+    subtitle = "Before bias-correction",
+    color = "Study site"
+  ) 
+
+tmp_processed_wide |>
+  ggplot() +
+  aes(x = log10(daily + 1), y = log10(weekly + 1), color = site) + 
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "black") +
+  geom_abline(
+    data = bias_line_on_strain,
+    aes(slope = slope, intercept = intercept),
+    color = "purple",
+    linetype = "dashed"
+  ) +
+  ggh4x::facet_nested_wrap(
+   facets = ~ site,
+  ) +
+  labs(
+    x = "Daily copies_per_swab",
+    y = "Weekly copies_per_swab",
+    subtitle = "Before bias-correction",
+    color = "Study site",
+    caption = "Purple dashed line represents the bias estimated for 16S rRNA sequencing samples"
+  ) 
+
+```
+
+
+```{r}
+#| fig-height: 10
+#| fig-width: 10
+
+tmp_processed_wide |>
+  ggplot() +
+  aes(x = log10(daily + 1), y = log10(weekly + 1), color = site) + 
+  geom_point(alpha = 0.7) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "black") +
+  geom_abline(
+    data = bias_line_on_strain,
+    aes(slope = slope, intercept = intercept),
+    color = "purple",
+    linetype = "dashed"
+  ) +
+  ggh4x::facet_nested_wrap(
+    facets = ~ .feature + site,
+  ) +
+  labs(
+    x = "Daily copies_per_swab",
+    y = "Weekly copies_per_swab",
+    subtitle = "Before bias-correction",
+    color = "Study site",
+    caption = "Purple dashed line represents the bias estimated for 16S rRNA sequencing samples"
+  ) 
+
+```
+
+From the plots above, we can indeed see that the bias between weekly and daily measurements for strains samples is similar to the bias observed for 16S rRNA sequencing samples, as the purple dashed line (representing the bias estimated for 16S rRNA sequencing samples) is close to the center of the cloud of points for strains samples.
+
+::: {.callout-warning}
+The high proportion of zeros in the strain qPCR data makes applying the same bias-correction model used for 16S qPCR impractical. No correction is therefore planned for strain samples at this stage, and any analyses involving strain qPCR values should be interpreted with caution.
+:::
+
+
+### Saving the results
+
+Below, we save the bias-corrected qPCR data for 16S rRNA gene sequencing samples in the `MAE` object.
+
+```{r}
+
+qpcr_processed <- 
+  qpcr_processed |> 
+  mutate(.feature = "16S") |> 
+  relocate(.feature, .before = .sample) |> 
+  filter(type == "weekly")
+
+```
+
+
+```{r}
+
+qpcr_df <- mae@ExperimentList$qPCR |> as_tibble()
+
+qpcr_df <- qpcr_df |>
+  left_join(
+    qpcr_processed |> 
+      select(.feature, .sample, uid, copies_per_swab_corrected) |> 
+      rename(copies_per_swab_med_corrected = copies_per_swab_corrected),
+    by = join_by(.feature, .sample, uid)
+  ) |>
+  relocate(copies_per_swab_med_corrected, .after = copies_per_swab_med)
+
+```
+
+
+```{r}
+
+new_assay <- qpcr_df |>
+  mutate(copies_per_swab_med_corrected = coalesce(copies_per_swab_med_corrected, copies_per_swab_med)) |>
+  select(.feature, .sample, copies_per_swab_med_corrected) |>
+  pivot_wider(names_from = .sample, values_from = copies_per_swab_med_corrected) |>
+  column_to_rownames(".feature") |>
+  as.matrix()
+
+assay(mae@ExperimentList$qPCR, "copies_per_swab_med_corrected") <- new_assay
+
+```
 
 
 ## Saving the `MultiAssayExperiment` objects
