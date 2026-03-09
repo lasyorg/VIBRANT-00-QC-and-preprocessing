@@ -942,7 +942,7 @@ We have a quite ok match. Some observations around the mismatches:
 
 Overall, it looks reasonable.
 
-# Fixing `visit_code` and `uids`
+### Fixing `visit_code` and `uids`
 
 We fix a few `visit_code` based on the CRF data, trial information, or based on information provided by the different labs.
 
