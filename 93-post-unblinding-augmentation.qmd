@@ -787,7 +787,43 @@ df_summ_pid <-
   )
 ```
 
+```{r}
+#| fig-height: 12
+#| fig-width: 10
 
+df_summ_pid |>
+  mutate(pid_label = fct_reorder(pid, prop_days_exposed)) |>
+  ggplot(aes(x = prop_days_exposed, y = pid_label)) +
+  geom_segment(aes(xend = 0, yend = pid_label, col = pid_exposed_by_qPCR), linewidth = 0.8) +
+  geom_point(aes(col = pid_exposed_by_qPCR), size = 1.5) +
+  ggh4x::facet_nested(arm + site ~ ., scales = "free_y", space = "free_y") +
+  scale_x_continuous(labels = scales::percent, limits = c(0, 1)) +
+  scale_color_manual(values = c("TRUE" = "steelblue", "FALSE" = "grey80")) +
+  labs(
+    x     = "Proportion of dosing days exposed",
+    y     = "",
+    color = "Exposed by qPCR",
+    title = "CTV05 exposure by qPCR — participant level"
+  ) +
+  theme(axis.text.y = element_text(size = 8))
+
+```
+
+```{r}
+
+df_summ_pid |>
+  dplyr::count(arm, site, pid_exposed_by_qPCR) |>
+  ggplot(aes(x = arm, y = n, fill = pid_exposed_by_qPCR)) +
+  geom_col(position = "fill") +
+  facet_wrap(~ site) +
+  scale_y_continuous(labels = scales::percent) +
+  scale_fill_manual(values = c("TRUE" = "steelblue", "FALSE" = "grey80")) +
+  labs(
+    x = "Arm", y = "Proportion of participants",
+    fill = "Exposed by qPCR",
+    title = "Proportion of participants exposed to CTV05 (by qPCR)"
+  )
+```
 
 We add these variables to the calculated variables table in the MAE metadata
 
