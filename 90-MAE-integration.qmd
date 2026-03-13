@@ -207,7 +207,7 @@ se_daily_qPRC
 
 ```{r}
 
-amplicon_file <- se_files[grepl("16S_agg", se_files)][1]
+amplicon_file <- se_files[grepl("16S_agg_2", se_files)][1]
 se_16S <- readRDS(amplicon_file)
 se_16S <- check_se(se_16S)
 se_16S
@@ -845,6 +845,60 @@ mae_coldata |>
 There are just two participants for which the dates don't match and the different assays were collected at different dates.
 This may be important for integrative analyses later, so we leave as is for now.
 
+### Creating the dictionary for the mae_coldata table
+
+We create a dictionary to document the variables in the `mae_coldata` table, which will be useful for downstream analyses and for the data sharing.
+
+We already have a dictionnary for the `participants` table (`participants_variable_dictionary`), we use this and add the variables from the `visits` table and the `mae_coldata_assays` table, as well as the variables we created in the previous steps (e.g., `visit`, `visit_number`, `study_week`, etc.).
+
+```{r}
+
+coldata_dictionary <- 
+  bind_rows(
+    participants_variable_dictionary |> select(variable, description),
+    tibble(
+      variable = setdiff(colnames(mae_coldata), colnames(participants)),
+      description = case_when(
+        variable == "uid" ~ "Unique identifier for each participant x visit combination, in the format pid_visitcode",
+        variable == "PIPV" ~ "Primary in-person visit (PIPV) flag",
+        variable == "visit_code" ~ "Visit code as in the CRF data",
+        variable == "visit" ~ "Visit name (e.g., Screening, Week 1 (post-MTZ), etc.)",
+        variable == "visit_number" ~ "Visit number (e.g., V0, V1, etc.)",
+        variable == "study_week" ~ "Study week number (from -2 to 12, with 0 being the day of the pre-MTZ visit)",
+        variable == "study_day" ~ "Relative study day number with 0 being the day of the pre-MTZ visit",
+        variable == "n_distinct_study_days" ~ "Number of distinct study days for a given participant and visit number",
+        variable == "crf_plates" ~ "CRF plates for which we have data for this participant x visit combination",
+        variable == "visit_attended" ~ "Whether the participant attended the visit according to the CRF data",
+        variable == "visit_planned" ~ "Whether the visit was planned according to the CRF data",
+        variable == "visit_type" ~ "Visit type (e.g., Clinic, Home, Unclear or NA)",
+        variable == "in_CRF" ~ "Whether this participant x visit combination is in the CRF data", 
+        variable == "in_assays" ~ "Whether this participant x visit combination is in an assay data",
+        variable == "sample_type" ~ "Sample type for this participant x visit combination in the assay data (Clinical sample, Clinical sample (other study), Negative/Positive control), Test sample or NA)",
+        variable == "control_type" ~ "Control type for the Negative and Positive control samples in the assay data (Nuclease-free water, Unused swab + C2, Mock 1 and Mock 2)",
+        variable == "assays" ~ "Names of the assays for which we have data for this participant x visit combination (mg, qPCR, amplicon, luminex, flow, etc.)",
+        variable == "screening_visit" ~ "Whether the visit is the main screening visit, an additional screening visit, or not a screening visit"
+      )
+  )
+  )
+
+```
+
+```{r}
+coldata_dictionary |> 
+  arrange(variable) |>
+  gt() |> 
+  tab_header(
+    title = "Dictionary for the mae_coldata table"
+  ) |> 
+  cols_label(
+    variable = "Variable",
+    description = "Description"
+  ) |> 
+  cols_align(
+    align = "left", columns = variable
+  )
+```
+
 
 ## Creating an assay to document specimen collection, and available data
 
@@ -1000,7 +1054,7 @@ mae <-
       data_source = "actual study data (not simulated)",
       data_status = "partially QCed",
       date = today(),
-      colData_dictionary = participants_variable_dictionary,
+      colData_dictionary = coldata_dictionary,
       crf_plates_description = crf_plates_dictionary,
       crf_data_raw = crf_raw,
       crf_data_clean = crf_clean, 

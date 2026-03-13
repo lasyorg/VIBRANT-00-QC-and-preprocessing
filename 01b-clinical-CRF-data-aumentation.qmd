@@ -846,7 +846,7 @@ crf31_sub <-
   crf_clean$crf31 |> 
   select(pid, med_start_relative_date, medication) |> 
   left_join(visits |> filter(visit_code == "1500") |> select(pid, visit_code, study_day), by = "pid") |> 
-  filter(str_detect(medication, regex("METRONIDAZOLE|FLAGYL|FOSFOMYCIN|CIPROFLOXACIN|CIPROBAY", ignore_case = TRUE))) |>
+  filter(str_detect(medication, regex("METRONIDAZOLE|FLAGYL|FOSFOMYCIN|CIPROFLOXACIN|NITROFURANTOIN|CIPROBAY|MACROBID|AZITHROMYCIN|PENICILLIN|AMOXICILLIN|AUGMENTIN|CIPROFLOXACIN|CEFTRIAXONE|DOXYCYCLINE|BENZANINE", ignore_case = TRUE))) |>
   filter(med_start_relative_date < study_day) |> #  med_start_relative_date > 7 
   mutate(
     any_antibiotics_crf31 = TRUE
@@ -1038,6 +1038,7 @@ participants_variable_dictionary <-
         variable == "replaced" ~ "Replacement flag (TRUE or FALSE): whether participant was replaced",
         variable == "replacement_criteria_bleeding" ~ "Whether participant met replacement criteria related to bleeding.",
         variable == "any_antibiotics" ~ "Whether participant used any antibiotics before visit 1500.",
+        variable == "any_antibiotics_crf31" ~ "Whether participant used any antibiotics before visit 1500 according to CRF31 (concomitant medications).",
         variable == "any_HSIL" ~ "Whether participant had HSIL pap at screening visit.",
         variable == "meets_replacement_criteria" ~ "Whether participant meets any of the replacement criteria (bleeding, antibiotics, HSIL pap)",
         variable == "n_study_product_doses_crf23" ~ "Number of doses taken (as reported in CRF23; missing values imputed to 0)",
