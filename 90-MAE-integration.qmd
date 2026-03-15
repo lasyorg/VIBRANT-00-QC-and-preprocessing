@@ -173,6 +173,7 @@ se_files <- fs::dir_ls(data_dir, regexp = "se_.*\\.rds$") |> sort(decreasing = T
 ```{r}
 
 mg_file <- se_files[grepl("mg", se_files)][1]
+cat("Loading metagenomics data from file: ", mg_file |> basename(), "\n")
 se_mg <- readRDS(mg_file)
 se_mg <- check_se(se_mg)
 se_mg
@@ -184,6 +185,7 @@ se_mg
 ```{r}
 
 qPCR_file <- se_files[grepl("03_se_pcr_agg", se_files)][1]
+cat("Loading qPCR data from file: ", qPCR_file |> basename(), "\n")
 se_qPRC <- readRDS(qPCR_file)
 se_qPRC <- check_se(se_qPRC)
 se_qPRC
@@ -195,6 +197,7 @@ se_qPRC
 ```{r}
 
 daily_qPCR_file <- se_files[grepl("30_se_pcr_agg", se_files)][1]
+cat("Loading qPCR data for daily swabs from file: ", daily_qPCR_file |> basename(), "\n")
 se_daily_qPRC <- readRDS(daily_qPCR_file)
 se_daily_qPRC <- check_se(se_daily_qPRC)
 se_daily_qPRC
@@ -204,15 +207,29 @@ se_daily_qPRC
 
 ## 16S rRNA amplicon sequencing
 
+We add both the ASV-level data and the data aggregated by taxonomic assignment.
+
+```{r}
+
+amplicon_ASV_file <- se_files[grepl("16S_ASV_2", se_files)][1]
+cat("Loading 16S rRNA amplicon sequencing ASV-level data from file: ", amplicon_ASV_file |> basename(), "\n")
+se_16S_ASV <- readRDS(amplicon_ASV_file)
+se_16S_ASV <- check_se(se_16S_ASV)
+se_16S_ASV
+
+```
+
 
 ```{r}
 
 amplicon_file <- se_files[grepl("16S_agg_2", se_files)][1]
+cat("Loading 16S rRNA amplicon sequencing data aggregated by taxonomic assignment from file: ", amplicon_file |> basename(), "\n")
 se_16S <- readRDS(amplicon_file)
 se_16S <- check_se(se_16S)
 se_16S
 
 ```
+
 
 
 ## Luminex data
@@ -221,6 +238,7 @@ se_16S
 ```{r}
 
 luminex_file <- se_files[grepl("luminex_agg", se_files)][1]
+cat("Loading Luminex data from file: ", luminex_file |> basename(), "\n")
 se_luminex <- readRDS(luminex_file)
 se_luminex <- check_se(se_luminex)
 se_luminex
@@ -234,6 +252,7 @@ se_luminex
 ```{r}
 
 flow_file <- se_files[grepl("flow", se_files)][1]
+cat("Loading flow cytometry data from file: ", flow_file |> basename(), "\n")
 se_flow <- readRDS(flow_file)
 se_flow <- check_se(se_flow)
 se_flow
@@ -264,10 +283,15 @@ assay_list <-
       assay_label = "qPCR home swabs"
       ),
     tibble(
+      mae_assay_name = "amplicon_ASV", 
+      se_object_name = "se_16S_ASV", 
+      assay_label = "16S rRNA amplicon seq. (ASV-level)"
+    ),
+    tibble(
       mae_assay_name = "amplicon", 
       se_object_name = "se_16S", 
       assay_label = "16S rRNA amplicon seq."
-      ),
+    ),
     tibble(
       mae_assay_name = "luminex", 
       se_object_name = "se_luminex", 
@@ -351,6 +375,8 @@ mae_coldata_assays |> colnames()
 mae_coldata_assays |> str()
 
 ```
+
+
 ```{r}
 
 mae_coldata_assays |> 
@@ -859,8 +885,8 @@ coldata_dictionary <-
     tibble(
       variable = setdiff(colnames(mae_coldata), colnames(participants)),
       description = case_when(
-        variable == "uid" ~ "Unique identifier for each participant x visit combination, in the format pid_visitcode",
-        variable == "PIPV" ~ "Primary in-person visit (PIPV) flag",
+        variable == "uid" ~ "Unique identifier for each participant x visit combination, in the format `pid`_`visit_code`",
+        variable == "PIPV" ~ "Planned in-person visit (PIPV) flag",
         variable == "visit_code" ~ "Visit code as in the CRF data",
         variable == "visit" ~ "Visit name (e.g., Screening, Week 1 (post-MTZ), etc.)",
         variable == "visit_number" ~ "Visit number (e.g., V0, V1, etc.)",
@@ -1036,6 +1062,7 @@ SE_list <-
     mg = se_mg,
     qPCR = se_qPRC,
     qPCR_daily = se_daily_qPRC,
+    amplicon_ASV = se_16S_ASV,
     amplicon = se_16S,
     luminex = se_luminex,
     flow = se_flow
@@ -1098,7 +1125,7 @@ All samples
 #| fig-width: 12
 
 mae_sample_map |> 
-  dplyr::filter(!is.na(assay)) |> 
+  dplyr::filter(!is.na(assay), assay != "amplicon_ASV") |> 
   group_by(uid) |> mutate(n = n()) |> ungroup() |> 
   mutate(uid = uid |> fct_reorder(-n)) |>
   ggplot() +
@@ -1125,7 +1152,7 @@ Longitudinal availability for all visits
 #| fig-width: 15
 
 mae_sample_map |> 
-  dplyr::filter(!is.na(assay)) |> 
+  dplyr::filter(!is.na(assay), assay != "amplicon_ASV") |> 
   # filter(visit_code %in% c("0000", seq(1000, 1900, by = 100), "2120")) |> 
   ggplot() +
   aes(x = assay_label, y = pid, fill = assay_label) +
@@ -1152,7 +1179,7 @@ For the weekly visits of all participants
 #| fig-width: 12
 
 mae_sample_map |> 
-  dplyr::filter(!is.na(assay)) |> 
+  dplyr::filter(!is.na(assay), assay != "amplicon_ASV") |> 
   dplyr::filter(visit_type == "Clinic") |> 
   ggplot() +
   aes(x = assay_label, y = pid, fill = assay_label) +
@@ -1181,7 +1208,7 @@ For the weekly visits of randomized participants
 
 mae_sample_map |> 
   dplyr::filter(randomized) |> 
-  dplyr::filter(!is.na(assay)) |> 
+  dplyr::filter(!is.na(assay), assay != "amplicon_ASV") |> 
   dplyr::filter(visit_type == "Clinic") |> 
   ggplot() +
   aes(x = assay_label, y = pid, fill = assay_label) +
@@ -1209,7 +1236,7 @@ mae_sample_map |>
 
 mae_sample_map |> 
   dplyr::filter(randomized) |> 
-  dplyr::filter(!is.na(assay)) |> 
+  dplyr::filter(!is.na(assay), assay != "amplicon_ASV") |> 
   dplyr::filter(PIPV) |> 
   ggplot() +
   aes(x = assay_label, y = pid, fill = assay_label) +
