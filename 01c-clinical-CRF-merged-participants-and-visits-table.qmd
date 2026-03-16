@@ -1283,12 +1283,13 @@ visits_crfs_merged <-
   visits_crfs_merged |> 
   filter(!(hiv_results == "Missing"  & nugent_done == "Missing" &
              if_all(-c(pid, visit_code, dfseq, hiv_results, nugent_done), is.na))) |> 
-  distinct()
+  distinct() |> 
+  mutate(uid = str_c(pid, "_", visit_code)) |>  
+  relocate(uid, pid, visit_code, study_day) 
 ```
 
 ```{r}
 visits_crfs_merged |> 
-  mutate(uid = str_c(pid, "_", visit_code)) |> 
   dplyr::count(uid) |> 
   dplyr::filter(n > 1)
 ```

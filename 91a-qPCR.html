@@ -2,12 +2,12 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.7.29">
+<meta name="generator" content="quarto-1.7.33">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="Mariam Rahali Masbouri, Khadija Rahali Masbouri, Laura Symul">
-<meta name="dcterms.date" content="2026-03-15">
+<meta name="dcterms.date" content="2026-03-16">
 
 <title>MAE augmentation : qPCR bias correction for 16S rRNA sequencing samples</title>
 <style>
@@ -2356,7 +2356,7 @@ window.Quarto = {
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">March 15, 2026</p>
+      <p class="date">March 16, 2026</p>
     </div>
   </div>
   
@@ -2400,7 +2400,7 @@ window.Quarto = {
 <span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">str_c</span>(<span class="st">&quot;Loading MultiAssayExperiment from: &quot;</span>, <span class="fu">dirname</span>(mae_file) <span class="sc">|&gt;</span> <span class="fu">basename</span>(), <span class="st">&quot;/&quot;</span>,  mae_file <span class="sc">|&gt;</span> <span class="fu">basename</span>(), <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>Loading MultiAssayExperiment from: 02 MAEs/mae_full_20260315.rds</code></pre>
+<pre><code>Loading MultiAssayExperiment from: 02 MAEs/mae_full_20260316.rds</code></pre>
 </div>
 <details class="code-fold">
 <summary>Code</summary>
@@ -2924,7 +2924,7 @@ stCAP:typwk  0.504 -0.547 -0.913</code></pre>
 <pre><code>                         2.5 %     97.5 %
 .sig01              0.00000000  0.3329885
 .sig02              0.24031003  0.4311027
-.sigma              0.73923878  0.8551971
+.sigma              0.73923878  0.8551959
 (Intercept)         7.13234938  7.6614345
 siteCAP            -0.06936088  0.5140042
 typeweekly          0.63524869  1.2207399
@@ -3411,7 +3411,7 @@ Warning
 <span id="cb45-2"><a href="#cb45-2" aria-hidden="true" tabindex="-1"></a>  mae, </span>
 <span id="cb45-3"><a href="#cb45-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">str_c</span>(</span>
 <span id="cb45-4"><a href="#cb45-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">get_03_output_dir</span>(),  </span>
-<span id="cb45-5"><a href="#cb45-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;mae_full_&quot;</span>, <span class="fu">today</span>() <span class="sc">|&gt;</span> <span class="fu">str_remove_all</span>(<span class="st">&quot;-&quot;</span>), <span class="st">&quot;.rds&quot;</span></span>
+<span id="cb45-5"><a href="#cb45-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;mae_full_01&quot;</span>, <span class="fu">today</span>() <span class="sc">|&gt;</span> <span class="fu">str_remove_all</span>(<span class="st">&quot;-&quot;</span>), <span class="st">&quot;.rds&quot;</span></span>
 <span id="cb45-6"><a href="#cb45-6" aria-hidden="true" tabindex="-1"></a>  )</span>
 <span id="cb45-7"><a href="#cb45-7" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>

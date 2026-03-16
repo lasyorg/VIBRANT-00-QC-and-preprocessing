@@ -7,9 +7,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="Laura Symul, Laura Vermeren">
-<meta name="dcterms.date" content="2026-03-13">
+<meta name="dcterms.date" content="2026-03-16">
 
-<title>Primary and secondary outcome definitions</title>
+<title>MAE augmentation - Primary and secondary outcome definitions</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -2209,7 +2209,7 @@ vertical-align: -.125em;
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
-<h1 class="title">Primary and secondary outcome definitions</h1>
+<h1 class="title">MAE augmentation - Primary and secondary outcome definitions</h1>
 </div>
 
 
@@ -2226,7 +2226,7 @@ vertical-align: -.125em;
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">March 13, 2026</p>
+      <p class="date">March 16, 2026</p>
     </div>
   </div>
   
@@ -2261,7 +2261,7 @@ vertical-align: -.125em;
 <div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>mae_files <span class="ot">&lt;-</span> </span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  fs<span class="sc">::</span><span class="fu">dir_ls</span>(</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">get_03_output_dir</span>(),</span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">regexp =</span> <span class="st">&quot;mae_full_qpcr_aug.*</span><span class="sc">\\</span><span class="st">.rds$&quot;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">regexp =</span> <span class="st">&quot;mae_full_01_.*</span><span class="sc">\\</span><span class="st">.rds$&quot;</span></span>
 <span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span> </span>
 <span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">sort</span>(<span class="at">decreasing =</span> <span class="cn">TRUE</span>) <span class="sc">|&gt;</span></span>
 <span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>  magrittr<span class="sc">::</span><span class="fu">extract</span>(<span class="dv">1</span>)</span>
@@ -3083,7 +3083,7 @@ vertical-align: -.125em;
 <span id="cb32-2"><a href="#cb32-2" aria-hidden="true" tabindex="-1"></a>  mae, </span>
 <span id="cb32-3"><a href="#cb32-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">str_c</span>(</span>
 <span id="cb32-4"><a href="#cb32-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">get_03_output_dir</span>(),  </span>
-<span id="cb32-5"><a href="#cb32-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;mae_full_primary_out_aug&quot;</span>, <span class="fu">today</span>() <span class="sc">|&gt;</span> <span class="fu">str_remove_all</span>(<span class="st">&quot;-&quot;</span>), <span class="st">&quot;.rds&quot;</span></span>
+<span id="cb32-5"><a href="#cb32-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;mae_full_02_&quot;</span>, <span class="fu">today</span>() <span class="sc">|&gt;</span> <span class="fu">str_remove_all</span>(<span class="st">&quot;-&quot;</span>), <span class="st">&quot;.rds&quot;</span></span>
 <span id="cb32-6"><a href="#cb32-6" aria-hidden="true" tabindex="-1"></a>  )</span>
 <span id="cb32-7"><a href="#cb32-7" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>

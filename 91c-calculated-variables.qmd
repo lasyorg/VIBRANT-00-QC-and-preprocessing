@@ -62,9 +62,11 @@ rm(mae_files)
 
 # Calculated variables
 
-The objective of this section is to create a new assay in the the coldata of the `MultiAssayExperiment` object that contains calculated variables that are relevant for downstream analyses. We create a new assay called `calc_vars` that contains one row per participant, and we will add to this assay variables related to participant characteristics, exposures, and outcomes.
+The objective of this section is to create new assays in the the coldata of the `MultiAssayExperiment` object that contains calculated variables that are relevant for downstream analyses. We create two new assay called `calc_vars_pid` that contains one row per participant, and we will add to this assay variables related to participant characteristics, exposures, and outcomes.
 
-We take all the information from the `participant_crfs_merged` table in the metadata of the `MultiAssayExperiment` object, which contains all the variables from the CRFs and have been merged together. We also take information from the `colData` of the `MultiAssayExperiment` object, which contains information on randomization and treatment arm. 
+We also create a new assay called `calc_vars_visit` that contains one row per participants and visit, and we will add to this assay variables related to visit characteristics, exposures, and outcomes.
+
+We take all the information from the `participant_crfs_merged` and `visits_crf_merged` table in the metadata of the `MultiAssayExperiment` object, which contains all the variables from the CRFs and have been merged together. We also take information from the `colData` of the `MultiAssayExperiment` object, which contains information on randomization and treatment arm. 
 
 We will use this information to create new variables that are relevant for downstream analyses.
 
@@ -76,6 +78,7 @@ mae@metadata$calc_vars_pid <-
 ```
 
 
+# Participant-level variables
 
 ## Education - can we harmonize between sites ?
 
@@ -476,7 +479,7 @@ food_security |>
 
 ## Pre-existing conditions
 
-In CRF5 ...
+In CRF5 participants were asked about pre-existing conditions. We explore the distribution of this variable and the different types of pre-existing conditions reported by participants. We also explore the relationship between pre-existing conditions and diagnosis.
 
 ```{r}
 
@@ -749,36 +752,899 @@ stress |>
 ```
 
 
+# Visit-level variables
 
-## Sexual behavior
-
-### PSA
+We create a new assay in the coldata of the `MultiAssayExperiment` object called `calc_vars_visit` that contains one row per participant and visit. We will add to this assay variables related to visit characteristics, exposures, and outcomes.
 
 ```{r}
 
-psa <- 
-  mae@metadata$crf_data_clean$crf45 |> 
-  select(uid, pid, visit_code, psa_results) |> 
+visits_crfs_merged <-
+  metadata(mae)$visits_crfs_merged |>
   left_join(
-    mae@colData |> as_tibble() |> 
-      select(pid, site, randomized) |> 
-      distinct(),
-    by = join_by(pid)
-  )
+    mae@colData |> as_tibble() |> select(uid, site, visit_type, randomized, ITT, mITT, PP) |> distinct(),
+    by = c("uid")
+  ) |>
+  select(uid, pid, visit_code, study_day, visit_type, everything())
+
 
 ```
+
+## Sexual behavior
+
+The participants’ sexual activity is measured in two different ways: via a prostate-specific antigen test (PSA) and through self-report. PSA are performed on all weekly vaginal swabs except visit 1300 and 1700, and they are used as a biomarker of recent semen exposure. PSA detect semen exposure (sex without condoms) within the past 24-48 hours. Self-reported is measured in the daily dairy and at the weekly visits. In the daily diary, participants report whether they had sex in the past 24 hours and if they used condoms or lubricants, and in the weekly visits, they report the type of partners (male/female/both and single/multiple), if it was a new partner, the frequency of condom and lubricant use, and the frequency of vaginal, oral, the type of sexual activity (vaginal, oral, anal) in the past week and finaly if they had sex in the past 24 hours.
+
+The goal of this exploratory analysis is to assess the consistency between self-reported sexual behaviour (also between daily responses and weekly responses) and PSA test results and to create new variables that summarize sexual activity based on both self-reported data and PSA results. 
+
+```{r}
+
+sex <- 
+  visits_crfs_merged |> 
+  select(uid, pid, study_day, visit_code, visit_type, randomized, site, sex_past_24hours.crf33, condom_use.crf33 = condom_use, lubricant_use, sex_type, past_week_sex_partner, sex_past_24hours.crf20, condom_use.crf20 = use_condoms, psa_results)
+
+```
+
+### PSA
+
+PSA was performed on swabs collecetd at the clinic visits 1000, 1200, 1500 and 2120. Results are collected in CRF45. Possible values are "Positive", "Negative", "Invalid" and "not done". We explore the distribution of PSA results across visits and sites.
+
 
 ```{r}
 #| fig-height: 8
 #| fig-width: 6
 
 
-psa |> 
+sex |> 
+  filter(randomized) |>
+  filter(!is.na(psa_results)) |>
   ggplot() +
-  aes(x = visit_code, y = pid) +
-  geom_tile(fill = "lightseagreen")
+  aes(x = visit_code, y = pid, fill = psa_results) +
+  geom_tile() + 
+  facet_grid(site ~ ., scales = "free_y", space = "free") + 
+  scale_fill_manual(
+    values = c(
+      "Negative" = "lightgray", 
+      "Positive" = "steelblue", 
+      "Not done" = "white", 
+      "Invalid" = "black")
+  )
 
 ```
+
+
+### Self-reported sexual activity
+
+As mentionned above, self-reported sexual activity is measured in the daily diary and at the weekly visits. We have the following source of information :
+
+- From the daily CRF (CRF33) : 
+  - `sex_past_24hours.crf33` : self-reported sexual behaviour in the past 24 hours (between visit 1000 and 1500). Participants answer the question "Did you had sex in the past 24 hours" every day. 
+  - `condom_use.crf33` : if yes to the previous question, did you use a condom ? (Always, Sometimes, Never)
+  - `lubricant_use` : if yes to the first question, did you use lubricant ? (Always, Sometimes, Never)
+  - `sex_type` : if yes to the first question, what type of sex ? (Oral, Anal, Vaginal, Other)
+
+- From the weekly CRF (CRF20) :
+  - `past_week_sex_partner` : self-reported sexual behaviour in the past week (at visit 1000, 1100, 1200, 1300, 1400 and 1500). Participants answer the question "In the past week, did you have sex with any of the following : a single male partner, multiple male partners, a single female partner, multiple female partners, both, no sex in the past week. 
+  - `sex_past_24hours.crf20` : self-reported sexual behaviour in the past 24 hours (each weekly visits). Participants answer the question "Did you had sex in the past 24 hours".
+  - `use_condom` : self-reported condom use in the past week (at visit 1000, 1100, 1200, 1300, 1400 and 1500).
+
+#### Daily responses
+
+We first explore the daily responses from CRF33. We are interested in the sexual behaviour of the participants. We look at whether they reported having had sexual intercourse in the last 24 hours, and whether they used lubricant and condoms.
+
+```{r}
+#| fig.height: 8
+#| fig.width: 10
+
+
+p1 <- 
+  sex |> 
+  filter(sex_past_24hours.crf33 == "Yes") |> 
+  #mutate(pid = pid |> as.character() |> factor(levels = all_pids) |> fct_infreq() |> fct_rev()) |> 
+  ggplot() +
+  aes(
+    x = visit_code |> factor(), y = pid, 
+    col = condom_use.crf33, shape = sex_type
+  ) +
+  geom_point() +
+  facet_grid(site ~ ., scales = "free_y", space = "free") +
+  scale_color_manual(
+    "Condom use", 
+    values = c("Never" = "black", "Sometimes" = "deeppink4", "Always" = "deeppink1", "Unknown" = "gray70")
+  ) +
+  scale_shape_manual(values = c(16, 17, 15, 18, 8, 22, 5, 2)) +
+  scale_y_discrete(drop = FALSE) +
+  labs(
+    x = "Visit code", y = "Participants",
+    shape = "Sex type", 
+    title = "Condom use"
+  ) +
+  theme(
+    axis.text.y = element_blank(),
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), 
+    plot.title = element_text(hjust = 0.5)
+  )
+
+p2 <- 
+  sex |> 
+  filter(sex_past_24hours.crf33 == "Yes") |> 
+  #mutate(pid = pid |> as.character() |> factor(levels = all_pids) |> fct_infreq() |> fct_rev()) |> 
+  ggplot() +
+  aes(
+    x = visit_code |> factor(), y = pid, 
+    col = lubricant_use, shape = sex_type
+  ) +
+  geom_point() +
+  facet_grid(site ~ ., scales = "free_y", space = "free") +
+  scale_color_manual(
+    "Lubricant use", 
+    values = c("Never" = "black", "Sometimes" = "gold3", "Always" = "gold", "Unknown" = "gray70")
+  ) +
+  scale_shape_manual(values = c(16, 17, 15, 18, 8, 22, 5, 2)) +
+  scale_y_discrete(drop = FALSE) +
+  labs(
+    x = "Visit code", y = "Participants",
+    shape = "Sex type", 
+    title = "Lubricant use"
+  ) +
+  theme(
+    axis.text.y = element_blank(),
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), 
+    plot.title = element_text(hjust = 0.5)
+  ) 
+
+(p1 + p2) +
+  plot_layout(guides = "collect") &
+  theme(legend.position = "right")
+```
+
+We look at the relationship between condom use, lubricant use and sex. All participants that reported no sex in the past 24 hours reported "Blank" for condom use and lubricant use. Participants that reported having sex in the past 24 hours reported mainly "Never" for condom use and lubricant use.
+
+```{r}
+#| fig.height: 4
+#| fig.width: 8
+
+sex |>
+  mutate(visit_code = visit_code |> as.numeric()) |>
+  filter(visit_type == "Home") |> 
+  dplyr::count(site, sex_past_24hours.crf33, condom_use.crf33, lubricant_use) |> 
+  ggplot() + 
+  geom_tile(aes(x = condom_use.crf33, y = lubricant_use, fill = n)) +
+  geom_text(aes(x = condom_use.crf33, y = lubricant_use, label = n)) + 
+  scale_fill_gradient(low = "white", high = "steelblue1") + 
+  facet_grid(site ~ sex_past_24hours.crf33, 
+             labeller = as_labeller(c(
+               "No" = "No sex in the past 24h", 
+               "Yes" = "Sex in the past 24h", 
+               "MGH" = "MGH",
+               "CAP" = "CAP"
+               ))
+             ) +
+  labs(x = "Condom use", y = "Lubricant use") +
+  guides(fill = "none")
+```
+
+We look at the relationship between condom use, sex type and sex. All participants that reported no sex in the past 24 hours reported "Blank" for condom use and "NA" for sex type. Participants that reported having sex in the past 24 hours reported mainly "Never" for condom use and "Vaginal" for sex type.
+
+```{r}
+#| fig.height: 4
+#| fig.width: 8
+
+sex |>
+  mutate(visit_code = visit_code |> as.numeric()) |>
+  filter(visit_type == "Home") |> 
+  dplyr::count(site, sex_past_24hours.crf33, condom_use.crf33, sex_type) |> 
+  ggplot() + 
+  geom_tile(aes(x = condom_use.crf33, y = sex_type, fill = n)) +
+  geom_text(aes(x = condom_use.crf33, y = sex_type, label = n)) + 
+  scale_fill_gradient(low = "white", high = "steelblue1") + 
+  facet_grid(site ~ sex_past_24hours.crf33, 
+             labeller = as_labeller(c(
+               "No" = "No sex in the past 24h", 
+               "Yes" = "Sex in the past 24h", 
+                "MGH" = "MGH",
+                "CAP" = "CAP"
+             ))
+             ) +
+  labs(x = "Condom use", y = "Sex type") +
+  guides(fill = "none")
+```
+
+Three participants that reported having sex in the last 24 hours reported "Unknown" for condom use and lubricant use. For two of them, the type of sex was "mounth-vagina".
+
+```{r}
+ 
+sex |> 
+  filter(!is.na(sex_past_24hours.crf33)) |>
+  filter(condom_use.crf33 == "Unknown" | lubricant_use == "Unknown") |>
+  select(pid, visit_code, sex_past_24hours.crf33, sex_type, condom_use.crf33, lubricant_use) |> 
+  gt(caption = "Zoom on unknown condom/lubricant use")
+
+```
+
+
+#### Weekly response
+
+At the clinical visits, participants were ask about her sexual behavior in the last 24 hours (`sex_past_24hours.crf20`) and in the past week : her partner in the last week (`past_week_sex_partner`) and if there use use condom in the past week (`use_condom`). 
+
+We first look at the past week sex partner and the condom use. 
+
+```{r}
+sex |> 
+  filter(visit_type == "Clinic") |> 
+  select(pid, visit_code, past_week_sex_partner) |>
+  distinct() |> 
+  dplyr::count(visit_code, past_week_sex_partner) |> 
+  pivot_wider(names_from = past_week_sex_partner, values_from = n, values_fill = 0) |>
+  gt(caption = "Past week sex partner by visit")
+```
+
+```{r}
+
+sex |> 
+  filter(visit_type == "Clinic") |> 
+  select(pid, visit_code, past_week_sex_partner, condom_use.crf20) |> 
+  distinct() |> 
+  dplyr::count(past_week_sex_partner, condom_use.crf20) |> 
+  ggplot() + 
+  aes(x = past_week_sex_partner, y = condom_use.crf20, fill = n) +
+  geom_tile() + 
+  geom_text(aes(label=n)) + 
+  scale_fill_gradient(low = "white", high = "steelblue1") + 
+  guides(fill = "none") +
+  labs(y = "Use condom", x = "Sexual partner(s) in the past week") + 
+  theme(strip.text = element_text(size = 12), 
+        axis.text.x = element_text(angle = 45, hjust = 1)) +
+  coord_fixed()
+
+```
+
+
+We look at the variable sex in the last 24hours (`sex_past_24hour.crf20`). We can see that the variable is not encoded as in the daily CRF.
+Here the variable is encoded as the "sex.type" variable.
+
+```{r}
+sex |> 
+  filter(visit_type == "Clinic") |> 
+  filter(sex_past_24hours.crf20 !="No") |> 
+  ggplot() + 
+  aes(x = visit_code |> as.factor(), y = pid, shape = sex_past_24hours.crf20) + 
+  geom_point() + 
+  facet_grid(site ~ ., scales = "free_y", space = "free") +
+  scale_shape_manual(values = c(16, 17, 15, 18, 8, 22, 5, 2)) + 
+  labs(
+        x = "Visit code", y = "Participants",
+        shape = "Sex past 24h\n(=Sex type)"
+    )
+```
+
+```{r}
+
+sex |>
+  mutate(visit_code = visit_code |> as.numeric()) |>
+  filter(visit_code%%10==0) |> 
+  dplyr::count(site, visit_code, sex_past_24hours.crf20) |> 
+  ggplot() +
+  aes(y = sex_past_24hours.crf20, x = visit_code |> as_factor()) +
+  geom_tile(aes(fill = n)) +
+  geom_text(aes(label = n)) +
+  facet_grid(site ~ ., scales = "free_y", space = "free") +
+  scale_fill_gradient(low = "white", high = "steelblue1") +
+  labs(y = "Sex in past 24h", x = "Visit") +
+  guides(fill = "none") 
+
+```
+
+We plot the relationship between `past_week_sex_partner`, `condom_use.crf20` and `sex_past_24hours.crf20`. We can see that participants
+
+```{r}
+sex |> 
+  filter(visit_type == "Clinic") |> 
+  filter(!str_detect(past_week_sex_partner, "No")) |> 
+  ggplot() + 
+  aes(x = visit_code |> as.factor(), y = pid, shape = past_week_sex_partner, col = condom_use.crf20) + 
+  geom_point() + 
+  facet_grid(site ~ ., scales = "free_y", space = "free") +
+  scale_shape_manual(values = c(16, 17)) +
+  scale_color_manual(
+    "Condom use", 
+    values = c("No" = "black", "Sometimes" = "deeppink4", "Every time" = "deeppink1", "Not applicable" = "gray70")
+  ) + 
+  labs(
+        x = "Visit code", y = "Participants",
+        shape = "Past week sexual partner(s)",
+        col = "Condom use in the past week"
+    )
+```
+
+
+Finaly we look at the consitency between `past_week_sex_partner` and `sex_past_24hours.crf20`. If participant report "Yes" to `sex_past_24hours.crf20`, they should not report "No sex in the past week" to `past_week_sex_partner`. All gray symbols in the plot below should be empty circles (if they reported Not having sex in the past week, they should report "No" to `sex_past_24hours.crf20`). We can see that there are some inconsistencies in the data. All colored symbols should be different from empty circles (if they reported having sex in the past week, they should report a type of sex to `sex_past_24hours.crf20`). We can see that there are some inconsistencies in the data.
+
+:::::: {.callout-note}
+Is it possible that the inconsistencies are due to the fact that the question "Did you have sex in the past 24 hours" refers to the 24 hours before the visit, while the question "In the past week, did you have sex with any of the following" refers to the past week and not the 7 days before the visit ? 
+:::
+
+```{r}
+#| fig-height: 10
+#| fig-width: 10
+
+sex |> 
+  filter(visit_type == "Clinic") |> 
+  #filter(sex_past_24hours.crf20 !="No") |> 
+  ggplot() + 
+  aes(x = visit_code |> as.factor(), y = pid, shape = sex_past_24hours.crf20, colour = past_week_sex_partner) + 
+  geom_point() + 
+  facet_grid(site ~ ., scales = "free_y", space = "free") +
+  scale_shape_manual(values = c(1, 17, 15, 18, 8, 22, 5, 2)) + 
+  scale_color_manual(values = c("gray70", "orchid1", "orchid4")) +
+  labs(
+        x = "Visit code", y = "Participants",
+        shape = "Did you have sex in the past 24 hour ?",
+        col = "In the past week have you had sex with"
+    )
+```
+
+```{r}
+#| eval: false
+
+sex |> 
+  filter(visit_type == "Clinic") |> 
+  group_by(visit_code) |> 
+  dplyr::count(
+    (sex_past_24hours.crf20 != "No" & !is.na(sex_past_24hours.crf20)) & past_week_sex_partner == "No sex in the past week"
+  ) 
+
+```
+
+
+
+#### Comparison between daily and weekly responses
+
+We merged the information from sex_past_24hours from the daily CRF (CRF33) and the weekly crf (CRF20) in one single variable `sex_past_24hours`.
+
+`sex_past_24hours` take the value of `sex_past_24hours.crf33` for the daily responses and take the value "Yes" if `sex_past_24hours.crf20` is not "No" or missing for the weekly responses. We also harmonized the value of `sex_type`for the clinical and home visits. Since we don't have information about condom use in the weekly CRF, if `sex_past_24hours.crf20` is not "No", we set `condom_use.crf33` to "Unknown" for those visits. Same for `lubricant_use`.
+
+
+
+```{r}
+
+# Harmonizing daily and weekly responses
+# merged daily and weekly
+# sex_past_24hours in the weekly crf20 is encoded as the sex_type
+# we also complete the sex_type variable with this information
+
+sex <- 
+  sex |> 
+  mutate(
+    sex_past_24hours = case_when(
+      !is.na(sex_past_24hours.crf33) ~ sex_past_24hours.crf33,
+      !is.na(sex_past_24hours.crf20) & sex_past_24hours.crf20 != "No" ~ "Yes",
+      !is.na(sex_past_24hours.crf20) & sex_past_24hours.crf20 == "No"  ~ "No",
+      TRUE ~ NA_character_
+    ),
+    
+    condom_use = case_when(
+      !is.na(sex_past_24hours.crf20) & sex_past_24hours.crf20 != "No" ~ "Unknown",
+      TRUE ~ condom_use.crf33
+    ),
+    
+    lubricant_use = case_when(
+      !is.na(sex_past_24hours.crf20) & sex_past_24hours.crf20 != "No" ~ "Unknown",
+      TRUE ~ lubricant_use
+    ),
+    
+    sex_type = case_when(
+      sex_past_24hours.crf20 == "penis_vagina" ~ "penis-vagina", 
+      sex_past_24hours.crf20 == "oral_sex" ~ "mouth-vagina",
+      sex_past_24hours.crf20 == "fingering, penis_vagina" ~ "penis-vagina, finger-vagina", 
+      sex_past_24hours.crf20 == "oral_sex, penis_vagina" ~ "penis-vagina, mouth-vagina",
+      sex_past_24hours.crf20 == "fingering, oral_sex, penis_vagina" ~ "penis-vagina, finger-vagina, mouth-vagina",
+      sex_past_24hours.crf20 == "anal_sex" ~ "anal",
+      TRUE ~ sex_type
+    )
+  )
+
+#check
+sex |> 
+  dplyr::count(sex_past_24hours, sex_past_24hours.crf33, sex_past_24hours.crf20) |> 
+  gt()
+ 
+```
+
+
+We first look at the consitency between the variable `sex_past_24hours` from CRF33 and the variable `past_week_sex_partner` from CRF20. If participant report "Yes" to `sex_past_24hours`, they should not report "No sex in the past week" to `past_week_sex_partner`.
+
+```{r}
+#| fig-height: 10
+#| fig-width: 10
+
+sex |> 
+  filter(!is.na(visit_code)) |> 
+  ggplot() + 
+  aes(x = visit_code, y = pid) +
+  geom_point(data = sex |> 
+               filter(sex_past_24hours.crf33 == "Yes"), 
+             aes(fill = sex_past_24hours.crf33),
+             size = 2.5, alpha = 0.5, shape = 21) +
+  geom_point(data = sex |> 
+               filter(!is.na(past_week_sex_partner)), 
+             aes(color = past_week_sex_partner), 
+             size = 2.5) +
+  scale_fill_manual(
+    name = "Sex in past 24h",
+    values = c("Yes" = "orchid1", "No" = "white")
+  ) +
+  scale_color_manual(
+    name = "Sex partner past week",
+    values = c("No sex in the past week" = "grey80", 
+               "A single male partner" = "orchid1", 
+               "Multiple male partners" = "orchid3")
+  ) +
+  labs(x = "Visit", y = "Participant ID") + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+```
+
+Resume table of the inconsistencies found.
+
+```{r}
+
+daily_summary <- 
+  sex |>
+  filter(visit_type == "Home") |>
+  mutate(period = str_sub(visit_code, 1, 2)) |>
+  group_by(pid, period) |>
+  summarise(
+    any_daily_sex = any(sex_past_24hours.crf33 == "Yes", na.rm = TRUE),
+    all_daily_no_sex = all(sex_past_24hours.crf33 == "No", na.rm = TRUE),
+    n_daily_visits = n(),
+    .groups = "drop"
+  )
+
+
+sex |>
+  filter(visit_type == "Clinic") |>
+  mutate(period = str_sub(visit_code, 1, 2)) |>
+  select(pid, period, past_week_sex_partner) |> 
+  left_join(daily_summary, by = c("pid", "period")) |>
+  filter(period < 16 & period !="00") |> 
+  mutate(
+    inconsistency_1 = any_daily_sex & (past_week_sex_partner == "No sex in the past week"),
+    inconsistency_2 = all_daily_no_sex & (past_week_sex_partner != "No sex in the past week")
+  ) |> 
+  dplyr::count(inconsistency_1, inconsistency_2) |> 
+  gt(caption = "Table of inconsistencies between daily and weekly sexual behaviour reports between visits 1000 and 1500") |> 
+  cols_label(
+    inconsistency_1 = "Daily sex but no weekly",
+    inconsistency_2 = "Weekly sex but no daily",
+    n = "Count"
+  ) 
+
+
+```
+
+We do the same with the condom use. At the weekly clinical visits, participants were ask if they used condom in the past week (In the past week, if you had male partners, did you use condoms? - `use_condom`). This should be consistent with the daily reports of condom use in the past 24 hours.
+
+```{r}
+#| fig-height: 10
+#| fig-width: 10
+sex |> 
+  filter(!is.na(visit_code)) |> 
+  ggplot() + 
+  aes(x = visit_code, y = pid) +
+  geom_point(data = sex |> 
+               mutate(condom_daily = ifelse(condom_use.crf33 %in% c("Always", "Sometimes"), "Yes", "No")) |>
+               filter(condom_daily == "Yes"), 
+             aes(fill = condom_daily),
+             size = 2.5, alpha = 0.5, shape = 21) +
+  geom_point(data = sex |> 
+               mutate(condom_weekly = ifelse(condom_use.crf20 %in% c("Every time", "Sometimes"), "Yes", "No")) |>
+               filter(condom_weekly == "Yes"),
+             aes(color = condom_weekly), 
+             size = 2.5) +
+  labs(x = "Visit", y = "Participant ID") + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+```
+
+There seem to be some inconsistencies between daily and weekly condom use reports. We can make a summary table of those inconsistencies.
+
+```{r}
+daily_summary <- 
+  sex |>
+  filter(visit_type == "Home") |>
+  mutate(period = str_sub(visit_code, 1, 2)) |>
+  group_by(pid, period) |>
+  summarise(
+    any_daily_condom= any(condom_use.crf33 %in% c("Always", "Sometimes"), na.rm = TRUE),
+    all_daily_no_condom = all(condom_use.crf33 %in% c("Never", "Unknown", "Blank"), na.rm = TRUE),
+    n_daily_visits = n(),
+    .groups = "drop"
+  )
+
+
+sex |>
+  filter(visit_type == "Clinic") |>
+  mutate(period = str_sub(visit_code, 1, 2)) |>
+  select(pid, period, condom_use.crf20) |>
+  mutate(
+    past_week_condom = case_when(
+      condom_use.crf20 %in% c("Every time", "Sometimes") ~ "Yes condom in past week",
+      condom_use.crf20 %in% c("Never", "Not applicable") ~ "No condom in past week",
+      TRUE ~ NA_character_
+    )
+  ) |>
+  left_join(daily_summary, by = c("pid", "period")) |>
+  filter(period < 16 & period !="00") |> 
+  mutate(
+    inconsistency_1 = any_daily_condom & (past_week_condom == "No condom in past week"),
+    inconsistency_2 = all_daily_no_condom & (past_week_condom == "Yes condom in past week")
+  ) |> 
+  dplyr::count(inconsistency_1, inconsistency_2) |> 
+  gt(caption = "Table of inconsistencies between daily and weekly condom use reports between visits 1000 and 1500") |> 
+  cols_label(
+    inconsistency_1 = "Any condom use daily but no reported weekly",
+    inconsistency_2 = "No condom use daily but reported weekly",
+    n = "Count"
+  ) 
+```
+
+#### SF Semen Exposure Variables
+
+We create boolean variables for semen exposure (pv is for penis-vagina)
+
+-  `SF_pv_sex_w_semen_exposure` : TRUE if `sex_past_24hours` is "Yes", the type of sex is penis-vagina and `condom_use` is "Sometimes" or "Never".
+
+- `SF_pv_sex_wo_semen_exposure` : TRUE if `sex_past_24hours` is "Yes", the type of sex is penis-vagina and the condom use is always.
+
+- `SF_pv_sex_unknown_semen_exposure` : TRUE if `sex_past_24hours` is "Yes", the type of sex is penis-vagina and the condom use is unknonw, missing or blank
+
+- `SF_other_sex_wo_semen_exposure` : TRUE if `sex_past_24hours` is "Yes", the type of sex is not penis-vagina. 
+
+If a participant have FALSE values for all the SF variables, it means they did not have any sexual activity in the past 24 hours.
+
+```{r}
+
+# Creating SF_semen_exposure
+
+sex <- 
+  sex |> 
+  mutate(
+    SF_pv_sex_w_semen_exposure = sex_past_24hours == "Yes" & str_detect(sex_type, "penis-vagina") & (condom_use == "Never" | condom_use == "Sometimes"),
+    SF_pv_sex_wo_semen_exposure = sex_past_24hours == "Yes" & str_detect(sex_type, "penis-vagina") & condom_use == "Always",
+    SF_pv_sex_unknown_semen_exposure = sex_past_24hours == "Yes" & str_detect(sex_type, "penis-vagina") & (is.na(condom_use) | condom_use == "Unknown" | condom_use == "Blank"),
+    SF_other_sex_wo_semen_exposure = sex_past_24hours == "Yes" & str_detect(sex_type, "finger-vagina|mouth-vagina|anal")
+  )
+
+# check 
+sex |> 
+  dplyr::count(sex_past_24hours, sex_type, condom_use, SF_pv_sex_w_semen_exposure, SF_pv_sex_wo_semen_exposure, SF_pv_sex_unknown_semen_exposure, SF_other_sex_wo_semen_exposure) |> 
+  gt()
+
+```
+
+```{r}
+
+sex |> 
+  pivot_longer(cols = starts_with("SF_"), names_to = "semen_exposure", values_to = "value") |> 
+  filter(value == TRUE) |> 
+  mutate(semen_exposure = semen_exposure |> factor(levels = c("SF_pv_sex_w_semen_exposure", "SF_pv_sex_wo_semen_exposure", "SF_pv_sex_unknown_semen_exposure", "SF_other_sex_wo_semen_exposure"))) |> 
+  ggplot() +
+  aes(y = pid, x = visit_code, col = semen_exposure, shape = semen_exposure) +
+  geom_point() + 
+  facet_grid(site ~ semen_exposure, scales = "free_y") + 
+  scale_color_manual(values = c("deeppink", "orange", "gray70", "black")) + 
+  scale_shape_manual(values = c(16, 17, 18, 4)) 
+
+sex |> 
+  pivot_longer(cols = starts_with("SF_"), names_to = "semen_exposure", values_to = "value") |> 
+  filter(value == TRUE) |> 
+  mutate(semen_exposure = semen_exposure |> factor(levels = c("SF_pv_sex_w_semen_exposure", "SF_pv_sex_wo_semen_exposure", "SF_pv_sex_unknown_semen_exposure", "SF_other_sex_wo_semen_exposure"))) |> 
+  ggplot() +
+  aes(y = pid, x = visit_code, col = semen_exposure, shape = semen_exposure) +
+  geom_point() + 
+  facet_grid(site ~ ., scales = "free_y") + 
+  scale_color_manual(values = c("deeppink", "orange", "gray70", "black")) + 
+  scale_shape_manual(values = c(16, 17, 18, 4)) 
+
+```
+
+
+We created new variables to assess the time since last sexual intercourse (with or without condom) at each study day using the `sex_past_24hours` and `condom_use` variables.
+
+- `day_since_last_sex_w_cndm` : count the number of day since the last self-report (penis-vagina) sexual intercourse with condom. 
+
+- `day_since_last_sex_wo_cndm` : count the number of day since the last self-report (penis-vagina) sexual intercourse without condom. 
+
+- `day_since_last_sex_unknown_cndm` : count the number of day since the last self-report (penis-vagina) sexual intercourse with unknown condom use. 
+
+:::::: {.callout-note}
+We don't have the information about the last sexual intercourse for the first visits until the first reported sexual intercourse. `day_since_last_sex` remains NA until the first reported sexual intercourse. 
+
+Should I impute the last sexual intercourse for the first visit (1000) ? 
+A solution could be to look at the variable `sexual_partners_past_month` and `sex_past_24hours` collected at the beginning of the study. If the participant reported no sexual partners in the last month and no sexual activity in the past 24 hours, we could impute the last sexual intercourse as 30 days before the visit. If the participant reported having a sexual partner in the last month but no sexual activity in the past 24 hours, we could impute the last sexual intercourse as 15 days before the visit.
+:::
+
+
+```{r}
+# Approximate the last sexual intercourse before the study start
+# mae@metadata$participant_crfs |> 
+#   select(pid, sexual_partners_past_month) |> 
+#   left_join(
+#     colData(mae) |> as_tibble() |> select(pid, randomized) |> distinct(), 
+#     by = "pid"
+#   ) |> 
+#   filter(randomized) |> 
+#   left_join(
+#     sex |> 
+#     filter(visit_code == "1000") |> 
+#     select(pid, visit_code, sex_past_24hours) |> 
+#     distinct(), 
+#     by = "pid"
+#   ) |> 
+#   distinct() |> 
+#   dplyr::count(sexual_partners_past_month>0, sex_past_24hours) |> 
+#   gt(caption = "Sexual partners and recent sexual activity at baseline")
+  
+# SF sex 
+
+sex <- 
+  sex |>
+  arrange(pid, study_day) |>
+  group_by(pid) |> 
+  mutate(
+  # with condom only
+    last_sex_day_w_cndm = case_when(
+      sex_past_24hours == "Yes" & str_detect(sex_type, "penis-vagina") & condom_use == "Always" ~ study_day,
+      TRUE ~ NA_integer_
+    ),
+    last_sex_day_w_cndm = zoo::na.locf(last_sex_day_w_cndm, na.rm = FALSE), 
+    days_since_last_sex_w_cndm = study_day - last_sex_day_w_cndm,
+    
+    # without condom only
+    last_sex_day_wo_cndm = case_when(
+      sex_past_24hours == "Yes" & (condom_use == "Never"|condom_use == "Sometimes") ~ study_day,
+      TRUE ~ NA_integer_
+    ),
+    last_sex_day_wo_cndm = zoo::na.locf(last_sex_day_wo_cndm, na.rm = FALSE),
+    days_since_last_sex_wo_cndm = study_day - last_sex_day_wo_cndm, 
+
+    # unknown condom use
+    last_sex_day_unknown_cndm = case_when(
+      sex_past_24hours == "Yes" & (is.na(condom_use)|condom_use == "Unknown") ~ study_day,
+      TRUE ~ NA_integer_
+    ),
+    last_sex_day_unknown_cndm = zoo::na.locf(last_sex_day_unknown_cndm, na.rm = FALSE),
+    days_since_last_sex_unknown_cndm = study_day - last_sex_day_unknown_cndm
+  ) |> 
+  ungroup() |> 
+  select(-c(last_sex_day_wo_cndm, last_sex_day_w_cndm, last_sex_day_unknown_cndm))
+
+
+```
+
+Numbers and colors represent the number of day since the last sexual intercourse without condom
+
+
+```{r}
+#| fig.height: 10
+#| fig.width: 10
+
+sex |> 
+  filter(randomized) |>
+  ggplot() + 
+  aes(x = visit_code |> as.factor(), y = pid, fill = days_since_last_sex_wo_cndm) +
+  geom_tile() +
+  facet_grid(site ~ ., scales = "free_y", space = "free") +
+  geom_text(aes(label = days_since_last_sex_wo_cndm), size = 2) + 
+  scale_fill_gradient("Day since last sex\n(wo cndm)", low = "#EBFAFE", high =  "lightskyblue4") +
+  labs(x = "Visit code", y="") +
+  theme(
+    #axis.text.y = element_blank(),
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
+  )
+
+```
+
+
+### PSA and self-reported sexual activity
+
+
+We compare the PSA results and the self-reported sexual behavior (`SF_pv_sex_w_semen_exposure` and `SF_pv_sex_unknown_semen_exposure`) to look at the consistency between those two variables.
+
+```{r}
+#| fig-height: 10
+#| fig-width: 10
+
+sex |> 
+  filter(!is.na(visit_code)) |> 
+  ggplot() + 
+  aes(x = visit_code, y = pid) +
+  geom_point(data = sex |> 
+               filter(SF_pv_sex_w_semen_exposure | SF_pv_sex_unknown_semen_exposure) |> 
+               pivot_longer(cols = c(SF_pv_sex_w_semen_exposure, SF_pv_sex_unknown_semen_exposure), names_to = "semen_exposure", values_to = "value") |>
+               filter(value == TRUE),
+             aes(fill = semen_exposure),
+             size = 2.5, alpha = 0.5, shape = 21) +
+  geom_point(data = sex |> 
+               filter(psa_results == "Positive"), 
+             aes(shape = psa_results), 
+             size = 2.5) +
+  geom_vline(
+    data = sex |>  select(visit_code, visit_type) |> filter(visit_type == "Clinic") |> distinct(),
+    aes(xintercept = visit_code),
+    color = "gray70",
+    linetype = "dashed",
+    linewidth = 0.4
+  ) +
+  scale_fill_manual(
+    name = "Sex in past 24h",
+    values = c("gray70", "deeppink"),
+  ) +
+  scale_shape_manual(
+    name = "PSA results", 
+    values = c("Positive" = 4)
+  )  +
+  labs(x = "Visit", y = "Participant ID") + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+
+#### Table of PSA and SF-sex
+
+We take into account the time since last sexual intercourse and look at the consistency between PSA results and self-reported sexual behaviour depending on the time since last sexual intercourse.
+
+We don't take into account the visit 0000 since we don't have information about their sexual behaviour : CRF33 and CRF20 where not fill at that visit. We just have information about PSA and we imputed the day since last sex using this information. 
+
+:::callout-note
+At the 1000th visit, the daily CRFs had not yet begun to be filled out: we therefore only have information from clinical visits, which did not provide details on condom use. The variable day_since_last_sex_wo_condom could not therefore be ‘updated’ since visit 0000 (at which this variable was initialised to 0 for participants with a positive PSA): it is therefore normal to have only values >4.
+:::
+
+Some participants that have a PSA positive but a day since last sex > 4 had report, at that weekly visit, a sexual intercourse in the last 24h BUT for the weekly visit we don't have the information about the condom use (so the variable `day_since_last_sex_wo_cndm`was not update)
+
+```{r}
+
+sex |> 
+  filter(randomized) |>
+  filter(visit_type == "Clinic") |>
+  group_by(pid) |>
+  mutate(last_sex_wo_cndm_cat = case_when(
+    is.na(days_since_last_sex_wo_cndm) ~ "Unknown",
+    days_since_last_sex_wo_cndm == 0 ~ "0 day",
+    days_since_last_sex_wo_cndm == 1 ~ "1 day",
+    days_since_last_sex_wo_cndm == 2 ~ "2 days",
+    days_since_last_sex_wo_cndm == 3 ~ "3 days",
+    days_since_last_sex_wo_cndm >= 4 ~ "4+ days",
+    TRUE ~ NA_character_
+  )) |>
+  ungroup() |>
+  select(pid, visit_code, last_sex_wo_cndm_cat, psa_results, visit_type) |>
+  distinct() |>
+  filter(visit_type == "Clinic", visit_code > "0000", visit_code != "1000") |>
+  filter(!is.na(psa_results)) |> 
+  dplyr::count(visit_code, last_sex_wo_cndm_cat, psa_results) |>
+  ggplot(aes(x = psa_results, y = last_sex_wo_cndm_cat, fill = n)) +
+  geom_tile() +
+  facet_grid(~ visit_code) +
+  geom_text(aes(label = n)) +
+  scale_fill_gradient(low = "white", high = "steelblue1") +
+  ylab("Last sex without condom") +
+  xlab("Psa result") + 
+  guides(fill = "none") +
+  theme(strip.text = element_text(size = 12), 
+        axis.text.x = element_text(angle = 45, hjust = 1)) +
+  coord_fixed()
+
+
+```
+
+Let's do the same plot but taking the variable `day_since_last_sex_unknown_cndm` to account for the fact that at the weekly visit we don't have information about the condom use. If a participant reported a sexual intercourse in the last 24h at the weekly visit, we set the variable `day_since_last_sex_unknown_cndm` to 0 for that visit, even if we don't know if they used condom or not.
+
+```{r}
+
+sex |> 
+  filter(randomized) |>
+  filter(visit_type == "Clinic") |>
+  group_by(pid) |>
+  mutate(last_sex_wo_cndm_cat = case_when(
+    is.na(days_since_last_sex_wo_cndm) ~ "Unknown",
+    days_since_last_sex_wo_cndm == 0 | days_since_last_sex_unknown_cndm == 0 ~ "0 day",
+    days_since_last_sex_wo_cndm == 1 | days_since_last_sex_unknown_cndm == 1 ~ "1 day",
+    days_since_last_sex_wo_cndm == 2 | days_since_last_sex_unknown_cndm == 2 ~ "2 days",
+    days_since_last_sex_wo_cndm == 3 | days_since_last_sex_unknown_cndm == 3 ~ "3 days",
+    days_since_last_sex_wo_cndm >= 4 | days_since_last_sex_unknown_cndm >= 4 ~ "4+ days",
+    TRUE ~ NA_character_
+  )) |>
+  ungroup() |>
+  select(pid, visit_code, last_sex_wo_cndm_cat, psa_results, visit_type) |>
+  distinct() |>
+  filter(visit_type == "Clinic", visit_code > "0000", visit_code != "1000") |>
+  filter(!is.na(psa_results)) |> 
+  dplyr::count(visit_code, last_sex_wo_cndm_cat, psa_results) |>
+  ggplot(aes(x = psa_results, y = last_sex_wo_cndm_cat, fill = n)) +
+  geom_tile() +
+  facet_grid(~ visit_code) +
+  geom_text(aes(label = n)) +
+  scale_fill_gradient(low = "white", high = "steelblue1") +
+  ylab("Last sex without condom") +
+  xlab("Psa result") + 
+  guides(fill = "none") +
+  theme(strip.text = element_text(size = 12), 
+        axis.text.x = element_text(angle = 45, hjust = 1)) +
+  coord_fixed()
+
+```
+
+### Create summary variable for semen exposure 
+
+```{r}
+
+psa_correction_days <- 
+  sex |>
+  filter(psa_results == "Positive") |>
+  select(pid, study_day) |>
+  reframe(correction_day = c(study_day, study_day - 1, study_day - 2), 
+          .by = c(pid, study_day)) |>
+  select(pid, correction_day) |>
+  distinct() |>
+  mutate(psa_positive_nearby = TRUE)
+
+sex <- 
+  sex |>
+  mutate(
+    # conversion booléen → numérique
+    pv_sex_w_semen_exposure  = as.numeric(SF_pv_sex_w_semen_exposure  == TRUE),
+    pv_sex_wo_semen_exposure = as.numeric(SF_pv_sex_wo_semen_exposure == TRUE),
+    other_sex_wo_semen_exp   = as.numeric(SF_other_sex_wo_semen_exposure == TRUE),
+    
+    # Résolution du "unknown" aux visites weekly avec le PSA
+    pv_sex_w_semen_exposure = case_when(
+      SF_pv_sex_unknown_semen_exposure & psa_results == "Positive" ~ 0.5,
+      TRUE ~ pv_sex_w_semen_exposure
+    ),
+    pv_sex_wo_semen_exposure = case_when(
+      SF_pv_sex_unknown_semen_exposure & psa_results == "Negative" ~ 1,
+      TRUE ~ pv_sex_wo_semen_exposure
+    )
+  ) |>
+  
+  # Correction PSA pour les jours entourant un PSA positif
+  left_join(psa_correction_days, by = c("pid", "study_day" = "correction_day")) |>
+  mutate(
+    pv_sex_w_semen_exposure = case_when(
+      psa_positive_nearby & pv_sex_w_semen_exposure == 0 ~ 0.5,
+      TRUE ~ pv_sex_w_semen_exposure
+    )
+  ) |>
+  select(-psa_positive_nearby)
+
+```
+
+```{r}
+sex |>
+  filter(randomized, study_day >= 0) |>
+  pivot_longer(
+    cols = c(pv_sex_w_semen_exposure, pv_sex_wo_semen_exposure, other_sex_wo_semen_exp),
+    names_to = "variable", values_to = "value"
+  ) |>
+  ggplot(aes(x = study_day, y = pid, fill = value)) +
+  geom_tile() +
+  # Overlay PSA positif
+  geom_point(
+    data = sex |> filter(psa_results == "Positive", study_day >= 0),
+    aes(x = study_day, y = pid), 
+    inherit.aes = FALSE,
+    shape = 4, size = 2, color = "red"
+  ) +
+  facet_grid(variable ~ ., scales = "free_y") +
+  scale_fill_gradient("Value", low = "white", high = "steelblue", na.value = "grey90") +
+  geom_vline(
+    data = sex |> filter(visit_type == "Clinic", study_day >= 0) |> distinct(study_day),
+    aes(xintercept = study_day), color = "gray50", linetype = "dashed", linewidth = 0.3
+  ) + 
+  scale_x_continuous(breaks = seq(0, 100, by = 7))
+```
+
 
 ## Metronidazole use
 
