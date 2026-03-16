@@ -1,5 +1,5 @@
 ---
-title: "Calculated variables"
+title: "MAE augmentation - Calculated variables"
 author: Laura Symul, Laura Vermeren
 date: today
 format: 
@@ -27,6 +27,9 @@ library(tidyverse)
 library(magrittr)
 library(gt)
 library(patchwork)
+library(grid)
+library(gridExtra)
+library(factoextra)
 library(SummarizedExperiment)
 library(tidySummarizedExperiment)
 library(MultiAssayExperiment)
@@ -43,8 +46,8 @@ theme_set(theme_light())
 
 mae_files <- 
   fs::dir_ls(
-    get_02_output_dir(),
-    regexp = "mae_full_.*\\.rds$"
+    get_03_output_dir(),
+    regexp = "mae_full_02_.*\\.rds$"
   ) |> 
   sort(decreasing = TRUE) |>
   magrittr::extract(1)
@@ -57,35 +60,39 @@ rm(mae_files)
 
 
 
-> TODO: edit this file (introduction, etc.)
-
-
-The primary purpose of this document is to define and create additional assays to the `MultiAssayExperiment` object that contain the primary and secondary outcomes of the VIBRANT trial.
-
-
 # Calculated variables
 
+The objective of this section is to create a new assay in the the coldata of the `MultiAssayExperiment` object that contains calculated variables that are relevant for downstream analyses. We create a new assay called `calc_vars` that contains one row per participant, and we will add to this assay variables related to participant characteristics, exposures, and outcomes.
+
+We take all the information from the `participant_crfs_merged` table in the metadata of the `MultiAssayExperiment` object, which contains all the variables from the CRFs and have been merged together. We also take information from the `colData` of the `MultiAssayExperiment` object, which contains information on randomization and treatment arm. 
+
+We will use this information to create new variables that are relevant for downstream analyses.
+
 ```{r}
+
 mae@metadata$calc_vars_pid <- 
   tibble(pid = mae@colData |> as_tibble() |> pull(pid) |> unique())
+
 ```
 
 
 
 ## Education - can we harmonize between sites ?
 
+We explore the education variable (from CRF2), which is collected in both sites but with different categories. We want to see if we can harmonize this variable between sites, and if not, we will keep it as a site-specific variable.
+
+:::::: {.callout-warning}
+For instance, we do not harmonized the education variable between sites because the categories are very different between sites, and there is no clear way to harmonize them. 
+:::
+
 ```{r}
 
 education <- 
-  bind_rows(
-    mae@metadata$crf_data_clean$crf1 |> 
-      select(uid, pid, visit_code, edu),
-    mae@metadata$crf_data_clean$crf101 |> 
-      select(uid, pid, visit_code, edu)
-  ) |> 
+  mae@metadata$participant_crfs_merged |> 
+  select(pid, site, edu) |> 
   left_join(
     mae@colData |> as_tibble() |> 
-      select(pid, site, randomized) |> 
+      select(pid, randomized) |> 
       distinct(),
     by = join_by(pid)
   )
@@ -95,7 +102,7 @@ education <-
 ```{r}
 #| fig-width: 8
 #| fig-height: 2.5
-education |> 
+education|> 
   ggplot() +
   aes(y = edu, fill = randomized) +
   facet_wrap(. ~ site, scales = "free") +
@@ -108,8 +115,6 @@ education |>
     labels = c("TRUE" = "Randomized", "FALSE" = "Not randomized")
   ) +
   theme(legend.position = "top")
-
-
 
 ```
 
@@ -125,33 +130,45 @@ education |>
   geom_bar(fill = "dodgerblue1") +
   xlab("Number of participants") +
   ylab("")
+
 ```
 
 ## Economic worry
 
+First, we retrieve the worry variables from CRF2 in the participant_crfs_merged_filtered dataset of the metadata. These variables represent the aspects of life for which participants reported having trouble paying for. The available choices were: *food*, *utilities*, *rent*, *student loans*, *education fees*, *mortgage*, *childcare expenses*, *medical bills*, and *none*. Participants were invited to check all options that applied to them.
+
+We explore the difference between sites in the distribution of this variable, and we also explore the relationship between economic worry (CRF2) and food insecurity (CRF12), which is defined based on three variables food did not last, not afford balanced meals, and cut size meals from CRF12.
+
+:::::: {.callout-warning}
+Only three variable were used to define food insecurity (cut size meals, eat less, and hungry did not eat),but six variable are define in CRF12 for food insecuruity. Is it normal ? 
+Variable not taken into account : food_did_not_last, not_afford_balanced_meals, often_cut_size_meals
+:::
+
 ```{r}
 
 worry <- 
-   bind_rows(
-    mae@metadata$crf_data_clean$crf2 |> 
-      select(uid, pid, visit_code, starts_with("worry_")),
-    mae@metadata$crf_data_clean$crf102 |> 
-      select(uid, pid, visit_code, starts_with("worry_"))
-  ) |> 
+  mae@metadata$participant_crfs_merged |> 
+  select(pid, site, starts_with("worry_")) |> 
   left_join(
     mae@colData |> as_tibble() |> 
-      select(pid, site, randomized) |> 
+      select(pid, randomized) |> 
       distinct(),
     by = join_by(pid)
   )
 
 ```
 
+### Exploration of the worry variables
+
+We plot the worry for each site for the randomized participants.
+
 ```{r}
 #| fig-height: 5
 #| fig-width: 6
+
 # create an upset plot to see the combinations of worries
 library(UpSetR)
+
 # create a binary matrix for the worries
 worry_matrix_CAP <-
   worry |>
@@ -162,18 +179,6 @@ worry_matrix_CAP <-
   mutate(across(everything(), ~ ifelse(. == "Checked", 1, 0))) |>
   as.data.frame()
 
-upset(
-  worry_matrix_CAP,
-  nsets = ncol(worry_matrix_CAP),
-  nintersects = NA,
-  keep.order = TRUE,
-  order.by = "freq",
-  #text.scale = c(2, 2, 2, 1.5, 2, 2),
-  main.bar.color = "dodgerblue1",
-  sets.bar.color = "gray70",
-  set_size.show = TRUE
-  )
-
 worry_matrix_MGH <-
   worry |>
   filter(randomized, site == "MGH", !is.na(worry_food)) |>
@@ -183,31 +188,136 @@ worry_matrix_MGH <-
   mutate(across(everything(), ~ ifelse(. == "Checked", 1, 0))) |>
   as.data.frame()
 
-upset(
-  worry_matrix_MGH,
+```
+
+```{r}
+
+# Capturer CAP sans afficher
+pdf(NULL)
+upset(worry_matrix_CAP,
+  nsets = ncol(worry_matrix_CAP),
+  nintersects = NA,
+  keep.order = TRUE,
+  order.by = "freq",
+  main.bar.color = "dodgerblue1",
+  sets.bar.color = "gray70",
+  set_size.show = TRUE
+)
+grid.edit('arrange', name = 'arrange_CAP')
+vp_CAP <- grid.grab()
+dev.off()
+
+# Capturer MGH sans afficher
+pdf(NULL)
+upset(worry_matrix_MGH,
   nsets = ncol(worry_matrix_MGH),
   nintersects = NA,
   keep.order = TRUE,
   order.by = "freq",
-  #text.scale = c(2, 2, 2, 1.5, 2, 2),
-  main.bar.color = "dodgerblue1",
-  # sets.bar.color = "gray70",
+  main.bar.color = "coral1",
+  sets.bar.color = "gray70",
   set_size.show = TRUE
 )
+grid.edit('arrange', name = 'arrange_MGH')
+vp_MGH <- grid.grab()
+dev.off()
+
+# Seul ce plot apparaîtra dans l'output
+dev.new()
+grid.arrange(vp_CAP, vp_MGH, ncol = 2,
+             top = "Worries by site (CAP and MGH)")
 
 ```
 
 
+We explore the correlations between the different types of worries using a multiple correspondence analysis (MCA). We can see that all *unchecked* worries are correlated together, and *checked* worries are correlated together by cluster. We see a first cluster of worries with worry about medical bills, education fees, utilities and mortgage, and a second cluster of worries with worry about food, childcare expenses. Worry about rent and worry about student loans are less correlated with the other worries.
+
 ```{r}
 
+worry_mca <- 
+  worry |>
+  select(-c("pid", "site")) |>
+  rename_with(~ str_remove(.x, "^worry_")) |>
+  mutate(across(everything(), ~ case_when(
+    .x == "Checked" ~ 1,
+    .x == "Unchecked" ~ 0,
+    TRUE ~ 0
+  )|> as.factor()
+  )
+  )
+   
+res.mca <- FactoMineR::MCA(worry_mca, graph = FALSE)
+
+factoextra::fviz_screeplot(res.mca, addlabels = TRUE)
+
+```
+
+```{r}
+
+factoextra::fviz_mca_var(
+  res.mca,
+  repel = TRUE,
+  ggtheme = theme_minimal(),
+  title = "MCA - Worry variables",
+  col.var = case_when(
+    str_detect(rownames(res.mca$var$coord), "_0") ~ "steelblue",
+    str_detect(rownames(res.mca$var$coord), "_1") ~ "firebrick",
+    TRUE ~ "grey60"  # au cas où il reste autre chose
+  ),
+  labelsize = 4    
+) + 
+  theme(legend.position = "none")
+
+```
+
+
+### Creation of a worry score
+
+We will now create a worry_score variable to summarize the different worries reported by each participant. We attribuate more weight to worry about utilisties, rent and food.
+
+```{r}
+# weights for worry score food, utilities, rent
+w <- 2
+
+worry <- 
+  worry |> 
+  select(-c("worry_none")) |>
+  mutate(
+    across(contains("worry"), ~ case_when(
+      .x == "Checked" ~ 1,
+      .x == "Unchecked" ~ 0,
+      TRUE ~ 0)
+      ), 
+      worry_score = worry_food * w + worry_utilities * w + worry_rent * w + worry_student_loans + worry_education_fees + worry_mortgage + worry_childcare + worry_medical_bills
+    ) 
+
+worry |>
+  ggplot() +
+  aes(x = worry_score, fill = site) +
+  geom_histogram(binwidth = 1) +
+  facet_wrap(. ~ site, scales = "free") +
+  scale_fill_manual(values = c("CAP" = "dodgerblue1", "MGH" = "coral1")) +
+  xlab("Worry score") +
+  ylab("Number of participants") +
+  theme(legend.position = "top")    
+
+```
+
+### Exploration of the relationship between economic worry and food insecurity
+
+Now we explore the relationship between economic worry and food insecurity. We define food insecurity based on these three variables: cut size meals, eat less, and hungry did not eat. We define a participant as food insecure if they answered "Yes" to at least one of these three variables. We then plot the relationship between food insecurity and economic worry (worry_food) for each site.
+
+Some participants report no food insecurity (answer No for cut size meals, eat less, and hungry did not eat) but report worry about food.We also see that the distribution of worry about food is different between sites, with more participants in CAP reporting worry about food compared to MGH.
+
+```{r}
 
 table1_data <- 
   metadata(mae)$participant_crfs_merged |> 
   dplyr::left_join(
-    colData(mae) |> as_tibble() |> select(pid, site, arm, ITT, mITT, PP) |> distinct(), 
+    colData(mae) |> as_tibble() |> select(pid, site, arm, randomized, ITT, mITT, PP) |> distinct(), 
     by = join_by(pid, site)
     )  |> 
-  filter(mITT) |> 
+  filter(randomized) |> 
   select(pid, site, arm, cut_size_meals, eat_less, hungry_did_not_eat) |> 
   mutate(
     food_insecurity = ifelse(
@@ -230,6 +340,7 @@ table1_data |>
     worry |> select(pid, worry_food) |> distinct(),
     by = join_by(pid)
   ) |> 
+  mutate(worry_food = worry_food |> recode("Checked" = "Yes", "Unchecked" = "No")) |>
   dplyr::count(site, food_insecurity, worry_food) |> 
   ggplot() +
   aes(x = food_insecurity, y = worry_food, fill = n) +
@@ -238,75 +349,216 @@ table1_data |>
   facet_wrap(. ~ site, scales = "free") +
   scale_fill_gradient(low = "white", high = "dodgerblue1") 
 
+```
 
+
+## Food security
+
+We process food security data collected at the screening visit using the six-item short form of the USDA Household Food Security Survey Module (HFSSM) questionnaire. Six questions were asked to assess food security status over the past 12 months. Based on the number of affirmative responses, we classify participants into high/marginal, low, or very low food security categories.
+
+Affirmative responses are defined as follows:
+- Food did not last: "Often true" or "Sometimes true"
+- Not afford balanced meals: "Often true" or "Sometimes true"
+- Cut size meals: "Yes"
+- Often cut size meals: "Almost every month" or "Some months but not every month"
+- Eat less: "Yes"
+- Hungry did not eat: "Yes"
+
+```{r}
+
+food_security <- 
+  mae@metadata$participant_crfs_merged |> 
+  select(pid, site, food_did_not_last, not_afford_balanced_meals, cut_size_meals, often_cut_size_meals, eat_less, hungry_did_not_eat) |> 
+  left_join(
+    mae@colData |> as_tibble() |> 
+      select(pid, randomized) |> 
+      distinct(),
+    by = join_by(pid)
+  ) |> 
+  filter(randomized)
+
+```
+
+```{r}
+
+food_security |>
+  select(pid, site, 
+         food_did_not_last, not_afford_balanced_meals, 
+         cut_size_meals, often_cut_size_meals, 
+         eat_less, hungry_did_not_eat) |>
+  pivot_longer(-c(pid, site), names_to = "question", values_to = "response") |>
+  mutate(
+    question = factor(question, levels = c(
+      "food_did_not_last", "not_afford_balanced_meals",
+      "cut_size_meals", "often_cut_size_meals",
+      "eat_less", "hungry_did_not_eat"
+    ))
+  ) |>
+  ggplot(aes(x = response, fill = site)) +
+  geom_bar(position = "dodge") +
+  facet_wrap(~ question, scales = "free_x", ncol = 2) +
+  scale_fill_manual(values = c("CAP" = "dodgerblue1", "MGH" = "coral1")) +
+  scale_x_discrete(labels = scales::label_wrap(12))
+  labs(x = "", y = "Number of participants", title = "Food security items by site") +
+  theme(
+    legend.position = "top"
+  )
+
+```
+
+```{r}
+
+food_security <- 
+  food_security |>
+  mutate(
+    # HH3: "Often true" or "Sometimes true" = affirmative
+    aff_food_did_not_last = food_did_not_last %in% c("Often true", "Sometimes true"),
+    # HH4: idem
+    aff_not_afford_balanced_meals = not_afford_balanced_meals %in% c("Often true", "Sometimes true"),
+    # AD1: "Yes" = affirmative
+    aff_cut_size_meals = cut_size_meals == "Yes",
+    # AD1a: "Almost every month" or "Some months but not every month" = affirmative
+    # "Only 1 or 2 months" is NOT affirmative for AD1a (AD1 already counted above)
+    aff_often_cut_size_meals = often_cut_size_meals %in% c("Almost every month", "Some months but not every month"),
+    # AD2
+    aff_eat_less = eat_less == "Yes",
+    # AD3
+    aff_hungry_did_not_eat = hungry_did_not_eat == "Yes",
+    # Raw score = sum of 6 affirmatives (max = 6)
+    food_security_raw = aff_food_did_not_last + aff_not_afford_balanced_meals +
+                        aff_cut_size_meals + aff_often_cut_size_meals +
+                        aff_eat_less + aff_hungry_did_not_eat,
+    # Categories per USDA guide
+    food_security_cat = case_when(
+      food_security_raw <= 1 ~ "High/Marginal",
+      food_security_raw <= 4 ~ "Low",
+      TRUE                   ~ "Very low"
+    ) |> factor(levels = c("High/Marginal", "Low", "Very low"))
+  )
+```
+
+```{r}
+
+food_security |>
+  ggplot(aes(x = food_security_raw, fill = site)) +
+  geom_bar(position = "dodge") +
+  facet_grid(site ~ food_security_cat, scales = "free") +
+  scale_fill_manual(values = c("CAP" = "dodgerblue1", "MGH" = "coral1")) +
+  scale_x_continuous(breaks = 0:6) +
+  labs(x = "Raw score (0–6)", y = "Number of participants",
+       title = "Food security score by site") +
+  theme(legend.position = "none")
+
+```
+
+We compare the food security score and the worry score
+
+```{r}
+
+food_security |>
+  select(pid, site, food_security_raw, food_security_cat) |>
+  left_join(
+    worry |> select(pid, worry_score),
+    by = "pid"
+  ) |>
+  dplyr::count(site, food_security_cat, worry_score) |>
+  ggplot() +
+  aes(x = food_security_cat, y = worry_score, fill = n) +
+  geom_tile() +
+  geom_text(aes(label = n)) +
+  facet_wrap(. ~ site, scales = "free") +
+  scale_fill_gradient(low = "white", high = "dodgerblue1") +
+  labs(x = "Food security category", y = "Worry score", title = "Food security category vs worry score by site") +
+  theme(legend.position = "none")
 
 ```
 
 
-
-
 ## Pre-existing conditions
+
+In CRF5 ...
 
 ```{r}
 
 pre_existing_conditions <- 
-  mae@metadata$crf_data_clean$crf5 |> 
-  select(pid, no_pre_existing_condition, diagnosis) |> 
+  mae@metadata$participant_crfs_merged |> 
+  select(pid, site, no_pre_existing_condition, diagnosis_agg) |> 
   left_join(
     mae@colData |> as_tibble() |> 
-      select(pid, site, randomized) |> 
+      select(pid, randomized) |> 
       distinct(),
     by = join_by(pid)
-  )
+  ) |> 
+  filter(randomized)
 
 ```
 
 ```{r}
 #| fig-height: 7
-#| 
+
 pre_existing_conditions |> 
-  filter(randomized) |> 
-  dplyr::mutate(
-    diagnosis = 
-      case_when(
-        no_pre_existing_condition ~ "No pre-existing condition",
-        TRUE ~ diagnosis
-        )
-    ) |> 
-  select(pid, diagnosis, site) |> 
-  distinct() |> 
-  dplyr::count(site, diagnosis) |> 
-  arrange(-n) |> 
-  mutate(diagnosis = diagnosis |> fct_inorder()) |>
+  mutate(
+    diagnosis_agg = case_when(
+      no_pre_existing_condition ~ "No pre-existing condition",
+      TRUE ~ diagnosis_agg
+    ),
+    diagnosis_agg = fct_reorder(
+      diagnosis_agg, 
+      str_count(diagnosis_agg, "&"),
+      .fun = dplyr::first,
+      .desc = TRUE 
+    ),
+    diagnosis_agg = fct_relevel(diagnosis_agg, "No pre-existing condition", after = Inf)
+  ) |>
   ggplot() +
-  aes(x = n, y = diagnosis) +
-  facet_grid(. ~ site, scales = "free_x") +
-  geom_col()
+  aes(y = diagnosis_agg, fill = site) +
+  geom_bar() +
+  xlab("Number of participants") +
+  ylab("") +
+  scale_fill_manual(
+    name = "Site",
+    values = c("CAP" = "dodgerblue1", "MGH" = "coral1")
+  ) +
+  theme(legend.position = "top")
 
 ```
-## Psychological wellbeing
+
+
+## Psychological wellbeing - Perceived Stress Scale (PSS)
+
+We are interest in perceived stress of the participants. Questions about their feelings and thoughts during the last month were ask at the screening visit only. Therefore, we consider stress as a time-invariant variable.
+
+The Perceived Stress scale used was developed by Sheldon Cohen and his colleagues in 1983. Nowadays, the PSS is most commonly implemented as the 10-item scale assessing the perceived stress degree based on that individual’s subjective interpretation of their reactions to stressors during a 1 month period.
+
+The PSS-10 scale includes 6 negative items (upset, unable_to_control, nervous_stressed, could_not_cope, outside_your_control, difficulties_piling_up) and 4 positive items (confident, going_your_way, control_irritations, on_top_of_things). Each item is rated on a 5-point Likert scale ranging from 0 (never) to 4 (very often).
+
+
 
 ```{r}
-psych_wellbeing <- 
-  mae@metadata$crf_data_clean$crf11 |> 
-  select(pid, upset:difficulties_piling_up) |>
-  distinct() |> 
+
+negative_items <- c("upset", 
+                  "unable_to_control", 
+                  "nervous_stressed",
+                  "could_not_cope",
+                  "outside_your_control",
+                  "difficulties_piling_up")
+
+positive_items <- c("confident",
+                    "going_your_way",
+                   "control_irritations",
+                   "on_top_of_things") 
+
+stress <- 
+  mae@metadata$participant_crfs_merged |>
+  select(pid, site, all_of(negative_items), all_of(positive_items)) |> 
   left_join(
     mae@colData |> as_tibble() |> 
-      select(pid, site, randomized) |> 
+      select(pid, randomized) |> 
       distinct(),
     by = join_by(pid)
-  )
-
-psych_wellbeing_long <- 
-  psych_wellbeing |> 
-  filter(randomized) |>
-  filter(!is.na(upset)) |>
-  pivot_longer(
-    cols = upset:difficulties_piling_up,
-    names_to = "question",
-    values_to = "answer"
-  )
+  ) |> 
+  filter(randomized) |> 
+  select(-randomized)
 
 
 
@@ -315,7 +567,14 @@ psych_wellbeing_long <-
 ```{r}
 #| fig-height: 10
 #| fig-width: 8
-psych_wellbeing_long |> 
+
+stress |> 
+  filter(!is.na(upset)) |>
+  pivot_longer(
+    cols = c(all_of(negative_items), all_of(positive_items)),
+    names_to = "question",
+    values_to = "answer"
+  ) |> 
   group_by(site, pid) |> 
   mutate(total_score = sum(answer |> as.integer())) |>
   ungroup() |> 
@@ -332,7 +591,164 @@ psych_wellbeing_long |>
     axis.text.x = element_text(angle = 45, hjust = 1),
     strip.text.y = element_text(angle = 0)
   )
+
 ```
+
+```{r}
+
+stress |> 
+  pivot_longer(
+    cols = -c(pid, site),
+    names_to = "item",
+    values_to = "response"
+  ) |>
+  mutate(
+    response = factor(response, levels = c("0 = Never", "1 = Almost never", "2 = Sometimes", "3 = Fairly often", "4 = Very")), 
+    group = case_when(
+      item %in% negative_items ~ "Negative items",
+      item %in% positive_items ~ "Positive items"
+    ) |> factor(), 
+    item = factor(item, levels = c(negative_items, positive_items))
+  ) |>  
+  ggplot() +
+  aes(x = response, fill = group) +
+  geom_bar() +
+  facet_wrap( ~ item, ncol=2) + 
+  scale_fill_manual(values = c("Negative items" = "tomato", "Positive items" = "steelblue")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+And by site: 
+
+```{r}
+
+stress |> 
+  pivot_longer(
+    cols = -c(pid, site),
+    names_to = "item",
+    values_to = "response"
+  ) |>
+  mutate(
+    response = factor(response, levels = c("0 = Never", "1 = Almost never", "2 = Sometimes", "3 = Fairly often", "4 = Very")), 
+    group = case_when(
+      item %in% negative_items ~ "Negative items",
+      item %in% positive_items ~ "Positive items"
+    ) |> factor(), 
+    item = factor(item, levels = c(negative_items, positive_items))
+  ) |>  
+  ggplot() +
+  aes(x = response, fill = group) +
+  geom_bar() +
+  facet_grid(item ~ site, scales = "free_y") + 
+  scale_fill_manual(values = c("Negative items" = "tomato", "Positive items" = "steelblue")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+We explore the relationship between the stress items using a PCA and a correlation matrix. For that we first need to convert the responses to numeric values (0, 1, 2, 3, 4) and reverse the scores for the positive items. The reverse-scoring of the four positively worded items (items 4, 5, 7 and 8: `confident`, `going_your_way`, `control_irritations`, `on_top_of_things`) is done by transforming 0 → 4, 1 → 3, 2 → 2, 3 → 1 and 4 → 0. The six negatively worded items (`upset`, `unable_to_control`, `nervous_stressed`, `could_not_cope`, `outside_your_control`, `difficulties_piling_up`) are scored directly. 
+
+```{r}
+
+stress <- 
+  stress |>
+  filter(!is.na(upset)) |>
+  mutate(across(
+    all_of(c(negative_items, positive_items)), 
+    ~ as.integer(str_extract(as.character(.x), "^[0-4]"))
+  )) |>
+  # Inverser les 4 items positifs
+  mutate(across(
+    all_of(positive_items),
+    ~ 4 - .x
+  ))
+
+```
+
+```{r}
+
+pca_stress <- 
+  stress |>
+  select(all_of(c(negative_items, positive_items))) |>
+  prcomp(scale. = TRUE)
+
+fviz_eig(pca_stress, addlabels = TRUE) +
+  labs(title = "PSS-10 — Scree plot")
+
+
+item_groups <- factor(
+  ifelse(c(negative_items, positive_items) %in% positive_items, 
+         "Positive items", 
+         "Negative items")
+)
+
+fviz_pca_var(
+  pca_stress,
+  col.var   = item_groups,
+  palette   = c("Negative items" = "tomato", "Positive items" = "steelblue"),
+  legend.title = "Item type",
+  repel     = TRUE,
+  title     = "PSS-10 — Variable contributions"
+)
+
+
+fviz_pca_ind(
+  pca_stress,
+  geom = "point",
+  habillage = stress$site,
+  palette = c("CAP" = "dodgerblue1", "MGH" = "coral1"),
+  addEllipses = TRUE,
+  title = "PSS-10 — Participants by site"
+)
+
+```
+
+
+
+Now we calculate the PSS-10 score by summing all 10 items, yielding a range of 0 to 40 where higher scores indicate greater perceived stress. Scores of 0–13, 14–26 and 27–40 are interpreted as low, moderate and high stress, respectively (Cohen & Janicki-Deverts, 2012). The PSS-10 comprises two subscales: *Perceived Helplessness* (items 1, 2, 3, 6, 9, 10) reflecting feelings of lack of control, and *Lack of Self-Efficacy* (items 4, 5, 7, 8) reflecting perceived inability to handle problems.
+
+
+
+```{r}
+
+stress <- 
+  stress |> 
+  rowwise() |>
+  mutate(
+    score_helplessness  = sum(c_across(all_of(negative_items))),
+    score_self_efficacy = sum(c_across(all_of(positive_items))),
+    pss_total           = score_helplessness + score_self_efficacy,
+    stress_category     = case_when(
+      pss_total <= 13 ~ "Low",
+      pss_total <= 26 ~ "Moderate",
+      TRUE            ~ "High"
+    ) |> factor(levels = c("Low", "Moderate", "High"))
+  ) |>
+  ungroup()
+
+
+stress |>
+  ggplot(aes(x = pss_total, fill = site)) +
+  geom_histogram(binwidth = 2) +
+  geom_vline(xintercept = c(13, 26), linetype = "dashed", color = "red") +
+  facet_wrap(. ~ site, scales = "free") +
+  scale_fill_manual(values = c("CAP" = "dodgerblue1", "MGH" = "coral1")) +
+  xlab("PSS total score") +
+  ylab("Number of participants") +
+  theme(legend.position = "top")
+
+stress |> 
+  ggplot(aes(x = stress_category, fill = site)) +
+  geom_bar(position = "dodge") +
+  facet_wrap(. ~ site, scales = "free") +
+  scale_fill_manual(values = c("CAP" = "dodgerblue1", "MGH" = "coral1")) +
+  xlab("Stress category") +
+  ylab("Number of participants") +
+  theme(legend.position = "top")
+
+```
+
+
 
 ## Sexual behavior
 

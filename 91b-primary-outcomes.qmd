@@ -1,5 +1,5 @@
 ---
-title: "Primary and secondary outcome definitions"
+title: "MAE augmentation - Primary and secondary outcome definitions"
 author: Laura Symul, Laura Vermeren
 date: today
 format: 
@@ -42,8 +42,8 @@ theme_set(theme_light())
 
 mae_files <- 
   fs::dir_ls(
-    get_02_output_dir(),
-    regexp = "mae_full_.*\\.rds$"
+    get_03_output_dir(),
+    regexp = "mae_full_01_.*\\.rds$"
   ) |> 
   sort(decreasing = TRUE) |>
   magrittr::extract(1)
@@ -54,8 +54,6 @@ rm(mae_files)
 
 ```
 
-
-> TODO: change here
 
 The primary purpose of this document is to define and create additional assays to the `MultiAssayExperiment` object that contain the primary and secondary outcomes of the VIBRANT trial.
 
@@ -470,12 +468,12 @@ colonization_qPCR <-
       left_join(mae@colData |> as_tibble()) |>
       dplyr::filter(sample_type == "Clinical sample") |> 
       dplyr::filter(is.na(LBP), .feature == "16S") |> 
-      select(.sample, copies_per_swab_med) |>
-      dplyr::rename(copies_per_swab_16S = copies_per_swab_med),
+      select(.sample, copies_per_swab_med_corrected) |> #copies_per_swab_med
+      dplyr::rename(copies_per_swab_16S = copies_per_swab_med_corrected), # copies_per_swab_med
     by = join_by(.sample)
   ) |> 
-  mutate(rel_ab = copies_per_swab_med / copies_per_swab_16S) |> 
-  select(.feature, .sample, rel_ab, copies_per_swab_med, copies_per_swab_16S, everything()) |> 
+  mutate(rel_ab = copies_per_swab_med_corrected / copies_per_swab_16S) |> #copies_per_swab_16S
+  select(.feature, .sample, rel_ab, copies_per_swab_med_corrected, copies_per_swab_16S, everything()) |> #copies_per_swab_16S
   group_by(.sample) |> 
   summarize(
     total_LBP_rel_ab_at = sum(rel_ab),
@@ -526,7 +524,7 @@ colonization_qPCR |>
     strip.text.y = element_text(angle = 0)
   )
 
-colonization_qPCR |> 
+colonization_qPCR|> 
   ggplot() +
   aes(x = visit_code, y = pid, fill = LBP_detected_at_qpcr) +
   geom_tile() +
@@ -816,7 +814,7 @@ saveRDS(
   mae, 
   str_c(
     get_03_output_dir(),  
-    "mae_full_", today() |> str_remove_all("-"), ".rds"
+    "mae_full_02_", today() |> str_remove_all("-"), ".rds"
   )
 )
 
