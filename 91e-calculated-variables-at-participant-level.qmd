@@ -1,0 +1,1302 @@
+---
+title: "MAE augmentation - Calculated variables at the participant level"
+author: Mariam Rahali Masbouri, Khadija Rahali Masbouri, Laura Symul, Laura Vermeren
+date: today
+format: 
+   html:
+     page-layout: full
+     code-fold: true
+     toc: true
+     toc-location: left
+     toc-depth: 5
+     embed-resources: true
+execute:
+  cache: refresh # true refresh false
+  warning: false
+knitr:
+  opts_chunk:
+    out.width: "100%"
+editor: source
+---
+
+
+```{r}
+#| warning: false
+#| cache: false
+
+library(tidyverse)
+library(magrittr)
+library(gt)
+library(patchwork)
+library(grid)
+library(gridExtra)
+library(factoextra)
+library(SummarizedExperiment)
+library(tidySummarizedExperiment)
+library(MultiAssayExperiment)
+
+tmp <- fs::dir_map("R scripts/", source)
+tmp <- fs::dir_map("../VIBRANT-99-utils/R/", source)
+rm(tmp)
+theme_set(theme_light())
+
+```
+
+
+
+```{r}
+
+mae_files <- 
+  fs::dir_ls(
+    get_03_output_dir(),
+    regexp = "mae_full_04_.*\\.rds$"
+  ) |> 
+  sort(decreasing = TRUE) |>
+  magrittr::extract(1)
+
+mae <- readRDS(mae_files)
+
+rm(mae_files)
+
+```
+
+
+
+# Participant-level variables
+
+The objective of this section is to create a new table (`calc_vars_pid`) in the metadata of the `MultiAssayExperiment` object that contain **calculated variables** relevant at the **participant level**. We create this table by selecting relevant variables from the `colData` and from the `participant_crfs_merged` table of the metadata, and we merge them by participant ID. This table will be useful for downstream analyses, as it will contain all the relevant information about the participants in one place.
+
+The following calculated variables are created at the participant level:
+
+- `pid`: participant ID
+- `site`: study site (CAP or MGH)
+- `randomized`: whether the participant was randomized or not
+- `ITT`: whether the participant is in the intention-to-treat population or not
+- `mITT`: whether the participant is in the modified intention-to-treat population or not
+- `PP`: whether the participant is in the per-protocol population or not
+- `education`: education level of the participant
+- `income`: income level of the participant
+- `contraception`: the contraceptive method used by the participant at baseline
+- `worry_score`: a score summarizing the economic worries of the participant
+- `food_security_score`: a score summarizing the food security status of the participant
+- `food_security_cat`: a categorical variable summarizing the food security status of the participant (High/Marginal, Low, Very low)
+- `no_pre_existing_condition`: whether the participant has no pre-existing condition or not
+- `diagnosis_agg`: an aggregated variable summarizing the diagnosis of the participant
+- `pss_score`: a score summarizing the perceived stress of the participant based on the PSS-10 questionnaire
+
+
+
+
+```{r}
+
+mae@metadata$calc_vars_pid <- 
+  mae@colData |> as_tibble() |> select(pid, site, randomized, ITT, mITT, PP) |> distinct()
+
+```
+
+
+```{r}
+
+participant_crfs_merged <- mae@metadata$participant_crfs_merged
+
+visits_crfs_merged <-
+  metadata(mae)$visits_crfs_merged |>
+  left_join(
+    mae@colData |> as_tibble() |> select(uid, randomized, site, visit_type) |> distinct(),
+    by = c("uid")
+  ) |>
+  select(uid, pid, visit_code, study_day, visit_type, site, randomized, everything()) 
+
+```
+
+
+## Education - can we harmonize between sites ?
+
+We explore the education variable (from CRF2), which is collected in both sites but with different categories. We want to see if we can harmonize this variable between sites, and if not, we will keep it as a site-specific variable.
+
+:::::: {.callout-warning}
+For instance, we do not harmonized the education variable between sites because the categories are very different between sites, and there is no clear way to harmonize them. 
+:::
+
+```{r}
+
+education <- 
+  participant_crfs_merged |> 
+  select(pid, site, edu) |> 
+  left_join(
+    mae@colData |> as_tibble() |> 
+      select(pid, randomized) |> 
+      distinct(),
+    by = join_by(pid)
+  )
+
+```
+
+```{r}
+#| fig-width: 8
+#| fig-height: 2.5
+education|> 
+  ggplot() +
+  aes(y = edu, fill = randomized) +
+  facet_wrap(. ~ site, scales = "free") +
+  geom_bar() +
+  xlab("Number of participants") +
+  ylab("") +
+  scale_fill_manual(
+    name = "",
+    values = c("TRUE" = "dodgerblue1", "FALSE" = "gray70"),
+    labels = c("TRUE" = "Randomized", "FALSE" = "Not randomized")
+  ) +
+  theme(legend.position = "top")
+
+```
+
+```{r}
+#| fig-width: 8
+#| fig-height: 2
+
+education |> 
+  filter(randomized) |> 
+  ggplot() +
+  aes(y = edu) +
+  facet_wrap(. ~ site, scales = "free") +
+  geom_bar(fill = "dodgerblue1") +
+  xlab("Number of participants") +
+  ylab("")
+
+```
+
+We add the variable to `mae@metadata$calc_vars_pid`
+
+```{r}
+
+mae@metadata$calc_vars_pid <- 
+  mae@metadata$calc_vars_pid |> 
+  left_join(
+    education |> select(pid, education = edu) |> distinct(),
+    by = "pid"
+  )
+```
+
+## Income 
+
+In this section, we will first retrieve the `income` data from CRF 2 and 102, from the `participant_crfs_merged` of the metadata. This variable was encoded as a categorical variable with interval ranges. 
+
+Specifically, participants in US were asked the question: "What is your estimated annual gross household income?", and answers options were:
+
+- "Less than $30,000 (less than $2,500 per month gross income)", 
+- "$30,000 – $70,000 ($2,500 - $5,800 per month gross income)", 
+- "$70,000 – 140,000 ($5,800 - $11,700 per month gross income)", 
+- "> $140,000 (greater than $11,700 per month gross income)", 
+- "Do not know", or 
+- "Prefer not to answer".
+
+Participants in SA were asked the question: "What is your estimated monthly gross household income?", and answers options were:
+
+- "Less than R1000 per month",
+- "R1001 - R3500 per month",
+- "> R3500 per month",
+- "Prefer not to answer".
+
+Two variables were created to capture the income information, namely `monthly_gross_income` and `annual_gross_income`, which were defined differently for the two sites (MGH and CAP).
+
+:::{.callout-note}
+For the US, the variable was defined as an annual household gross income, while in SA, it was defined as a monthly household gross income. We will need to harmonize these two variables to have one unique variable `gross_income` for both sites.
+:::
+
+```{r}
+
+income <- 
+  participant_crfs_merged |>
+  select(pid, monthly_gross_income, annual_gross_income, site) |> 
+  left_join(
+    mae@colData |> as_tibble() |> 
+      select(pid, randomized) |> 
+      distinct(),
+    by = join_by(pid)
+  )
+
+
+```
+
+
+```{r}
+
+income <- 
+  income |>
+  mutate(
+    gross_income = case_when(
+      is.na(monthly_gross_income) ~ annual_gross_income,
+      TRUE ~ monthly_gross_income
+    )
+  ) |>
+  select(-monthly_gross_income, -annual_gross_income)
+
+```
+
+For harmonization purposes, we also add a new column called `income_level`, which summarize the information in `gross_income` into three categories, namely "Low", "Mid", and "High", where:
+
+-   `Low` : `Less than R100 per month` (SA) & `Less than $30,000` (US);
+
+-   `Mid` : `R1001 - R3500` (SA) & `$30,000 - $70,000` (US);
+
+-   `High` : `More than R3500` (SA) & `More than $70,000` (US);
+
+-   `Missing`: regroup participants who answered `Prefer not to answer`
+
+::: {.callout-warning}
+By merging the two variables into one, we are assuming that the income categories are comparable across sites. This assumption was somewhat confirmed during one of the VIBRANT meetings.
+:::
+
+```{r}
+
+income <-
+  income |>
+  mutate(
+    income_level = case_when(
+      gross_income == "Less than R1000 per month" ~ "Low",
+      gross_income == "R1001-R3500 per month" ~ "Mid",
+      gross_income == "> R3500" ~ "High",
+      
+      gross_income == "Less than $30,000" ~ "Low",
+      gross_income == "$30.000 - $70,000" ~ "Mid",
+      gross_income %in% c("$70,000 - $140,000", "Greater than $140,000") ~ "High",
+      
+      gross_income == "Prefer not to answer" ~ "Missing"
+    )
+  )
+
+```
+
+
+```{r}
+# table summarizing proportions of participants in each category by site
+
+income |>
+  group_by(site, income_level) |>
+  summarise(n = n(), .groups = "drop") |>
+  group_by(site) |>
+  mutate(pct = round(n / sum(n) * 100, 1),
+         label = paste0(n, " (", pct, "%)")) |>
+  select(-n, -pct) |>
+  pivot_wider(names_from = income_level, values_from = label) |>
+  ungroup() |>
+  gt(caption = "Distribution of participants across income levels by site")
+
+```
+
+
+```{r}
+
+income |>
+  filter(randomized) |>
+  dplyr::count(income_level, site) |>
+  ggplot() +
+  aes(x = income_level |> factor(), y = site) +
+  geom_tile(aes(fill = n)) +
+  geom_text(aes(label = n)) +
+  scale_fill_gradient(low = "white", high = "steelblue1") +
+  labs(x = "Income level", y = "Site", title = "Distribution of participants across income levels by site", subtitle = "Randomized participants only") +
+  guides(fill = "none")
+
+```
+
+
+We add the variable to `mae@metadata$calc_vars_pid`
+
+```{r}
+
+mae@metadata$calc_vars_pid <- 
+  mae@metadata$calc_vars_pid |> 
+  left_join(
+    income |> select(pid, income_level) |> distinct(),
+    by = "pid"
+  )
+
+```
+
+
+## Contraception
+
+We explore the self-reported contraception method variable by first performing an exploratory analysis for weekly responses, checking for missing values and consistency between reported contraception methods.
+
+For this variable, we have available the following informations:
+
+* From weekly CRF21:
+
+  - `contraception`: weekly self-reported contraception method (between visits 1000 and 2120). Participants were asked the question: "What are you using for contraception?". Possible responses were categorized into 4 levels: Depo provera, Net-En, Continuous combined oral contraceptives pills (skip placebo), and Other, in which they could specify the method they were using. The "Other" category includes the following methods: Completed 3mo of BC pills, Condoms, Implant (Nexplanon), Injection (Noristerate), IUD, IUD (Kyleena), IUD (Mirena), No sex, None, Not applicable, Tubal ligation or removed tubes, and Vasectomy.
+
+  - `contraceptive_missing_doses`: weekly self-reported number of missed contraceptive doses (between visits 1000 and 2120). Participants were asked the question: "How many doses have you missed".
+
+```{r}
+
+contraception <-
+  visits_crfs_merged |>
+  select(uid, pid, visit_code, study_day, randomized, site, contraception, contraceptive_missed_doses)
+
+```
+
+### Weekly responses
+
+We first look at the weekly responses from CRF21.
+
+```{r}
+#| fig.height: 9.5
+#| fig.width: 6.5
+
+contraception_colors <- c(
+  "Completed 3mo of BC pills" = "gold",
+  "Condoms" = "dodgerblue",
+  "Continuous combined oral contraceptives pills (skip placebo)" = "aquamarine3",
+  "Depo provera" = "cadetblue2",
+  "Implant (Nexplanon)" = "purple",
+  "Injection (Noristerate)" = "orange",
+  "IUD" = "red3",
+  "IUD (Kyleena)" = "violetred",
+  "IUD (Mirena)" = "tomato",
+  "No sex" = "tan",
+  "None" = "grey", 
+  "Not applicable" = "grey",
+  "Tubal ligation or removed tubes" = "yellowgreen",
+  "Vasectomy" = "springgreen3", 
+  "NA" = "grey" 
+)
+
+contraception |> 
+  filter(!is.na(contraception)) |> 
+  mutate(randomized = if_else(randomized, "Randomized", "Not randomized")) |>
+  ggplot() +
+  aes(
+    x = visit_code |> factor(), y = pid, 
+    fill = contraception
+  ) +
+  geom_tile(color = "white") +
+  ggh4x::facet_nested(
+    site + randomized ~ ., 
+    scales = "free_y", space = "free_y"
+  ) +
+  scale_fill_manual(
+    "Contraception method", 
+    values = contraception_colors) +
+  scale_y_discrete(drop = FALSE) +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
+  ) +
+  labs(
+    x = "Visit code", y = "Participants"
+  ) 
+
+```
+
+We can visualize the distribution of contraception methods in the table below.
+
+```{r}
+
+contraception |> 
+  filter(!is.na(contraception)) |>
+  group_by(site, contraception) |>
+  summarise(n = n()) |>
+  ungroup() |>
+  mutate(percent = round(n / sum(n) * 100, 1)) |>
+  arrange(site, desc(n)) |>
+  gt(caption = "Distribution of contraception methods in the dataset")
+
+```
+
+
+```{r}
+#| eval: false
+
+contraception |>
+  filter(!is.na(contraception)) |>
+  ggplot() +
+  aes(y = contraception, x = site, color = site) +
+  geom_jitter(width = 0.3, height = 0.25, alpha = 0.3) +
+  scale_color_manual(values = site_colors) +
+  labs(x = "Site", y = "Contraception method", color = "Site") +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
+  )
+
+
+```
+
+
+### Checking for consistency
+
+In this section, we will evaluate whether indeed we can assume that participants did not change (significantly) their contraceptive method during the trial, and if we need to take into account the reported missed contraceptive doses.
+
+#### Missing contraceptive doses
+
+```{r}
+
+contraception |>
+  filter(contraceptive_missed_doses != 0) |>
+  gt(caption = "Participants who reported missing contraceptive doses")
+
+```
+
+For three participants, namely `068100026`, `068100029`, and `068200357`, they reported having missed doses :
+
+-   Participant `068200357` reported having missed 20 doses of Depo Provera, but we can safely assume that this was an encoding error ;
+
+-   Participant `068100026` reported having missed 6 doses of "Continuous combined oral contraceptive pills", and;
+
+-   Participant `068100029` reported having missed 2 doses of "Continuous combined oral contraceptive pills".
+
+For the last two participants, because the information is already summarized in the vaginal bleeding variable:
+
+-   For participant `068100026`, some vaginal bleeding occurs after she reported not taking 6 doses of contraceptive;
+
+-   For participant `068100029`, it is less straightforward since there are already vaginal bleeding occurring before, suggesting that she may have possibly missed other doses.
+
+Since vaginal bleeding information summarizes missing contraceptive doses quite well, and since only few participant reported missing doses, we don't include missed contraceptive doses in our model.
+
+#### Consistency in contraception method
+
+Below, we highlight participants whose contraception methods change across weekly visits.
+
+```{r}
+#| fig.height: 4
+#| fig.width: 8
+
+contraception |>
+  filter(!is.na(contraception)) |> 
+  group_by(pid) |>
+  filter(n_distinct(contraception) != 1) |>
+  ungroup() |>
+  ggplot() +
+  aes(x = visit_code, y = pid, fill = contraception) +
+  geom_tile(color = "white") +
+  facet_grid(site ~ ., scales = "free_y", space = "free_y") +
+  scale_fill_manual(
+    "Contraception method",
+    values = contraception_colors,
+    na.value = "transparent") +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
+  ) +
+  labs(
+    x = "Visit code", y = "Participants"
+  )
+
+```
+
+For participants whose reported contraception method is the same across the first three weekly visit codes (i.e., the first three weeks of the trial for which we have daily amplicon data available), we select the contraception method reported for these weeks.
+
+For other participants, we check them individually:
+
+-   Participant `068200428` reported injection by Noristerate for the first two weeks and injection by Depo-Provera for the third week. We classify this as injection contraception.
+
+-   Participant `068200380` reported oral contraceptive pills for the first week, injection by Noristerate for the second week, and injection by Depo-Provera for the third week. We only take into account the first week and classify this as pills contraceptive.
+
+-   Participant `068100060` reported IUD for the first week and IUD (Mirena) for the second week, and no method for the third week. Based on subsequent weeks, we assume the third week is also an IUD. We classify it as UID contraception.
+
+-   Participant `068100040` reported tubal ligation for the first week. Since this is a permanent sterilization procedure, we assume no additional contraception is used. This is classified as non-hormonal contraception.
+
+-   Participant `068100036` reported oral contraceptive pills for the first and second weeks and Depo-Provera injection for the third week. Since all reported methods are hormonal, we classify this as hormonal contraception.
+
+Corroborated by the analyses above, we will consider the variable contraception to be time-independent.
+
+### Hamonization of the `contraception` variable
+
+In this section, we will simplify variable names where necessary and organize them into a four-level categorical variable.
+
+For simplicity, "Continuous combined oral contraceptives pills (skip placebo)" was changed into "Continuous COC pills".
+
+```{r}
+# change the variable names
+
+contraception <-
+  contraception |>
+  mutate(
+    contraception =
+      case_when(
+        contraception == "Continuous combined oral contraceptives pills (skip placebo)" ~ 
+          "Continuous COC pills",
+        TRUE ~ contraception
+        )
+    )
+
+```
+
+
+We add a new variable called `contraception_group`, which summarize the information in `contraception` into four categories, namely "Pills", "Injection or implant", "IUD", and "non-hormonal or none", where:
+
+`pill` : Completed 3mo of BC pills, Continuous combined oral contraceptives pills (skip placebo), Implant (Nexplanon), Vaginal ring (NuvaRing)
+
+`injection`: Depo provera, Injection (Noristerate)
+
+`IUD`: IUD (Kyleena), IUD (Mirena), IUD
+
+`non-hormonal_or_none` : Tubal ligation or removed tubes, Vasectomy, Condoms, None, Not applicable, No sex
+
+```{r}
+# group into categories
+
+contraception <-
+  contraception |> 
+  filter(visit_code == "1000") |> 
+  select(pid, contraception) |> 
+  distinct(pid, .keep_all = TRUE) |> 
+  mutate(
+    contraception_group = case_when(
+      contraception %in% c(
+        "Completed 3mo of BC pills", 
+        "Continuous COC pills",
+        "Implant (Nexplanon)", 
+        "Nuvaring"
+      ) ~ "pills",
+      
+      contraception %in% c(
+        "IUD", "IUD (Kyleena)", "IUD (Mirena)"
+      ) ~ "IUD",
+      
+      contraception %in% c(
+        "Depo provera", 
+        "Injection (Noristerate)"
+      ) ~ "injection",
+      
+      contraception %in% c(
+        "Tubal ligation or removed tubes", 
+        "Vasectomy", "Condoms",
+        "None", "Not applicable", "No sex"
+      ) ~ "non-hormonal_or_none"
+    )
+  )
+
+
+```
+
+We document the proportion of participants (in %) in each contraception group.
+
+```{r}
+
+contraception |>
+  group_by(contraception_group) |>
+  summarise(n = n()) |>
+  ungroup() |>
+  mutate(
+    percent = round(n / sum(n) * 100, 1),
+    n = paste0(n, " (", percent, "%)")
+  ) |>
+  select(contraception_group, n) |>
+  gt() 
+
+```
+
+
+
+### Saving the `contraception` variable
+
+We save the cleaned variable in the `calc_vars_pid` variable.
+
+```{r}
+
+mae@metadata$calc_vars_pid <-
+  mae@metadata$calc_vars_pid |> 
+  left_join(
+    contraception |> select(pid, contraception, contraception_group) |> distinct(),
+    by = "pid"
+  )
+
+```
+
+
+
+## Economic worry
+
+First, we retrieve the worry variables from CRF2 in the participant_crfs_merged_filtered dataset of the metadata. These variables represent the aspects of life for which participants reported having trouble paying for. The available choices were: *food*, *utilities*, *rent*, *student loans*, *education fees*, *mortgage*, *childcare expenses*, *medical bills*, and *none*. Participants were invited to check all options that applied to them.
+
+We explore the difference between sites in the distribution of this variable, and we also explore the relationship between economic worry (CRF2) and food insecurity (CRF12), which is defined based on three variables food did not last, not afford balanced meals, and cut size meals from CRF12.
+
+:::::: {.callout-warning}
+Only three variable were used to define food insecurity (cut size meals, eat less, and hungry did not eat),but six variable are define in CRF12 for food insecuruity. Is it normal ? 
+Variable not taken into account : food_did_not_last, not_afford_balanced_meals, often_cut_size_meals
+:::
+
+```{r}
+
+worry <- 
+  mae@metadata$participant_crfs_merged |> 
+  select(pid, site, starts_with("worry_")) |> 
+  left_join(
+    mae@colData |> as_tibble() |> 
+      select(pid, randomized) |> 
+      distinct(),
+    by = join_by(pid)
+  )
+
+```
+
+### Exploration of the worry variables
+
+We plot the worry for each site for the randomized participants.
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+# create an upset plot to see the combinations of worries
+library(UpSetR)
+
+# create a binary matrix for the worries
+worry_matrix_CAP <-
+  worry |>
+  filter(randomized, site == "CAP", !is.na(worry_food)) |>
+  select(starts_with("worry_")) |>
+  # remove "worry_" prefix from column names
+  rename_with(~ str_remove_all(., "worry_")) |>
+  mutate(across(everything(), ~ ifelse(. == "Checked", 1, 0))) |>
+  as.data.frame()
+
+worry_matrix_MGH <-
+  worry |>
+  filter(randomized, site == "MGH", !is.na(worry_food)) |>
+  select(starts_with("worry_")) |>
+  # remove "worry_" prefix from column names
+  rename_with(~ str_remove_all(., "worry_")) |>
+  mutate(across(everything(), ~ ifelse(. == "Checked", 1, 0))) |>
+  as.data.frame()
+
+```
+
+```{r}
+
+# Capturer CAP sans afficher
+pdf(NULL)
+upset(worry_matrix_CAP,
+  nsets = ncol(worry_matrix_CAP),
+  nintersects = NA,
+  keep.order = TRUE,
+  order.by = "freq",
+  main.bar.color = "dodgerblue1",
+  sets.bar.color = "gray70",
+  set_size.show = TRUE
+)
+grid.edit('arrange', name = 'arrange_CAP')
+vp_CAP <- grid.grab()
+dev.off()
+
+# Capturer MGH sans afficher
+pdf(NULL)
+upset(worry_matrix_MGH,
+  nsets = ncol(worry_matrix_MGH),
+  nintersects = NA,
+  keep.order = TRUE,
+  order.by = "freq",
+  main.bar.color = "coral1",
+  sets.bar.color = "gray70",
+  set_size.show = TRUE
+)
+grid.edit('arrange', name = 'arrange_MGH')
+vp_MGH <- grid.grab()
+dev.off()
+
+# Seul ce plot apparaîtra dans l'output
+dev.new()
+grid.arrange(vp_CAP, vp_MGH, ncol = 2,
+             top = "Worries by site (CAP and MGH)")
+
+```
+
+
+We explore the correlations between the different types of worries using a multiple correspondence analysis (MCA). We can see that all *unchecked* worries are correlated together, and *checked* worries are correlated together by cluster. We see a first cluster of worries with worry about medical bills, education fees, utilities and mortgage, and a second cluster of worries with worry about food, childcare expenses. Worry about rent and worry about student loans are less correlated with the other worries.
+
+```{r}
+
+worry_mca <- 
+  worry |>
+  select(-c("pid", "site")) |>
+  rename_with(~ str_remove(.x, "^worry_")) |>
+  mutate(across(everything(), ~ case_when(
+    .x == "Checked" ~ 1,
+    .x == "Unchecked" ~ 0,
+    TRUE ~ 0
+  )|> as.factor()
+  )
+  )
+   
+res.mca <- FactoMineR::MCA(worry_mca, graph = FALSE)
+
+factoextra::fviz_screeplot(res.mca, addlabels = TRUE)
+
+```
+
+```{r}
+
+factoextra::fviz_mca_var(
+  res.mca,
+  repel = TRUE,
+  ggtheme = theme_minimal(),
+  title = "MCA - Worry variables",
+  col.var = case_when(
+    str_detect(rownames(res.mca$var$coord), "_0") ~ "steelblue",
+    str_detect(rownames(res.mca$var$coord), "_1") ~ "firebrick",
+    TRUE ~ "grey60"  # au cas où il reste autre chose
+  ),
+  labelsize = 4    
+) + 
+  theme(legend.position = "none")
+
+```
+
+
+### Creation of a worry score
+
+We will now create a worry_score variable to summarize the different worries reported by each participant. We attribuate more weight to worry about utilisties, rent and food.
+
+```{r}
+# weights for worry score food, utilities, rent
+w <- 2
+
+worry <- 
+  worry |> 
+  select(-c("worry_none")) |>
+  mutate(
+    across(contains("worry"), ~ case_when(
+      .x == "Checked" ~ 1,
+      .x == "Unchecked" ~ 0,
+      TRUE ~ 0)
+      ), 
+      worry_score = worry_food * w + worry_utilities * w + worry_rent * w + worry_student_loans + worry_education_fees + worry_mortgage + worry_childcare + worry_medical_bills
+    ) 
+
+worry |>
+  ggplot() +
+  aes(x = worry_score, fill = site) +
+  geom_histogram(binwidth = 1) +
+  facet_wrap(. ~ site, scales = "free") +
+  scale_fill_manual(values = c("CAP" = "dodgerblue1", "MGH" = "coral1")) +
+  xlab("Worry score") +
+  ylab("Number of participants") +
+  theme(legend.position = "top")    
+
+```
+
+### Exploration of the relationship between economic worry and food insecurity
+
+Now we explore the relationship between economic worry and food insecurity. We define food insecurity based on these three variables: cut size meals, eat less, and hungry did not eat. We define a participant as food insecure if they answered "Yes" to at least one of these three variables. We then plot the relationship between food insecurity and economic worry (worry_food) for each site.
+
+Some participants report no food insecurity (answer No for cut size meals, eat less, and hungry did not eat) but report worry about food.We also see that the distribution of worry about food is different between sites, with more participants in CAP reporting worry about food compared to MGH.
+
+```{r}
+
+table1_data <- 
+  metadata(mae)$participant_crfs_merged |> 
+  dplyr::left_join(
+    colData(mae) |> as_tibble() |> select(pid, site, arm, randomized, ITT, mITT, PP) |> distinct(), 
+    by = join_by(pid, site)
+    )  |> 
+  filter(randomized) |> 
+  select(pid, site, arm, cut_size_meals, eat_less, hungry_did_not_eat) |> 
+  mutate(
+    food_insecurity = ifelse(
+      cut_size_meals == "Yes" | eat_less == "Yes" | hungry_did_not_eat == "Yes",
+      "Yes",
+      "No"
+    ),
+    food_insecurity = factor(food_insecurity, levels = c("No", "Yes"))
+  ) |> 
+  select(-c(eat_less, cut_size_meals, hungry_did_not_eat))
+
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 8
+
+table1_data |> 
+  left_join(
+    worry |> select(pid, worry_food) |> distinct(),
+    by = join_by(pid)
+  ) |> 
+  mutate(worry_food = worry_food |> recode("Checked" = "Yes", "Unchecked" = "No")) |>
+  dplyr::count(site, food_insecurity, worry_food) |> 
+  ggplot() +
+  aes(x = food_insecurity, y = worry_food, fill = n) +
+  geom_tile() +
+  geom_text(aes(label = n)) +
+  facet_wrap(. ~ site, scales = "free") +
+  scale_fill_gradient(low = "white", high = "dodgerblue1") 
+
+```
+
+
+We add the variable to `mae@metadata$calc_vars_pid`
+
+```{r}
+mae@metadata$calc_vars_pid <- 
+  mae@metadata$calc_vars_pid |> 
+  left_join(
+    worry |> select(pid, worry_score) |> distinct(),
+    by = "pid"
+  )
+```
+
+## Food security
+
+We process food security data collected at the screening visit using the six-item short form of the USDA Household Food Security Survey Module (HFSSM) questionnaire. Six questions were asked to assess food security status over the past 12 months. Based on the number of affirmative responses, we classify participants into high/marginal, low, or very low food security categories.
+
+Affirmative responses are defined as follows:
+- Food did not last: "Often true" or "Sometimes true"
+- Not afford balanced meals: "Often true" or "Sometimes true"
+- Cut size meals: "Yes"
+- Often cut size meals: "Almost every month" or "Some months but not every month"
+- Eat less: "Yes"
+- Hungry did not eat: "Yes"
+
+```{r}
+
+food_security <- 
+  mae@metadata$participant_crfs_merged |> 
+  select(pid, site, food_did_not_last, not_afford_balanced_meals, cut_size_meals, often_cut_size_meals, eat_less, hungry_did_not_eat) |> 
+  left_join(
+    mae@colData |> as_tibble() |> 
+      select(pid, randomized) |> 
+      distinct(),
+    by = join_by(pid)
+  ) |> 
+  filter(randomized)
+
+```
+
+```{r}
+
+food_security |>
+  select(pid, site, 
+         food_did_not_last, not_afford_balanced_meals, 
+         cut_size_meals, often_cut_size_meals, 
+         eat_less, hungry_did_not_eat) |>
+  pivot_longer(-c(pid, site), names_to = "question", values_to = "response") |>
+  mutate(
+    question = factor(question, levels = c(
+      "food_did_not_last", "not_afford_balanced_meals",
+      "cut_size_meals", "often_cut_size_meals",
+      "eat_less", "hungry_did_not_eat"
+    ))
+  ) |>
+  ggplot(aes(x = response, fill = site)) +
+  geom_bar(position = "dodge") +
+  facet_wrap(~ question, scales = "free_x", ncol = 2) +
+  scale_fill_manual(values = c("CAP" = "dodgerblue1", "MGH" = "coral1")) +
+  scale_x_discrete(labels = scales::label_wrap(12))
+  labs(x = "", y = "Number of participants", title = "Food security items by site") +
+  theme(
+    legend.position = "top"
+  )
+
+```
+
+```{r}
+
+food_security <- 
+  food_security |>
+  mutate(
+    # HH3: "Often true" or "Sometimes true" = affirmative
+    aff_food_did_not_last = food_did_not_last %in% c("Often true", "Sometimes true"),
+    # HH4: idem
+    aff_not_afford_balanced_meals = not_afford_balanced_meals %in% c("Often true", "Sometimes true"),
+    # AD1: "Yes" = affirmative
+    aff_cut_size_meals = cut_size_meals == "Yes",
+    # AD1a: "Almost every month" or "Some months but not every month" = affirmative
+    # "Only 1 or 2 months" is NOT affirmative for AD1a (AD1 already counted above)
+    aff_often_cut_size_meals = often_cut_size_meals %in% c("Almost every month", "Some months but not every month"),
+    # AD2
+    aff_eat_less = eat_less == "Yes",
+    # AD3
+    aff_hungry_did_not_eat = hungry_did_not_eat == "Yes",
+    # Raw score = sum of 6 affirmatives (max = 6)
+    food_security_score = aff_food_did_not_last + aff_not_afford_balanced_meals +
+                        aff_cut_size_meals + aff_often_cut_size_meals +
+                        aff_eat_less + aff_hungry_did_not_eat,
+    # Categories per USDA guide
+    food_security_cat = case_when(
+      food_security_score <= 1 ~ "High/Marginal",
+      food_security_score <= 4 ~ "Low",
+      TRUE                   ~ "Very low"
+    ) |> factor(levels = c("High/Marginal", "Low", "Very low"))
+  )
+```
+
+```{r}
+
+food_security |>
+  ggplot(aes(x = food_security_score, fill = site)) +
+  geom_bar(position = "dodge") +
+  facet_grid(site ~ food_security_cat, scales = "free") +
+  scale_fill_manual(values = c("CAP" = "dodgerblue1", "MGH" = "coral1")) +
+  scale_x_continuous(breaks = 0:6) +
+  labs(x = "Raw score (0–6)", y = "Number of participants",
+       title = "Food security score by site") +
+  theme(legend.position = "none")
+
+```
+
+We compare the food security score and the worry score
+
+```{r}
+
+food_security |>
+  select(pid, site, food_security_score, food_security_cat) |>
+  left_join(
+    worry |> select(pid, worry_score),
+    by = "pid"
+  ) |>
+  dplyr::count(site, food_security_cat, worry_score) |>
+  ggplot() +
+  aes(x = food_security_cat, y = worry_score, fill = n) +
+  geom_tile() +
+  geom_text(aes(label = n)) +
+  facet_wrap(. ~ site, scales = "free") +
+  scale_fill_gradient(low = "white", high = "dodgerblue1") +
+  labs(x = "Food security category", y = "Worry score", title = "Food security category vs worry score by site") +
+  theme(legend.position = "none")
+
+```
+
+We add the variable to `mae@metadata$calc_vars_pid`
+
+```{r}
+mae@metadata$calc_vars_pid <- 
+  mae@metadata$calc_vars_pid |> 
+  left_join(
+    food_security |> select(pid, food_security_score, food_security_cat) |> distinct(),
+    by = "pid"
+  )
+```
+
+
+## Pre-existing conditions
+
+In CRF5 participants were asked about pre-existing conditions. We explore the distribution of this variable and the different types of pre-existing conditions reported by participants. We also explore the relationship between pre-existing conditions and diagnosis.
+
+```{r}
+
+pre_existing_conditions <- 
+  mae@metadata$participant_crfs_merged |> 
+  select(pid, site, no_pre_existing_condition, diagnosis_agg) |> 
+  left_join(
+    mae@colData |> as_tibble() |> 
+      select(pid, randomized) |> 
+      distinct(),
+    by = join_by(pid)
+  ) |> 
+  filter(randomized)
+
+```
+
+```{r}
+#| fig-height: 7
+
+pre_existing_conditions |> 
+  mutate(
+    diagnosis_agg = case_when(
+      no_pre_existing_condition ~ "No pre-existing condition",
+      TRUE ~ diagnosis_agg
+    ),
+    diagnosis_agg = fct_reorder(
+      diagnosis_agg, 
+      str_count(diagnosis_agg, "&"),
+      .fun = dplyr::first,
+      .desc = TRUE 
+    ),
+    diagnosis_agg = fct_relevel(diagnosis_agg, "No pre-existing condition", after = Inf)
+  ) |>
+  ggplot() +
+  aes(y = diagnosis_agg, fill = site) +
+  geom_bar() +
+  xlab("Number of participants") +
+  ylab("") +
+  scale_fill_manual(
+    name = "Site",
+    values = c("CAP" = "dodgerblue1", "MGH" = "coral1")
+  ) +
+  scale_y_discrete(labels = scales::label_wrap(30)) +
+  theme(legend.position = "top")
+
+```
+
+
+We add the variable to `mae@metadata$calc_vars_pid`
+
+```{r}
+mae@metadata$calc_vars_pid <- 
+  mae@metadata$calc_vars_pid |> 
+  left_join(
+    pre_existing_conditions |> select(pid, no_pre_existing_condition, diagnosis_agg) |> distinct(),
+    by = "pid"
+  )
+```
+
+## Psychological wellbeing - Perceived Stress Scale (PSS)
+
+We are interest in perceived stress of the participants. Questions about their feelings and thoughts during the last month were ask at the screening visit only. Therefore, we consider stress as a time-invariant variable.
+
+The Perceived Stress scale used was developed by Sheldon Cohen and his colleagues in 1983. Nowadays, the PSS is most commonly implemented as the 10-item scale assessing the perceived stress degree based on that individual’s subjective interpretation of their reactions to stressors during a 1 month period.
+
+The PSS-10 scale includes 6 negative items (upset, unable_to_control, nervous_stressed, could_not_cope, outside_your_control, difficulties_piling_up) and 4 positive items (confident, going_your_way, control_irritations, on_top_of_things). Each item is rated on a 5-point Likert scale ranging from 0 (never) to 4 (very often).
+
+
+
+```{r}
+
+negative_items <- c("upset", 
+                  "unable_to_control", 
+                  "nervous_stressed",
+                  "could_not_cope",
+                  "outside_your_control",
+                  "difficulties_piling_up")
+
+positive_items <- c("confident",
+                    "going_your_way",
+                   "control_irritations",
+                   "on_top_of_things") 
+
+stress <- 
+  mae@metadata$participant_crfs_merged |>
+  select(pid, site, all_of(negative_items), all_of(positive_items)) |> 
+  left_join(
+    mae@colData |> as_tibble() |> 
+      select(pid, randomized) |> 
+      distinct(),
+    by = join_by(pid)
+  ) |> 
+  filter(randomized) |> 
+  select(-randomized)
+
+
+
+```
+
+```{r}
+#| fig-height: 10
+#| fig-width: 8
+
+stress |> 
+  filter(!is.na(upset)) |>
+  pivot_longer(
+    cols = c(all_of(negative_items), all_of(positive_items)),
+    names_to = "question",
+    values_to = "answer"
+  ) |> 
+  group_by(site, pid) |> 
+  mutate(total_score = sum(answer |> as.integer())) |>
+  ungroup() |> 
+  arrange(total_score) |> 
+  mutate(
+    pid = pid |> fct_inorder()
+  ) |>
+  ggplot() +
+  aes(y = pid, x = question, fill = answer) +
+  facet_grid(site ~ ., scales = "free_y", space = "free") +
+  geom_tile() +
+  scale_fill_brewer(type = "div", palette = "PRGn") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text.y = element_text(angle = 0)
+  )
+
+```
+
+```{r}
+#| eval: false
+
+stress |> 
+  pivot_longer(
+    cols = -c(pid, site),
+    names_to = "item",
+    values_to = "response"
+  ) |>
+  mutate(
+    response = factor(response, levels = c("0 = Never", "1 = Almost never", "2 = Sometimes", "3 = Fairly often", "4 = Very")), 
+    group = case_when(
+      item %in% negative_items ~ "Negative items",
+      item %in% positive_items ~ "Positive items"
+    ) |> factor(), 
+    item = factor(item, levels = c(negative_items, positive_items))
+  ) |>  
+  ggplot() +
+  aes(x = response, fill = group) +
+  geom_bar() +
+  facet_wrap( ~ item, ncol=2) + 
+  scale_fill_manual(values = c("Negative items" = "tomato", "Positive items" = "steelblue")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+
+```{r}
+
+stress |> 
+  pivot_longer(
+    cols = -c(pid, site),
+    names_to = "item",
+    values_to = "response"
+  ) |>
+  mutate(
+    response = factor(response, levels = c("0 = Never", "1 = Almost never", "2 = Sometimes", "3 = Fairly often", "4 = Very")), 
+    group = case_when(
+      item %in% negative_items ~ "Negative items",
+      item %in% positive_items ~ "Positive items"
+    ) |> factor(), 
+    item = factor(item, levels = c(negative_items, positive_items))
+  ) |>  
+  ggplot() +
+  aes(x = response, fill = group) +
+  geom_bar() +
+  facet_grid(item ~ site, scales = "free_y") + 
+  scale_fill_manual(values = c("Negative items" = "tomato", "Positive items" = "steelblue")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+We explore the relationship between the stress items using a PCA and a correlation matrix. For that we first need to convert the responses to numeric values (0, 1, 2, 3, 4) and reverse the scores for the positive items. The reverse-scoring of the four positively worded items (items 4, 5, 7 and 8: `confident`, `going_your_way`, `control_irritations`, `on_top_of_things`) is done by transforming 0 → 4, 1 → 3, 2 → 2, 3 → 1 and 4 → 0. The six negatively worded items (`upset`, `unable_to_control`, `nervous_stressed`, `could_not_cope`, `outside_your_control`, `difficulties_piling_up`) are scored directly. 
+
+```{r}
+
+stress <- 
+  stress |>
+  filter(!is.na(upset)) |>
+  mutate(across(
+    all_of(c(negative_items, positive_items)), 
+    ~ as.integer(str_extract(as.character(.x), "^[0-4]"))
+  )) |>
+  # Inverser les 4 items positifs
+  mutate(across(
+    all_of(positive_items),
+    ~ 4 - .x
+  ))
+
+```
+
+```{r}
+
+pca_stress <- 
+  stress |>
+  select(all_of(c(negative_items, positive_items))) |>
+  prcomp(scale. = TRUE)
+
+fviz_eig(pca_stress, addlabels = TRUE) +
+  labs(title = "PSS-10 — Scree plot")
+
+
+item_groups <- factor(
+  ifelse(c(negative_items, positive_items) %in% positive_items, 
+         "Positive items", 
+         "Negative items")
+)
+
+fviz_pca_var(
+  pca_stress,
+  col.var   = item_groups,
+  palette   = c("Negative items" = "tomato", "Positive items" = "steelblue"),
+  legend.title = "Item type",
+  repel     = TRUE,
+  title     = "PSS-10 — Variable contributions"
+)
+
+
+fviz_pca_ind(
+  pca_stress,
+  geom = "point",
+  habillage = stress$site,
+  palette = c("CAP" = "dodgerblue1", "MGH" = "coral1"),
+  addEllipses = TRUE,
+  title = "PSS-10 — Participants by site"
+)
+
+```
+
+
+
+Now we calculate the PSS-10 score by summing all 10 items, yielding a range of 0 to 40 where higher scores indicate greater perceived stress. Scores of 0–13, 14–26 and 27–40 are interpreted as low, moderate and high stress, respectively (Cohen & Janicki-Deverts, 2012). The PSS-10 comprises two subscales: *Perceived Helplessness* (items 1, 2, 3, 6, 9, 10) reflecting feelings of lack of control, and *Lack of Self-Efficacy* (items 4, 5, 7, 8) reflecting perceived inability to handle problems.
+
+
+
+```{r}
+
+stress <- 
+  stress |> 
+  rowwise() |>
+  mutate(
+    score_helplessness  = sum(c_across(all_of(negative_items))),
+    score_self_efficacy = sum(c_across(all_of(positive_items))),
+    pss_total           = score_helplessness + score_self_efficacy,
+    stress_category     = case_when(
+      pss_total <= 13 ~ "Low",
+      pss_total <= 26 ~ "Moderate",
+      TRUE            ~ "High"
+    ) |> factor(levels = c("Low", "Moderate", "High"))
+  ) |>
+  ungroup()
+
+
+stress |>
+  ggplot(aes(x = pss_total, fill = site)) +
+  geom_histogram(binwidth = 2) +
+  geom_vline(xintercept = c(13, 26), linetype = "dashed", color = "red") +
+  facet_wrap(. ~ site, scales = "free") +
+  scale_fill_manual(values = c("CAP" = "dodgerblue1", "MGH" = "coral1")) +
+  xlab("PSS total score") +
+  ylab("Number of participants") +
+  theme(legend.position = "top")
+
+stress |> 
+  ggplot(aes(x = stress_category, fill = site)) +
+  geom_bar(position = "dodge") +
+  facet_wrap(. ~ site, scales = "free") +
+  scale_fill_manual(values = c("CAP" = "dodgerblue1", "MGH" = "coral1")) +
+  xlab("Stress category") +
+  ylab("Number of participants") +
+  theme(legend.position = "top")
+
+```
+
+
+We add the variable to `mae@metadata$calc_vars_pid`
+
+```{r}
+
+mae@metadata$calc_vars_pid <- 
+  mae@metadata$calc_vars_pid |> 
+  left_join(
+    stress |> select(pid, stress_score = pss_total, stress_category) |> distinct(),
+    by = "pid"
+  )
+
+```
+
+
+
+
+## TODO ? 
+
+## Number of product doses 
+
+We create the variable `n_product_doses` to summarize the number of doses of the study product received by each participant. This variable is calculated based on ....
+
+## Last dose at week 2 
+
+`last_dose_at_W2` 
+
+`pid_exposed_by_qPCR`, `n_days_exposed_by_qPCR`, `n_days_exp_dosed`
+
+
+# Saving the `MultiAssayExperiment` objects
+
+We save the MAE for downstream analyses.
+
+```{r}
+#| eval: true
+
+saveRDS(
+  mae, 
+  str_c(
+    get_03_output_dir(),  
+    "mae_full_05_", today() |> str_remove_all("-"), ".rds"
+  )
+)
+
+```
+

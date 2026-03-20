@@ -1,0 +1,81 @@
+---
+title: "MAE augmentation - Additionnal descriptive analyses"
+author: Mariam Rahali Masbouri, Khadija Rahali Masbouri, Laura Symul, Laura Vermeren
+date: today
+format: 
+   html:
+     page-layout: full
+     code-fold: true
+     toc: true
+     toc-location: left
+     toc-depth: 5
+     embed-resources: true
+execute:
+  cache: refresh # true refresh false
+  warning: false
+knitr:
+  opts_chunk:
+    out.width: "100%"
+editor: source
+---
+
+
+
+```{r}
+#| warning: false
+#| cache: false
+
+library(tidyverse)
+library(magrittr)
+library(gt)
+library(patchwork)
+library(grid)
+library(gridExtra)
+library(factoextra)
+library(SummarizedExperiment)
+library(tidySummarizedExperiment)
+library(MultiAssayExperiment)
+
+tmp <- fs::dir_map("R scripts/", source)
+tmp <- fs::dir_map("../VIBRANT-99-utils/R/", source)
+rm(tmp)
+theme_set(theme_light())
+```
+
+
+
+```{r}
+
+mae_files <- 
+  fs::dir_ls(
+    get_03_output_dir(),
+    regexp = "mae_full_05_.*\\.rds$"
+  ) |> 
+  sort(decreasing = TRUE) |>
+  magrittr::extract(1)
+
+mae <- readRDS(mae_files)
+
+rm(mae_files)
+
+```
+
+
+# Saving the `MultiAssayExperiment` objects
+
+We save the MAE for downstream analyses.
+
+```{r}
+#| eval: true
+
+saveRDS(
+  mae, 
+  str_c(
+    get_03_output_dir(),  
+    "mae_full_06_", today() |> str_remove_all("-"), ".rds"
+  )
+)
+
+```
+
+

@@ -1,0 +1,171 @@
+---
+title: "MAE augmentation - Calculated variables at the participant and visit code level"
+author: Mariam Rahali Masbouri, Khadija Rahali Masbouri, Laura Symul, Laura Vermeren
+date: today
+format: 
+   html:
+     page-layout: full
+     code-fold: true
+     toc: true
+     toc-location: left
+     toc-depth: 5
+     embed-resources: true
+execute:
+  cache: refresh # true refresh false
+  warning: false
+knitr:
+  opts_chunk:
+    out.width: "100%"
+editor: source
+---
+
+
+```{r}
+#| warning: false
+#| cache: false
+
+library(tidyverse)
+library(magrittr)
+library(gt)
+library(patchwork)
+library(grid)
+library(gridExtra)
+library(factoextra)
+library(SummarizedExperiment)
+library(tidySummarizedExperiment)
+library(MultiAssayExperiment)
+
+tmp <- fs::dir_map("R scripts/", source)
+tmp <- fs::dir_map("../VIBRANT-99-utils/R/", source)
+rm(tmp)
+theme_set(theme_light())
+```
+
+
+
+```{r}
+
+mae_files <- 
+  fs::dir_ls(
+    get_03_output_dir(),
+    regexp = "mae_full_03_.*\\.rds$"
+  ) |> 
+  sort(decreasing = TRUE) |>
+  magrittr::extract(1)
+
+mae <- readRDS(mae_files)
+
+rm(mae_files)
+
+```
+
+
+# Calculated variables at the participant and visit code level
+
+The goal of this document is to create calculated variables at the participant and visit code level, and add them to the metadata of the `MultiAssayExperiment` object. Two tables will be created : one table at the weekly visit code level (`calc_vars_visit_code_weekly`) and another at the daily visit code level (`calc_vars_visit_code_daily`).
+
+> TODO : add description and list of variables created at the visit code level, and the rationale for creating them.
+
+
+# Calculated variables at the weekly visit code level
+
+```{r}
+
+mae@metadata$calc_vars_weekly_visit_code <- 
+  mae@colData |> 
+  as_tibble() |> 
+  select(uid, pid, visit_code, visit_type) |> 
+  filter(!is.na(pid), !is.na(visit_code), visit_type == "Clinic") |>
+  distinct()
+
+```
+
+## Days since last dose 
+
+> based on the study product exposure data 
+
+## Days since last sex 
+
+We calculate the number of days since last sexual intercourse with and without condom, and with unknown condom use, based on the semen exposure variable calculated in the `calc_vars_study_day` table. We first calculate the number of days since last sexual intercourse with and without semen exposure and with unknown condom use, at the participant and study day which is the corresponding semen exposure variable being > 0, and then we add these variables to the `calc_vars_weekly_visit_code` table by merging by `uid`.
+
+```{r}
+
+tmp <- mae@metadata$calc_vars_weekly_visit_code$uid |> unique() |> sort()
+
+sex <- 
+    mae@metadata$calc_vars_study_day |> 
+    select(
+        uid, pid, study_day, pv_sex_w_semen_exposure, pv_sex_wo_semen_exposure, other_sex_wo_semen_exp
+    )
+
+```
+
+
+```{r}
+sex <- 
+    sex |>
+    arrange(pid, study_day) |>
+    group_by(pid) |> 
+    mutate(
+    # with condom only
+        last_sex_day_w_semen_exp = case_when(
+        pv_sex_w_semen_exposure > 0 ~ study_day,
+        TRUE ~ NA_integer_
+        ),
+        last_sex_day_w_semen_exp = zoo::na.locf(last_sex_day_w_semen_exp, na.rm = FALSE), 
+        days_since_last_sex_w_semen_exp = study_day - last_sex_day_w_semen_exp,
+        
+        # without condom only
+        last_sex_day_wo_semen_exp = case_when(
+        pv_sex_wo_semen_exposure > 0 ~ study_day,
+        TRUE ~ NA_integer_
+        ),
+        last_sex_day_wo_semen_exp = zoo::na.locf(last_sex_day_wo_semen_exp, na.rm = FALSE),
+        days_since_last_sex_wo_semen_exp = study_day - last_sex_day_wo_semen_exp, 
+        # unknown condom use
+        last_other_sex_day = case_when(
+        other_sex_wo_semen_exp > 0 ~ study_day,
+        TRUE ~ NA_integer_
+        ),
+        last_other_sex_day = zoo::na.locf(last_other_sex_day, na.rm = FALSE),
+        days_since_last_other_sex = study_day - last_other_sex_day
+    ) |> 
+    ungroup() |> 
+    select(-c(last_sex_day_wo_semen_exp, last_sex_day_w_semen_exp, last_other_sex_day))
+
+```
+
+Add the variable `days_since_last_sex_wo_semen_exp`, `days_since_last_sex_w_semen_exp` and `days_since_last_other_sex` to the `calc_vars_weekly_visit_code` table.
+
+```{r}
+
+mae@metadata$calc_vars_weekly_visit_code <- 
+  mae@metadata$calc_vars_weekly_visit_code |> 
+  left_join(
+    sex |> 
+      select(uid, days_since_last_sex_wo_semen_exp, days_since_last_sex_w_semen_exp, days_since_last_other_sex),
+    by = join_by(uid)
+  )
+
+
+```
+
+## Lab values 
+
+# Saving the `MultiAssayExperiment` objects
+
+We save the MAE for downstream analyses.
+
+```{r}
+#| eval: true
+
+saveRDS(
+  mae, 
+  str_c(
+    get_03_output_dir(),  
+    "mae_full_04_", today() |> str_remove_all("-"), ".rds"
+  )
+)
+
+```
+

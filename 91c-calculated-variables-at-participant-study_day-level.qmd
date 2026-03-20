@@ -1,6 +1,6 @@
 ---
-title: "MAE augmentation - Calculated variables"
-author: Laura Symul, Laura Vermeren
+title: "MAE augmentation - Calculated variables at the participant and study day level"
+author: Mariam Rahali Masbouri, Khadija Rahali Masbouri, Laura Symul, Laura vermeren
 date: today
 format: 
    html:
@@ -58,817 +58,26 @@ rm(mae_files)
 
 ```
 
-
-
-# Calculated variables
-The objective of this section is to create new tables in the metadata of the `MultiAssayExperiment` object that contain calculated variables relevant for downstream analyses. We create two new tables:
-
-- `calc_vars_pid` contains one row per participant, initialized with `pid`, `site`, and population flags (`ITT`, `mITT`, `PP`, `randomized`). Variables related to participant-level characteristics and outcomes will be progressively added to this table.
-
-- `calc_vars_visits` contains one row per participant and study day. It is initialized from the `colData` of the `MultiAssayExperiment` object, which provides the list of observed study days alongside randomization and population flag information. When a clinical and a home visit fall on the same study day, the two rows are merged into a single row with `visit_type = "Clinic & Home"`. To ensure continuity over the main follow-up period, all missing study days between day 0 and day 35 are imputed using `tidyr::complete()`. For these imputed days, the `visit_code` is derived from the study day using the weekly visit structure (e.g., day 7 → `1100`, day 8 → `1101`), and `visit_type` is inferred from the `visit_code` — visits with a code divisible by 100 are classified as `Clinic`, all others as `Home`. Study days beyond day 35 (follow-up visits at weeks 7, 9, 12, and end of study) are not imputed and remain as observed. A `predicted` flag distinguishes imputed rows from true observations.
-
-All variables are derived from the `participant_crfs_merged` and `visits_crfs_merged` tables available in the metadata of the `MultiAssayExperiment` object, which contain the harmonized CRF data, as well as from the `colData`, which provides randomization and treatment arm information.
-
-```{r}
-
-mae@metadata$calc_vars_pid <- 
-  mae@colData |> as_tibble() |> select(pid, site, randomized, ITT, mITT, PP) |> distinct()
-
-mae@metadata$calc_vars_visits <- 
-  mae@colData |> 
-  as_tibble() |> 
-  select(uid, pid, visit_code, study_day, visit_type) |> 
-  filter(!is.na(pid), !is.na(study_day)) |>
-
-  # If there is duplicate (pid, study_day) (i.e. multiple visits on the same day), we keep the visit_code and visit_type of the Clinic visit if there is one, otherwise we keep the first one (which is arbitrary but it does not matter because we will predict visit_code and visit_type for all duplicated days in the next step)
-  group_by(pid, study_day) |>
-  mutate(
-    visit_code = case_when(
-        any(visit_type == "Clinic") ~ visit_code[visit_type == "Clinic"][1],
-        TRUE ~ visit_code[1]
-      ),
-      visit_type = case_when(
-        n() > 1 ~ "Clinic & Home",
-        TRUE ~ visit_type[1]
-      )
-    ) |>
-    dplyr::slice(1) |>
-    ungroup() |>
-
-    group_by(pid) |>
-    complete(study_day = seq(max(0, min(study_day)), min(35, max(study_day)))) |>
-    mutate(
-      predicted = is.na(visit_code),  # flag pour les jours prédits
-      
-      # Estimate visit_code and visit_type for missing days
-      # Logique : les jours manquants sont forcément des Home visits
-      # visit_code prédit : base (ex: 1100) + position dans la semaine
-      visit_code = case_when(
-    !predicted ~ visit_code,
-    TRUE ~ {
-      week_block <- floor(study_day / 7)
-      position   <- study_day - week_block * 7      # 0-6
-      base       <- (week_block + 10) * 100         # 1000, 1100, 1200...
-      sprintf("%04d", as.integer(base + position))
-    }
-  ),
-
-  # visit_type déduit du visit_code :
-  # divisible par 100 → Clinic, sinon → Home
-  visit_type = case_when(
-    !predicted ~ visit_type,
-    as.integer(visit_code) %% 100 == 0 ~ "Clinic",
-    TRUE ~ "Home"
-  ), 
-  uid = str_c(pid, visit_code, sep = "_")
-  )
-
-mae@metadata$calc_vars_visits <- 
-  mae@metadata$calc_vars_visits |> 
-  left_join(
-    mae@colData |> as_tibble() |> select(pid, site, randomized, ITT, mITT, PP) |> distinct(),
-    by = "pid"
-  )
-
-```
-
-
-# Participant-level variables
-
-## Education - can we harmonize between sites ?
-
-We explore the education variable (from CRF2), which is collected in both sites but with different categories. We want to see if we can harmonize this variable between sites, and if not, we will keep it as a site-specific variable.
-
-:::::: {.callout-warning}
-For instance, we do not harmonized the education variable between sites because the categories are very different between sites, and there is no clear way to harmonize them. 
-:::
-
-```{r}
-
-education <- 
-  mae@metadata$participant_crfs_merged |> 
-  select(pid, site, edu) |> 
-  left_join(
-    mae@colData |> as_tibble() |> 
-      select(pid, randomized) |> 
-      distinct(),
-    by = join_by(pid)
-  )
-
-```
-
-```{r}
-#| fig-width: 8
-#| fig-height: 2.5
-education|> 
-  ggplot() +
-  aes(y = edu, fill = randomized) +
-  facet_wrap(. ~ site, scales = "free") +
-  geom_bar() +
-  xlab("Number of participants") +
-  ylab("") +
-  scale_fill_manual(
-    name = "",
-    values = c("TRUE" = "dodgerblue1", "FALSE" = "gray70"),
-    labels = c("TRUE" = "Randomized", "FALSE" = "Not randomized")
-  ) +
-  theme(legend.position = "top")
-
-```
-
-```{r}
-#| fig-width: 8
-#| fig-height: 2
-
-education |> 
-  filter(randomized) |> 
-  ggplot() +
-  aes(y = edu) +
-  facet_wrap(. ~ site, scales = "free") +
-  geom_bar(fill = "dodgerblue1") +
-  xlab("Number of participants") +
-  ylab("")
-
-```
-
-We add the variable to `mae@metadata$calc_vars_pid`
-
-```{r}
-mae@metadata$calc_vars_pid <- 
-  mae@metadata$calc_vars_pid |> 
-  left_join(
-    education |> select(pid, education = edu) |> distinct(),
-    by = "pid"
-  )
-```
-
-## Economic worry
-
-First, we retrieve the worry variables from CRF2 in the participant_crfs_merged_filtered dataset of the metadata. These variables represent the aspects of life for which participants reported having trouble paying for. The available choices were: *food*, *utilities*, *rent*, *student loans*, *education fees*, *mortgage*, *childcare expenses*, *medical bills*, and *none*. Participants were invited to check all options that applied to them.
-
-We explore the difference between sites in the distribution of this variable, and we also explore the relationship between economic worry (CRF2) and food insecurity (CRF12), which is defined based on three variables food did not last, not afford balanced meals, and cut size meals from CRF12.
-
-:::::: {.callout-warning}
-Only three variable were used to define food insecurity (cut size meals, eat less, and hungry did not eat),but six variable are define in CRF12 for food insecuruity. Is it normal ? 
-Variable not taken into account : food_did_not_last, not_afford_balanced_meals, often_cut_size_meals
-:::
-
-```{r}
-
-worry <- 
-  mae@metadata$participant_crfs_merged |> 
-  select(pid, site, starts_with("worry_")) |> 
-  left_join(
-    mae@colData |> as_tibble() |> 
-      select(pid, randomized) |> 
-      distinct(),
-    by = join_by(pid)
-  )
-
-```
-
-### Exploration of the worry variables
-
-We plot the worry for each site for the randomized participants.
-
-```{r}
-#| fig-height: 5
-#| fig-width: 6
-
-# create an upset plot to see the combinations of worries
-library(UpSetR)
-
-# create a binary matrix for the worries
-worry_matrix_CAP <-
-  worry |>
-  filter(randomized, site == "CAP", !is.na(worry_food)) |>
-  select(starts_with("worry_")) |>
-  # remove "worry_" prefix from column names
-  rename_with(~ str_remove_all(., "worry_")) |>
-  mutate(across(everything(), ~ ifelse(. == "Checked", 1, 0))) |>
-  as.data.frame()
-
-worry_matrix_MGH <-
-  worry |>
-  filter(randomized, site == "MGH", !is.na(worry_food)) |>
-  select(starts_with("worry_")) |>
-  # remove "worry_" prefix from column names
-  rename_with(~ str_remove_all(., "worry_")) |>
-  mutate(across(everything(), ~ ifelse(. == "Checked", 1, 0))) |>
-  as.data.frame()
-
-```
-
-```{r}
-
-# Capturer CAP sans afficher
-pdf(NULL)
-upset(worry_matrix_CAP,
-  nsets = ncol(worry_matrix_CAP),
-  nintersects = NA,
-  keep.order = TRUE,
-  order.by = "freq",
-  main.bar.color = "dodgerblue1",
-  sets.bar.color = "gray70",
-  set_size.show = TRUE
-)
-grid.edit('arrange', name = 'arrange_CAP')
-vp_CAP <- grid.grab()
-dev.off()
-
-# Capturer MGH sans afficher
-pdf(NULL)
-upset(worry_matrix_MGH,
-  nsets = ncol(worry_matrix_MGH),
-  nintersects = NA,
-  keep.order = TRUE,
-  order.by = "freq",
-  main.bar.color = "coral1",
-  sets.bar.color = "gray70",
-  set_size.show = TRUE
-)
-grid.edit('arrange', name = 'arrange_MGH')
-vp_MGH <- grid.grab()
-dev.off()
-
-# Seul ce plot apparaîtra dans l'output
-dev.new()
-grid.arrange(vp_CAP, vp_MGH, ncol = 2,
-             top = "Worries by site (CAP and MGH)")
-
-```
-
-
-We explore the correlations between the different types of worries using a multiple correspondence analysis (MCA). We can see that all *unchecked* worries are correlated together, and *checked* worries are correlated together by cluster. We see a first cluster of worries with worry about medical bills, education fees, utilities and mortgage, and a second cluster of worries with worry about food, childcare expenses. Worry about rent and worry about student loans are less correlated with the other worries.
-
-```{r}
-
-worry_mca <- 
-  worry |>
-  select(-c("pid", "site")) |>
-  rename_with(~ str_remove(.x, "^worry_")) |>
-  mutate(across(everything(), ~ case_when(
-    .x == "Checked" ~ 1,
-    .x == "Unchecked" ~ 0,
-    TRUE ~ 0
-  )|> as.factor()
-  )
-  )
-   
-res.mca <- FactoMineR::MCA(worry_mca, graph = FALSE)
-
-factoextra::fviz_screeplot(res.mca, addlabels = TRUE)
-
-```
-
-```{r}
-
-factoextra::fviz_mca_var(
-  res.mca,
-  repel = TRUE,
-  ggtheme = theme_minimal(),
-  title = "MCA - Worry variables",
-  col.var = case_when(
-    str_detect(rownames(res.mca$var$coord), "_0") ~ "steelblue",
-    str_detect(rownames(res.mca$var$coord), "_1") ~ "firebrick",
-    TRUE ~ "grey60"  # au cas où il reste autre chose
-  ),
-  labelsize = 4    
-) + 
-  theme(legend.position = "none")
-
-```
-
-
-### Creation of a worry score
-
-We will now create a worry_score variable to summarize the different worries reported by each participant. We attribuate more weight to worry about utilisties, rent and food.
-
-```{r}
-# weights for worry score food, utilities, rent
-w <- 2
-
-worry <- 
-  worry |> 
-  select(-c("worry_none")) |>
-  mutate(
-    across(contains("worry"), ~ case_when(
-      .x == "Checked" ~ 1,
-      .x == "Unchecked" ~ 0,
-      TRUE ~ 0)
-      ), 
-      worry_score = worry_food * w + worry_utilities * w + worry_rent * w + worry_student_loans + worry_education_fees + worry_mortgage + worry_childcare + worry_medical_bills
-    ) 
-
-worry |>
-  ggplot() +
-  aes(x = worry_score, fill = site) +
-  geom_histogram(binwidth = 1) +
-  facet_wrap(. ~ site, scales = "free") +
-  scale_fill_manual(values = c("CAP" = "dodgerblue1", "MGH" = "coral1")) +
-  xlab("Worry score") +
-  ylab("Number of participants") +
-  theme(legend.position = "top")    
-
-```
-
-### Exploration of the relationship between economic worry and food insecurity
-
-Now we explore the relationship between economic worry and food insecurity. We define food insecurity based on these three variables: cut size meals, eat less, and hungry did not eat. We define a participant as food insecure if they answered "Yes" to at least one of these three variables. We then plot the relationship between food insecurity and economic worry (worry_food) for each site.
-
-Some participants report no food insecurity (answer No for cut size meals, eat less, and hungry did not eat) but report worry about food.We also see that the distribution of worry about food is different between sites, with more participants in CAP reporting worry about food compared to MGH.
-
-```{r}
-
-table1_data <- 
-  metadata(mae)$participant_crfs_merged |> 
-  dplyr::left_join(
-    colData(mae) |> as_tibble() |> select(pid, site, arm, randomized, ITT, mITT, PP) |> distinct(), 
-    by = join_by(pid, site)
-    )  |> 
-  filter(randomized) |> 
-  select(pid, site, arm, cut_size_meals, eat_less, hungry_did_not_eat) |> 
-  mutate(
-    food_insecurity = ifelse(
-      cut_size_meals == "Yes" | eat_less == "Yes" | hungry_did_not_eat == "Yes",
-      "Yes",
-      "No"
-    ),
-    food_insecurity = factor(food_insecurity, levels = c("No", "Yes"))
-  ) |> 
-  select(-c(eat_less, cut_size_meals, hungry_did_not_eat))
-
-```
-
-```{r}
-#| fig-height: 4
-#| fig-width: 8
-
-table1_data |> 
-  left_join(
-    worry |> select(pid, worry_food) |> distinct(),
-    by = join_by(pid)
-  ) |> 
-  mutate(worry_food = worry_food |> recode("Checked" = "Yes", "Unchecked" = "No")) |>
-  dplyr::count(site, food_insecurity, worry_food) |> 
-  ggplot() +
-  aes(x = food_insecurity, y = worry_food, fill = n) +
-  geom_tile() +
-  geom_text(aes(label = n)) +
-  facet_wrap(. ~ site, scales = "free") +
-  scale_fill_gradient(low = "white", high = "dodgerblue1") 
-
-```
-
-
-We add the variable to `mae@metadata$calc_vars_pid`
-
-```{r}
-mae@metadata$calc_vars_pid <- 
-  mae@metadata$calc_vars_pid |> 
-  left_join(
-    worry |> select(pid, worry_score) |> distinct(),
-    by = "pid"
-  )
-```
-
-## Food security
-
-We process food security data collected at the screening visit using the six-item short form of the USDA Household Food Security Survey Module (HFSSM) questionnaire. Six questions were asked to assess food security status over the past 12 months. Based on the number of affirmative responses, we classify participants into high/marginal, low, or very low food security categories.
-
-Affirmative responses are defined as follows:
-- Food did not last: "Often true" or "Sometimes true"
-- Not afford balanced meals: "Often true" or "Sometimes true"
-- Cut size meals: "Yes"
-- Often cut size meals: "Almost every month" or "Some months but not every month"
-- Eat less: "Yes"
-- Hungry did not eat: "Yes"
-
-```{r}
-
-food_security <- 
-  mae@metadata$participant_crfs_merged |> 
-  select(pid, site, food_did_not_last, not_afford_balanced_meals, cut_size_meals, often_cut_size_meals, eat_less, hungry_did_not_eat) |> 
-  left_join(
-    mae@colData |> as_tibble() |> 
-      select(pid, randomized) |> 
-      distinct(),
-    by = join_by(pid)
-  ) |> 
-  filter(randomized)
-
-```
-
-```{r}
-
-food_security |>
-  select(pid, site, 
-         food_did_not_last, not_afford_balanced_meals, 
-         cut_size_meals, often_cut_size_meals, 
-         eat_less, hungry_did_not_eat) |>
-  pivot_longer(-c(pid, site), names_to = "question", values_to = "response") |>
-  mutate(
-    question = factor(question, levels = c(
-      "food_did_not_last", "not_afford_balanced_meals",
-      "cut_size_meals", "often_cut_size_meals",
-      "eat_less", "hungry_did_not_eat"
-    ))
-  ) |>
-  ggplot(aes(x = response, fill = site)) +
-  geom_bar(position = "dodge") +
-  facet_wrap(~ question, scales = "free_x", ncol = 2) +
-  scale_fill_manual(values = c("CAP" = "dodgerblue1", "MGH" = "coral1")) +
-  scale_x_discrete(labels = scales::label_wrap(12))
-  labs(x = "", y = "Number of participants", title = "Food security items by site") +
-  theme(
-    legend.position = "top"
-  )
-
-```
-
-```{r}
-
-food_security <- 
-  food_security |>
-  mutate(
-    # HH3: "Often true" or "Sometimes true" = affirmative
-    aff_food_did_not_last = food_did_not_last %in% c("Often true", "Sometimes true"),
-    # HH4: idem
-    aff_not_afford_balanced_meals = not_afford_balanced_meals %in% c("Often true", "Sometimes true"),
-    # AD1: "Yes" = affirmative
-    aff_cut_size_meals = cut_size_meals == "Yes",
-    # AD1a: "Almost every month" or "Some months but not every month" = affirmative
-    # "Only 1 or 2 months" is NOT affirmative for AD1a (AD1 already counted above)
-    aff_often_cut_size_meals = often_cut_size_meals %in% c("Almost every month", "Some months but not every month"),
-    # AD2
-    aff_eat_less = eat_less == "Yes",
-    # AD3
-    aff_hungry_did_not_eat = hungry_did_not_eat == "Yes",
-    # Raw score = sum of 6 affirmatives (max = 6)
-    food_security_score = aff_food_did_not_last + aff_not_afford_balanced_meals +
-                        aff_cut_size_meals + aff_often_cut_size_meals +
-                        aff_eat_less + aff_hungry_did_not_eat,
-    # Categories per USDA guide
-    food_security_cat = case_when(
-      food_security_score <= 1 ~ "High/Marginal",
-      food_security_score <= 4 ~ "Low",
-      TRUE                   ~ "Very low"
-    ) |> factor(levels = c("High/Marginal", "Low", "Very low"))
-  )
-```
-
-```{r}
-
-food_security |>
-  ggplot(aes(x = food_security_score, fill = site)) +
-  geom_bar(position = "dodge") +
-  facet_grid(site ~ food_security_cat, scales = "free") +
-  scale_fill_manual(values = c("CAP" = "dodgerblue1", "MGH" = "coral1")) +
-  scale_x_continuous(breaks = 0:6) +
-  labs(x = "Raw score (0–6)", y = "Number of participants",
-       title = "Food security score by site") +
-  theme(legend.position = "none")
-
-```
-
-We compare the food security score and the worry score
-
-```{r}
-
-food_security |>
-  select(pid, site, food_security_score, food_security_cat) |>
-  left_join(
-    worry |> select(pid, worry_score),
-    by = "pid"
-  ) |>
-  dplyr::count(site, food_security_cat, worry_score) |>
-  ggplot() +
-  aes(x = food_security_cat, y = worry_score, fill = n) +
-  geom_tile() +
-  geom_text(aes(label = n)) +
-  facet_wrap(. ~ site, scales = "free") +
-  scale_fill_gradient(low = "white", high = "dodgerblue1") +
-  labs(x = "Food security category", y = "Worry score", title = "Food security category vs worry score by site") +
-  theme(legend.position = "none")
-
-```
-
-We add the variable to `mae@metadata$calc_vars_pid`
-
-```{r}
-mae@metadata$calc_vars_pid <- 
-  mae@metadata$calc_vars_pid |> 
-  left_join(
-    food_security |> select(pid, food_security_score, food_security_cat) |> distinct(),
-    by = "pid"
-  )
-```
-
-
-## Pre-existing conditions
-
-In CRF5 participants were asked about pre-existing conditions. We explore the distribution of this variable and the different types of pre-existing conditions reported by participants. We also explore the relationship between pre-existing conditions and diagnosis.
-
-```{r}
-
-pre_existing_conditions <- 
-  mae@metadata$participant_crfs_merged |> 
-  select(pid, site, no_pre_existing_condition, diagnosis_agg) |> 
-  left_join(
-    mae@colData |> as_tibble() |> 
-      select(pid, randomized) |> 
-      distinct(),
-    by = join_by(pid)
-  ) |> 
-  filter(randomized)
-
-```
-
-```{r}
-#| fig-height: 7
-
-pre_existing_conditions |> 
-  mutate(
-    diagnosis_agg = case_when(
-      no_pre_existing_condition ~ "No pre-existing condition",
-      TRUE ~ diagnosis_agg
-    ),
-    diagnosis_agg = fct_reorder(
-      diagnosis_agg, 
-      str_count(diagnosis_agg, "&"),
-      .fun = dplyr::first,
-      .desc = TRUE 
-    ),
-    diagnosis_agg = fct_relevel(diagnosis_agg, "No pre-existing condition", after = Inf)
-  ) |>
-  ggplot() +
-  aes(y = diagnosis_agg, fill = site) +
-  geom_bar() +
-  xlab("Number of participants") +
-  ylab("") +
-  scale_fill_manual(
-    name = "Site",
-    values = c("CAP" = "dodgerblue1", "MGH" = "coral1")
-  ) +
-  scale_y_discrete(labels = scales::label_wrap(30)) +
-  theme(legend.position = "top")
-
-```
-
-
-We add the variable to `mae@metadata$calc_vars_pid`
-
-```{r}
-mae@metadata$calc_vars_pid <- 
-  mae@metadata$calc_vars_pid |> 
-  left_join(
-    pre_existing_conditions |> select(pid, no_pre_existing_condition, diagnosis_agg) |> distinct(),
-    by = "pid"
-  )
-```
-
-## Psychological wellbeing - Perceived Stress Scale (PSS)
-
-We are interest in perceived stress of the participants. Questions about their feelings and thoughts during the last month were ask at the screening visit only. Therefore, we consider stress as a time-invariant variable.
-
-The Perceived Stress scale used was developed by Sheldon Cohen and his colleagues in 1983. Nowadays, the PSS is most commonly implemented as the 10-item scale assessing the perceived stress degree based on that individual’s subjective interpretation of their reactions to stressors during a 1 month period.
-
-The PSS-10 scale includes 6 negative items (upset, unable_to_control, nervous_stressed, could_not_cope, outside_your_control, difficulties_piling_up) and 4 positive items (confident, going_your_way, control_irritations, on_top_of_things). Each item is rated on a 5-point Likert scale ranging from 0 (never) to 4 (very often).
-
-
-
-```{r}
-
-negative_items <- c("upset", 
-                  "unable_to_control", 
-                  "nervous_stressed",
-                  "could_not_cope",
-                  "outside_your_control",
-                  "difficulties_piling_up")
-
-positive_items <- c("confident",
-                    "going_your_way",
-                   "control_irritations",
-                   "on_top_of_things") 
-
-stress <- 
-  mae@metadata$participant_crfs_merged |>
-  select(pid, site, all_of(negative_items), all_of(positive_items)) |> 
-  left_join(
-    mae@colData |> as_tibble() |> 
-      select(pid, randomized) |> 
-      distinct(),
-    by = join_by(pid)
-  ) |> 
-  filter(randomized) |> 
-  select(-randomized)
-
-
-
-```
-
-```{r}
-#| fig-height: 10
-#| fig-width: 8
-
-stress |> 
-  filter(!is.na(upset)) |>
-  pivot_longer(
-    cols = c(all_of(negative_items), all_of(positive_items)),
-    names_to = "question",
-    values_to = "answer"
-  ) |> 
-  group_by(site, pid) |> 
-  mutate(total_score = sum(answer |> as.integer())) |>
-  ungroup() |> 
-  arrange(total_score) |> 
-  mutate(
-    pid = pid |> fct_inorder()
-  ) |>
-  ggplot() +
-  aes(y = pid, x = question, fill = answer) +
-  facet_grid(site ~ ., scales = "free_y", space = "free") +
-  geom_tile() +
-  scale_fill_brewer(type = "div", palette = "PRGn") +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    strip.text.y = element_text(angle = 0)
-  )
-
-```
-
-```{r}
-#| eval: false
-
-stress |> 
-  pivot_longer(
-    cols = -c(pid, site),
-    names_to = "item",
-    values_to = "response"
-  ) |>
-  mutate(
-    response = factor(response, levels = c("0 = Never", "1 = Almost never", "2 = Sometimes", "3 = Fairly often", "4 = Very")), 
-    group = case_when(
-      item %in% negative_items ~ "Negative items",
-      item %in% positive_items ~ "Positive items"
-    ) |> factor(), 
-    item = factor(item, levels = c(negative_items, positive_items))
-  ) |>  
-  ggplot() +
-  aes(x = response, fill = group) +
-  geom_bar() +
-  facet_wrap( ~ item, ncol=2) + 
-  scale_fill_manual(values = c("Negative items" = "tomato", "Positive items" = "steelblue")) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-```
-
-
-```{r}
-
-stress |> 
-  pivot_longer(
-    cols = -c(pid, site),
-    names_to = "item",
-    values_to = "response"
-  ) |>
-  mutate(
-    response = factor(response, levels = c("0 = Never", "1 = Almost never", "2 = Sometimes", "3 = Fairly often", "4 = Very")), 
-    group = case_when(
-      item %in% negative_items ~ "Negative items",
-      item %in% positive_items ~ "Positive items"
-    ) |> factor(), 
-    item = factor(item, levels = c(negative_items, positive_items))
-  ) |>  
-  ggplot() +
-  aes(x = response, fill = group) +
-  geom_bar() +
-  facet_grid(item ~ site, scales = "free_y") + 
-  scale_fill_manual(values = c("Negative items" = "tomato", "Positive items" = "steelblue")) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-```
-
-We explore the relationship between the stress items using a PCA and a correlation matrix. For that we first need to convert the responses to numeric values (0, 1, 2, 3, 4) and reverse the scores for the positive items. The reverse-scoring of the four positively worded items (items 4, 5, 7 and 8: `confident`, `going_your_way`, `control_irritations`, `on_top_of_things`) is done by transforming 0 → 4, 1 → 3, 2 → 2, 3 → 1 and 4 → 0. The six negatively worded items (`upset`, `unable_to_control`, `nervous_stressed`, `could_not_cope`, `outside_your_control`, `difficulties_piling_up`) are scored directly. 
-
-```{r}
-
-stress <- 
-  stress |>
-  filter(!is.na(upset)) |>
-  mutate(across(
-    all_of(c(negative_items, positive_items)), 
-    ~ as.integer(str_extract(as.character(.x), "^[0-4]"))
-  )) |>
-  # Inverser les 4 items positifs
-  mutate(across(
-    all_of(positive_items),
-    ~ 4 - .x
-  ))
-
-```
-
-```{r}
-
-pca_stress <- 
-  stress |>
-  select(all_of(c(negative_items, positive_items))) |>
-  prcomp(scale. = TRUE)
-
-fviz_eig(pca_stress, addlabels = TRUE) +
-  labs(title = "PSS-10 — Scree plot")
-
-
-item_groups <- factor(
-  ifelse(c(negative_items, positive_items) %in% positive_items, 
-         "Positive items", 
-         "Negative items")
-)
-
-fviz_pca_var(
-  pca_stress,
-  col.var   = item_groups,
-  palette   = c("Negative items" = "tomato", "Positive items" = "steelblue"),
-  legend.title = "Item type",
-  repel     = TRUE,
-  title     = "PSS-10 — Variable contributions"
-)
-
-
-fviz_pca_ind(
-  pca_stress,
-  geom = "point",
-  habillage = stress$site,
-  palette = c("CAP" = "dodgerblue1", "MGH" = "coral1"),
-  addEllipses = TRUE,
-  title = "PSS-10 — Participants by site"
-)
-
-```
-
-
-
-Now we calculate the PSS-10 score by summing all 10 items, yielding a range of 0 to 40 where higher scores indicate greater perceived stress. Scores of 0–13, 14–26 and 27–40 are interpreted as low, moderate and high stress, respectively (Cohen & Janicki-Deverts, 2012). The PSS-10 comprises two subscales: *Perceived Helplessness* (items 1, 2, 3, 6, 9, 10) reflecting feelings of lack of control, and *Lack of Self-Efficacy* (items 4, 5, 7, 8) reflecting perceived inability to handle problems.
-
-
-
-```{r}
-
-stress <- 
-  stress |> 
-  rowwise() |>
-  mutate(
-    score_helplessness  = sum(c_across(all_of(negative_items))),
-    score_self_efficacy = sum(c_across(all_of(positive_items))),
-    pss_total           = score_helplessness + score_self_efficacy,
-    stress_category     = case_when(
-      pss_total <= 13 ~ "Low",
-      pss_total <= 26 ~ "Moderate",
-      TRUE            ~ "High"
-    ) |> factor(levels = c("Low", "Moderate", "High"))
-  ) |>
-  ungroup()
-
-
-stress |>
-  ggplot(aes(x = pss_total, fill = site)) +
-  geom_histogram(binwidth = 2) +
-  geom_vline(xintercept = c(13, 26), linetype = "dashed", color = "red") +
-  facet_wrap(. ~ site, scales = "free") +
-  scale_fill_manual(values = c("CAP" = "dodgerblue1", "MGH" = "coral1")) +
-  xlab("PSS total score") +
-  ylab("Number of participants") +
-  theme(legend.position = "top")
-
-stress |> 
-  ggplot(aes(x = stress_category, fill = site)) +
-  geom_bar(position = "dodge") +
-  facet_wrap(. ~ site, scales = "free") +
-  scale_fill_manual(values = c("CAP" = "dodgerblue1", "MGH" = "coral1")) +
-  xlab("Stress category") +
-  ylab("Number of participants") +
-  theme(legend.position = "top")
-
-```
-
-
-We add the variable to `mae@metadata$calc_vars_pid`
-
-```{r}
-
-mae@metadata$calc_vars_pid <- 
-  mae@metadata$calc_vars_pid |> 
-  left_join(
-    stress |> select(pid, stress_score = pss_total, stress_category) |> distinct(),
-    by = "pid"
-  )
-
-```
-
-
 # Visit-level variables
 
-We create a new assay in the coldata of the `MultiAssayExperiment` object called `calc_vars_visit` that contains one row per participant and visit. We will add to this assay variables related to visit characteristics, exposures, and outcomes.
+The objective of this section is to create a new table `calc_vars_study_day` in the metadata of the `MultiAssayExperiment` object, containing calculated variables at the participant and study day level. This table is initialized with one row per participant per study day, including the `uid`, `pid`, and `study_day` variables.
+
+Some participants have duplicate study day entries arising from multiple visits occurring on the same calendar day (e.g., a clinic visit and a home visit). These duplicate entries are merged to yield a single row per participant per study day. In cases where data from visits occurring on the same day are discordant, a resolution strategy is applied. For each variable, a decision rule is defined and explicitly described in the corresponding subsection below. In the majority of cases, discordances are resolved according to the worst-case scenario — that is, the value reflecting the most severe or conservative clinical interpretation is retained.
+
+
+```{r}
+
+mae@metadata$calc_vars_study_day <- 
+  mae@colData |> 
+  as_tibble() |> 
+  select(uid, pid, study_day) |> 
+  filter(!is.na(pid), !is.na(study_day)) |>
+  distinct()
+
+```
+
+
+All variables in the `calc_vars_study_day` table are created by merging and transforming variables from the `visits_crfs_merged` table created in the `01c-clinical-CRF-merged-participants-and-visits-table.qmd`. For each variable, we do some descriptive and QC, thene merge the inforation to have one row per participant and study day, and finally we merge the resulting table with the `calc_vars_study_day` table in the metadata of the `MultiAssayExperiment` object by `uid`, `pid` and `study_day`. The code for each variable is provided in the corresponding subsection below.
 
 ```{r}
 
@@ -1609,11 +818,11 @@ sex |>
 
 We created new variables to assess the time since last sexual intercourse (with or without condom) at each study day using the `sex_past_24hours` and `condom_use` variables.
 
-- `day_since_last_sex_w_cndm` : count the number of day since the last self-report (penis-vagina) sexual intercourse with condom. 
+- `sf_day_since_last_sex_w_cndm` : count the number of day since the last self-report (penis-vagina) sexual intercourse with condom. 
 
-- `days_since_last_sex_wo_cndm` : count the number of day since the last self-report (penis-vagina) sexual intercourse without condom. 
+- `sf_days_since_last_sex_wo_cndm` : count the number of day since the last self-report (penis-vagina) sexual intercourse without condom. 
 
-- `days_since_last_sex_unknown_cndm` : count the number of day since the last self-report (penis-vagina) sexual intercourse with unknown condom use. 
+- `sf_days_since_last_sex_unknown_cndm` : count the number of day since the last self-report (penis-vagina) sexual intercourse with unknown condom use. 
 
 :::::: {.callout-note}
 We don't have the information about the last sexual intercourse for the first visits until the first reported sexual intercourse. `day_since_last_sex` remains NA until the first reported sexual intercourse. 
@@ -1637,7 +846,7 @@ sex <-
       TRUE ~ NA_integer_
     ),
     last_sex_day_w_cndm = zoo::na.locf(last_sex_day_w_cndm, na.rm = FALSE), 
-    days_since_last_sex_w_cndm = study_day - last_sex_day_w_cndm,
+    sf_days_since_last_sex_w_cndm = study_day - last_sex_day_w_cndm,
     
     # without condom only
     last_sex_day_wo_cndm = case_when(
@@ -1645,7 +854,7 @@ sex <-
       TRUE ~ NA_integer_
     ),
     last_sex_day_wo_cndm = zoo::na.locf(last_sex_day_wo_cndm, na.rm = FALSE),
-    days_since_last_sex_wo_cndm = study_day - last_sex_day_wo_cndm, 
+    sf_days_since_last_sex_wo_cndm = study_day - last_sex_day_wo_cndm, 
 
     # unknown condom use
     last_sex_day_unknown_cndm = case_when(
@@ -1653,7 +862,7 @@ sex <-
       TRUE ~ NA_integer_
     ),
     last_sex_day_unknown_cndm = zoo::na.locf(last_sex_day_unknown_cndm, na.rm = FALSE),
-    days_since_last_sex_unknown_cndm = study_day - last_sex_day_unknown_cndm
+    sf_days_since_last_sex_unknown_cndm = study_day - last_sex_day_unknown_cndm
   ) |> 
   ungroup() |> 
   select(-c(last_sex_day_wo_cndm, last_sex_day_w_cndm, last_sex_day_unknown_cndm))
@@ -1671,10 +880,10 @@ Numbers and colors represent the number of day since the last sexual intercourse
 sex |> 
   filter(randomized) |>
   ggplot() + 
-  aes(x = visit_code |> as.factor(), y = pid, fill = days_since_last_sex_wo_cndm) +
+  aes(x = visit_code |> as.factor(), y = pid, fill = sf_days_since_last_sex_wo_cndm) +
   geom_tile() +
   facet_grid(site ~ ., scales = "free_y", space = "free") +
-  geom_text(aes(label = days_since_last_sex_wo_cndm), size = 2) + 
+  geom_text(aes(label = sf_days_since_last_sex_wo_cndm), size = 2) + 
   scale_fill_gradient("Day since last sex\n(wo cndm)", low = "#EBFAFE", high =  "lightskyblue4") +
   labs(x = "Visit code", y="") +
   theme(
@@ -1749,12 +958,12 @@ sex |>
   filter(visit_type %in% c("Clinic", "Clinic & Home")) |>
   group_by(pid) |>
   mutate(last_sex_wo_cndm_cat = case_when(
-    is.na(days_since_last_sex_wo_cndm) ~ "Unknown",
-    days_since_last_sex_wo_cndm == 0 ~ "0 day",
-    days_since_last_sex_wo_cndm == 1 ~ "1 day",
-    days_since_last_sex_wo_cndm == 2 ~ "2 days",
-    days_since_last_sex_wo_cndm == 3 ~ "3 days",
-    days_since_last_sex_wo_cndm >= 4 ~ "4+ days",
+    is.na(sf_days_since_last_sex_wo_cndm) ~ "Unknown",
+    sf_days_since_last_sex_wo_cndm == 0 ~ "0 day",
+    sf_days_since_last_sex_wo_cndm == 1 ~ "1 day",
+    sf_days_since_last_sex_wo_cndm == 2 ~ "2 days",
+    sf_days_since_last_sex_wo_cndm == 3 ~ "3 days",
+    sf_days_since_last_sex_wo_cndm >= 4 ~ "4+ days",
     TRUE ~ NA_character_
   )) |>
   ungroup() |>
@@ -1787,12 +996,12 @@ sex |>
   filter(visit_type == "Clinic") |>
   group_by(pid) |>
   mutate(last_sex_wo_cndm_cat = case_when(
-    is.na(days_since_last_sex_wo_cndm) ~ "Unknown",
-    days_since_last_sex_wo_cndm == 0 | days_since_last_sex_unknown_cndm == 0 ~ "0 day",
-    days_since_last_sex_wo_cndm == 1 | days_since_last_sex_unknown_cndm == 1 ~ "1 day",
-    days_since_last_sex_wo_cndm == 2 | days_since_last_sex_unknown_cndm == 2 ~ "2 days",
-    days_since_last_sex_wo_cndm == 3 | days_since_last_sex_unknown_cndm == 3 ~ "3 days",
-    days_since_last_sex_wo_cndm >= 4 | days_since_last_sex_unknown_cndm >= 4 ~ "4+ days",
+    is.na(sf_days_since_last_sex_wo_cndm) ~ "Unknown",
+    sf_days_since_last_sex_wo_cndm == 0 | sf_days_since_last_sex_unknown_cndm == 0 ~ "0 day",
+    sf_days_since_last_sex_wo_cndm == 1 | sf_days_since_last_sex_unknown_cndm == 1 ~ "1 day",
+    sf_days_since_last_sex_wo_cndm == 2 | sf_days_since_last_sex_unknown_cndm == 2 ~ "2 days",
+    sf_days_since_last_sex_wo_cndm == 3 | sf_days_since_last_sex_unknown_cndm == 3 ~ "3 days",
+    sf_days_since_last_sex_wo_cndm >= 4 | sf_days_since_last_sex_unknown_cndm >= 4 ~ "4+ days",
     TRUE ~ NA_character_
   )) |>
   ungroup() |>
@@ -1891,6 +1100,8 @@ sex |>
 ```
 
 ```{r}
+#| fig.height: 10
+#| fig.width: 10
 
 sex |>
   filter(randomized, study_day >= 0) |>
@@ -1904,14 +1115,15 @@ sex |>
 
 ```
 
-We add the summary variables for sexual activity and semen exposure to the `calc_vars_visits` table in the metadata of the `mae` object.
+We add the summary variables for sexual activity and semen exposure to the `calc_vars_study_day` table in the metadata of the `mae` object.
 
 ```{r}
-mae@metadata$calc_vars_visits <- 
-  mae@metadata$calc_vars_visits |> 
+mae@metadata$calc_vars_study_day <- 
+  mae@metadata$calc_vars_study_day |> 
   left_join(
     sex |> 
-      select(pid, study_day, pv_sex_w_semen_exposure,  pv_sex_wo_semen_exposure, other_sex_wo_semen_exp),
+      select(
+        pid, study_day, sex_past_24hours, condom_use, sf_days_since_last_sex_wo_cndm, sf_days_since_last_sex_w_cndm, pv_sex_w_semen_exposure, sf_days_since_last_sex_unknown_cndm, pv_sex_wo_semen_exposure, other_sex_wo_semen_exp),
     by = join_by(pid, study_day)
   )
 ```
@@ -2407,11 +1619,11 @@ bleeding <-
 
 ```
 
-We add the summary variables for sexual activity and semen exposure to the `calc_vars_visits` table in the metadata of the `mae` object.
+We add the summary variables for sexual activity and semen exposure to the `calc_vars_study_day` table in the metadata of the `mae` object.
 
 ```{r}
-mae@metadata$calc_vars_visits <- 
-  mae@metadata$calc_vars_visits |> 
+mae@metadata$calc_vars_study_day <- 
+  mae@metadata$calc_vars_study_day |> 
   left_join(
     bleeding |> 
       select(pid, study_day, vaginal_bleeding),
@@ -2693,11 +1905,11 @@ vaginal_insertions <-
   slice_max(order_by = n_put_in_vagina, with_ties = FALSE)
 ```
 
-We add the summary variables for sexual activity and semen exposure to the `calc_vars_visits` table in the metadata of the `mae` object.
+We add the summary variables for sexual activity and semen exposure to the `calc_vars_study_day` table in the metadata of the `mae` object.
 
 ```{r}
-mae@metadata$calc_vars_visits <- 
-  mae@metadata$calc_vars_visits |> 
+mae@metadata$calc_vars_study_day <- 
+  mae@metadata$calc_vars_study_day |> 
   left_join(
     vaginal_insertions |> 
       select(pid, study_day, n_put_in_vagina),
@@ -3025,6 +2237,9 @@ suppl_antibiotics <-
 
 ```{r}
 
+#| fig.height: 10
+#| fig.width: 10
+
 tmp <- 
   suppl_antibiotics |>
   separate_rows(supplementary_antibiotics, sep = ";\\s*") |>
@@ -3090,11 +2305,11 @@ tmp |>
 
 ```
 
-We add the summary variables for sexual activity and semen exposure to the `calc_vars_visits` table in the metadata of the `mae` object.
+We add the summary variables for sexual activity and semen exposure to the `calc_vars_study_day` table in the metadata of the `mae` object.
 
 ```{r}
-mae@metadata$calc_vars_visits <- 
-  mae@metadata$calc_vars_visits |> 
+mae@metadata$calc_vars_study_day <- 
+  mae@metadata$calc_vars_study_day |> 
   left_join(
     suppl_antibiotics |> 
       select(pid, study_day, supplementary_antibiotics, source_supplementary_antibiotics = source),
