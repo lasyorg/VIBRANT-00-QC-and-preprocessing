@@ -1923,7 +1923,18 @@ Antibiotic use was captured through two CRFs. CRF31 was completed at each clinic
 
 ### CRF 31 - Concomitant medications
 
-CRF31 is not in the `visits_crfs_merged` or `participant_crfs_merged` datasets but in the `crf_data_clean` object.
+CRF31 is not in the `visits_crfs_merged` or `participant_crfs_merged` datasets but in the `crf_data_clean` object because this CRF was in a different format.
+
+Different variables are measured in CRF31 = 
+
+- `medication` : the name of the medication 
+- `route` : the route of administration (e.g., oral, vaginal)
+- `indication` : the reason for taking the medication
+- `frequency` : how often the medication was taken
+- `med_start_relative_date` : the study day when the medication was started, relative to the date of randomization (day 0)
+- `med_stop_relative_date` : the study day when the medication was stopped, relative to the date of randomization (day 0)
+
+Here is the list of all the concomitant medications reported by the participants in CRF31, along with their counts. We only keep randomized participants for this analysis.
 
 ```{r}
 
@@ -1938,18 +1949,74 @@ crf31 <-
     ) |> 
   filter(randomized)
 
+# we create the pid label variable 
+crf31 <- crf31 |> mutate(pid_label = ifelse(!PP, paste("(*) ", pid), pid))
+
 crf31 |> 
   dplyr::count(medication) |> 
   gt::gt(caption = "Concominant medication")
 
 ```
 
+The different route are 
+
+```{r}
+
+crf31 |> 
+  filter(!is.na(route)) |> 
+  dplyr::count(route) |> 
+  mutate(
+    route_description = case_when(
+      route == "IM" ~ "Intramuscular",
+      route == "PO" ~ "Oral",
+      route == "VAG" ~ "Vaginal",
+      route == "TOP" ~ "Topical",
+      route == "IHL" ~ "Inhalation",
+      route == "IV" ~ "Intravenous",
+      route == "SC" ~ "Subcutaneous",
+      route == "REC" ~ "Rectal",
+      TRUE ~ route
+    )
+  ) |> 
+  select(route, route_description, n) |>
+  arrange(desc(n)) |>
+  gt::gt(caption = "Route of administration")
+
+```
+
+And the different frequency are
+
+```{r}
+
+crf31 |> 
+  filter(!is.na(frequency)) |> 
+  dplyr::count(frequency) |>
+  mutate(
+    frequency_description = case_when(
+      frequency == "Stat" ~ "Immediately and only once",
+      frequency == "BID" ~ "Twice a day",
+      frequency == "QD" ~ "Once a day",
+      frequency == "PRN" ~ "As needed",
+      frequency == "QD" ~ "Once a day",
+      frequency == "TID" ~ "Three times a day",
+      frequency == "Nocte" ~ "At night",
+      frequency == "QID" ~ "Four times a day",
+      TRUE ~ frequency
+    )
+  ) |>
+  select(frequency, frequency_description, n) |>
+  arrange(desc(n)) |> 
+  gt::gt(caption = "Frequency of administration")
+
+```
+
+
 Some of those medications are antibiotics, which may have an impact on the vaginal microbiome and thus on the primary outcome. We look at the number of participants who took these antibiotics and when they took them. 
 
 
 ```{r}
 
-antibiotics <- c("METRONIDAZOLE", "FLAGYL", "NITROFURANTOIN", "MACROBID", "AZITHROMYCIN", "PENICILLIN", "AMOXICILLIN", "AUGMENTIN", "CIPROBAY", "CIPROFLOXACIN", "CEFTRIAXONE", "DOXYCYCLINE","FOSFOMYCIN", "BENZANINE", "URIZONE")
+antibiotics <- c("METRONIDAZOLE", "FLAGYL", "NITROFURANTOIN", "MACROBID", "AZITHROMYCIN", "PENICILLIN", "AMOXICILLIN", "AUGMENTIN", "CIPROBAY", "CIPROFLOXACIN", "CEFTRIAXONE", "DOXYCYCLINE","FOSFOMYCIN", "BENZATHINE", "URIZONE")
 
 # crf31 |> 
 #   filter(str_detect(medication, paste(antibiotics, collapse = "|"))) |> 
@@ -1969,15 +2036,35 @@ crf31 |>
 
 ```
 
-*Note : stars represent participants not included in the PP population*
+We create a dictionnary built from distinct combinaition of `medication` and `route` to categorize the antibiotics into different classes. This dictionnary contains the following variables:
+
+- `medication` : the name of the medication
+- `route` : the route of administration (e.g., oral, vaginal)
+- `route_description` : a description of the route of administration
+- `is_abx` : a binary variable indicating whether the medication is an antibiotic or not
+- `abx_compound` : the class of antibiotic compound (e.g., Metronidazole, Penicillins, etc.) or "Non ABX" if the medication is not an antibiotic
+- `abx_cat` 
 
 ```{r}
 
-suppl_antibiotics_crf31 <- 
+dictionnary <- 
   crf31 |> 
-  filter(str_detect(medication, paste(antibiotics, collapse = "|"))) |>
-    mutate(
-    antibiotics_cat = case_when(
+  select(medication, route) |>
+  distinct() |>
+  mutate(
+    route_description = case_when(
+      route == "IM" ~ "Intramuscular",
+      route == "PO" ~ "Oral",
+      route == "VAG" ~ "Vaginal",
+      route == "TOP" ~ "Topical",
+      route == "IHL" ~ "Inhalation",
+      route == "IV" ~ "Intravenous",
+      route == "SC" ~ "Subcutaneous",
+      route == "REC" ~ "Rectal",
+      TRUE ~ route
+    ), 
+    is_abx = str_detect(medication, paste(antibiotics, collapse = "|")), 
+    abx_compound = case_when(
       str_detect(medication, regex("METRONIDAZOLE|FLAGYL", ignore_case = TRUE)) ~ "Metronidazole",
       str_detect(medication, regex("NITROFURANTOIN|MACROBID", ignore_case = TRUE)) ~ "Nitrofurans",
       str_detect(medication, regex("AZITHRO", ignore_case = TRUE)) ~ "Macrolides",
@@ -1985,29 +2072,80 @@ suppl_antibiotics_crf31 <-
       str_detect(medication, regex("CIPROFLOXACIN|CIPROBAY", ignore_case = TRUE)) ~ "Fluoroquinolones",
       str_detect(medication, regex("CEFTRIAXONE", ignore_case = TRUE)) ~ "Cephalosporins",
       str_detect(medication, regex("DOXYCYCLINE", ignore_case = TRUE)) ~ "Tetracyclines",
-      str_detect(medication, regex("FOSFOMYCIN", ignore_case = TRUE)) ~ "Fosfomycin",
+      str_detect(medication, regex("FOSFOMYCIN|URIZONE", ignore_case = TRUE)) ~ "Fosfomycin",
       str_detect(medication, regex("BENZANINE", ignore_case = TRUE)) ~ "Benzanines",
-      str_detect(medication, regex("URIZONE", ignore_case = TRUE)) ~ "Urizone",
-      TRUE ~ "Other_or_non_abx"
+      TRUE ~ "Non ABX"
     ), 
-    med_stop_relative_date = ifelse(is.na(med_stop_relative_date), med_start_relative_date, med_stop_relative_date), 
-    pid_label = ifelse(!PP, paste("(*) ", pid), pid)
-  ) |> 
-    select(pid, medication, indication, med_start_relative_date, med_stop_relative_date, antibiotics_cat, PP, pid_label, site)
+    abx_cat = case_when(
+      is_abx & abx_compound == "Metronidazole" & route == "PO" ~ "oral_mtz", 
+      is_abx & abx_compound == "Metronidazole" & route == "VAG" ~ "vaginal_mtz",
+      is_abx & abx_compound == "Metronidazole" & !(route %in% c("PO", "VAG")) ~ "other_route_mtz",
+      is_abx & abx_compound != "Metronidazole" & route == "PO" ~ "oral_other_abx",
+      is_abx & abx_compound != "Metronidazole" & route == "VAG" ~ "vaginal_other_abx",
+      is_abx & abx_compound != "Metronidazole" & !(route %in% c("PO", "VAG")) ~ "other_route_other_abx",
+      TRUE ~ "Non ABX"
+    )
+  )
+
+dictionnary |> arrange(-is_abx, abx_compound) |> gt()
 
 ```
+
+```{r}
+#| eval: false
+# output in Excel for Caroline
+
+t1 <- dictionnary |> distinct(medication, is_abx) |> arrange(-is_abx, medication)
+t2 <- dictionnary |> distinct(route, route_description) |> arrange(route)
+t3 <- dictionnary |> filter(is_abx) |> distinct(medication, abx_compound) |> arrange(abx_compound, medication)
+t4 <- dictionnary |> filter(is_abx) |> distinct(abx_compound, route_description, abx_cat) |> arrange(abx_compound, route_description)
+
+openxlsx::write.xlsx(
+  list(
+    medication_is_abx      = t1,
+    route_description      = t2,
+    abx_medication_compound = t3,
+    abx_compound_route_cat  = t4
+  ),
+  file = "dictionary_check_caroline.xlsx"
+)
+
+```
+
+
+We only are interest in th esupplementary antibiotics taken during the study period. 
+
+```{r}
+
+suppl_antibiotics_crf31 <- 
+  crf31 |> 
+  select(pid, site, pid_label, med_start_relative_date, med_stop_relative_date, medication, route) |> 
+  left_join(
+    dictionnary |> select(medication, route, is_abx, abx_cat, abx_compound) |> distinct(),
+    by = c("medication", "route")
+  ) |> 
+  filter(is_abx) |>
+  mutate(
+    med_stop_relative_date_modified = ifelse(is.na(med_stop_relative_date), med_start_relative_date, med_stop_relative_date)
+  )
+
+```
+
+*Note : stars represent participants not included in the PP population*
 
 ```{r}
 #| fig.height: 8
 #| fig.width: 8
 
+# by antibiotic compound
+
 suppl_antibiotics_crf31 |> 
   ggplot() +
   aes(
     x    = med_start_relative_date,
-    xend = med_stop_relative_date,
+    xend = med_stop_relative_date_modified,
     y    = pid_label,
-    color = antibiotics_cat
+    color = abx_compound
   ) +
     annotate(
     "rect",
@@ -2018,10 +2156,46 @@ suppl_antibiotics_crf31 |>
   geom_segment(linewidth = 1.2, lineend = "round") +
   geom_point(
     data = suppl_antibiotics_crf31 |> 
-      filter(med_start_relative_date == med_stop_relative_date),
+      filter(med_start_relative_date == med_stop_relative_date_modified, is_abx),
     aes(x = med_start_relative_date),
     size = 1
+  )+
+  facet_grid(site ~ ., scales = "free_y", space = "free_y") +
+  labs(
+    x = "Study day",
+    y = "Participant",
+    color = "Antibiotic",
+    title = "Periods of additional antibiotic use", 
+    caption = "(*) Randomized participants not included in the per-protocol population"
   ) +
+  scale_x_continuous(breaks = seq(0,100, by=7))
+
+
+# by antibiotics cat 
+
+suppl_antibiotics_crf31 |> 
+  filter(is_abx) |>
+  ggplot() +
+  aes(
+    x    = med_start_relative_date,
+    xend = med_stop_relative_date_modified,
+    y    = pid_label,
+    color = abx_cat
+  ) +
+    annotate(
+    "rect",
+    xmin = -Inf, xmax = 35,
+    ymin = -Inf, ymax = Inf,
+    fill = "pink", alpha = 0.2
+  ) + 
+  geom_segment(linewidth = 1.2, lineend = "round", alpha = 0.6) +
+  geom_point(
+    data = suppl_antibiotics_crf31 |> 
+      filter(med_start_relative_date == med_stop_relative_date_modified, is_abx),
+    aes(x = med_start_relative_date),
+    alpha = 0.6,
+    size = 1
+  )+
   facet_grid(site ~ ., scales = "free_y", space = "free_y") +
   labs(
     x = "Study day",
@@ -2034,30 +2208,6 @@ suppl_antibiotics_crf31 |>
 
 ```
 
-We have to re-structure the data to have one row per participant and per study day, with a variable indicating which supplementary antibiotics were taken on that day.If a participant took multiple supplementary antibiotics on the same day, we will concatenate the names of these antibiotics in the same cell, separated by a ";".
-
-
-```{r}
-
-suppl_antibiotics <- 
-  suppl_antibiotics_crf31 |> 
-  #filter(med_start_relative_date <= 35) |> 
-  select(pid, med_start_relative_date, med_stop_relative_date, antibiotics_cat) |> 
-  rowwise() |> 
-  mutate(study_day = list(med_start_relative_date:med_stop_relative_date)) |> 
-  unnest(study_day) |> 
-  select(pid, study_day, supplementary_antibiotics = antibiotics_cat) |> 
-  ungroup() 
-
-suppl_antibiotics <- 
-  suppl_antibiotics |> 
-  group_by(pid, study_day) |>
-  summarise(
-    supplementary_antibiotics = paste(supplementary_antibiotics, collapse = "; "),
-    .groups = "drop"
-  )
-
-```
 
 ### CRF 20 - Antibiotics
 
@@ -2086,16 +2236,24 @@ crf20 |>
 
 ```
 
-We only look at the vaginal/oral antibiotics, yeast medication and probiotics use during the past week.
+We only look at the vaginal/oral antibiotics. 
 
 ```{r}
+#| fig.height: 8
+#| fig.width: 8
+
 
 suppl_antibiotics_crf20 <- 
   crf20 |>
-  filter(str_detect(used_during_past_week, "antibiotic|yeast|probiotic")) |> 
+  filter(str_detect(used_during_past_week, "antibiotic")) |> 
   mutate(
-    used_during_past_week = str_remove(used_during_past_week, "lube_with_sex, "), 
-    pid_label = ifelse(!PP, paste("(*) ", pid), pid)
+    used_during_past_week = 
+      str_remove(used_during_past_week, "lube_with_sex") |> 
+      str_remove("oral_yeast") |> 
+      str_replace_all(",\\s*", ""),
+    pid_label = ifelse(!PP, paste("(*) ", pid), pid), 
+    window_start = study_day - 7,
+    window_end   = study_day
   )
  
 suppl_antibiotics_crf20 |> 
@@ -2103,14 +2261,18 @@ suppl_antibiotics_crf20 |>
   gt::gt(caption = "Antibiotics/probiotics use during the past week, by visit")
 
 suppl_antibiotics_crf20 |> 
-  mutate(
-    used_during_past_week = used_during_past_week |> factor(
-      levels = c("oral_antibiotic", "vaginal_antibiotic", "oral_yeast", "vaginal_yeast", "oral_antibiotic, oral_yeast", "oral_probiotic", "vaginal_probiotic")
-    )
-  ) |> 
   ggplot() +
-  aes(x = study_day, y = pid_label, color = used_during_past_week) +
+  aes(
+    x = study_day, 
+    y = pid_label, 
+    color = used_during_past_week
+    ) +
   geom_point() +
+  geom_segment(
+    aes(x = window_start, xend = window_end, y = pid_label, yend = pid_label), 
+    linewidth = 1.2, lineend = "round", 
+    alpha = 0.4
+  ) +
   annotate(
     "rect",
     xmin = -Inf, xmax = 35,
@@ -2122,12 +2284,7 @@ suppl_antibiotics_crf20 |>
     "Medication use during the past week",
     values = c(
       "oral_antibiotic" = "deeppink", 
-      "vaginal_antibiotic" = "deeppink3", 
-      "oral_yeast" = "orange", 
-      "vaginal_yeast" = "orange4", 
-      "oral_antibiotic, oral_yeast" = "purple", 
-      "oral_probiotic" = "lightblue",
-      "vaginal_probiotic" = "lightblue4"
+      "vaginal_antibiotic" = "orange"
       )
   ) +
    scale_y_discrete(drop = FALSE) +
@@ -2142,180 +2299,121 @@ suppl_antibiotics_crf20 |>
 
 ```
 
-We want to see if some supplementary antibiotics were not reported in CRF31 but were reported in CRF20. We look at a window of 7 days before the study day of the visit where CRF20 was filled. The following table shows the antibiotics use reported in CRF20 and CRF31 for each participant, for each visit of CRF20. The rows are colored in pink when there is no overlap between the two CRFs, i.e. when the participant reported taking antibiotics during the past week in CRF20 but did not report any antibiotic use in CRF31 during the corresponding 7-day window, or vice versa. The rows are colored in darker pink when there is no overlap and when the visit of CRF20 occurred before day 35. This allows us to identify potential discrepancies between the two CRFs that may have an impact on the primary outcome, which is assessed at day 35.
+We combine the information from this CRF with the information from CRF31. The goal is to check if the antibiotics reported in CRF31 overlap with the periods of antibiotic use reported in CRF20, and to identify any discrepancies between the two sources of information. We also want to see if there are any antibiotics reported in CRF20 that are not captured in CRF31.
 
 ```{r}
 
-suppl_antibiotics_crf20 <- 
-  suppl_antibiotics_crf20 |> 
-  mutate(
-    window_start = study_day - 7,
-    window_end   = study_day
-  )
 
-suppl_antibiotics_crf20_crf31 <-
-  suppl_antibiotics_crf20 |> 
-  select(pid, crf20_weekly_visit = visit_code, crf20_start = window_start, crf20_end = window_end, antibiotics_crf20 = used_during_past_week, PP, pid_label) |>
-  left_join(
-    suppl_antibiotics_crf31 |> 
-      select(pid, crf31_start = med_start_relative_date, crf31_end = med_stop_relative_date, antibiotics_crf31 = antibiotics_cat),
-    by = "pid",
-    relationship = "many-to-many"
-  ) |> 
-  mutate(
-    overlap = !is.na(crf31_start) & crf31_start <= crf20_end & crf31_end >= crf20_start
-  ) 
+suppl_antibiotics_crf31_long <- 
+  suppl_antibiotics_crf31 |> 
+  filter(is_abx) |>
+  select(pid, pid_label, site, med_start_relative_date, med_stop_relative_date_modified, is_abx, abx_cat, abx_compound) |> 
+  rowwise() |> 
+  mutate(study_day = list(med_start_relative_date:med_stop_relative_date_modified)) |> 
+  unnest(study_day) |> 
+  select(-med_start_relative_date, -med_stop_relative_date_modified) |> 
+  ungroup() 
 
-suppl_antibiotics_crf20_crf31 |>
-  select(pid_label, crf20_weekly_visit, crf20_start, crf20_end, antibiotics_crf20, crf31_start, crf31_end, antibiotics_crf31, PP, overlap) |>
-  arrange(overlap, is.na(crf31_start), PP) |>  
-  gt() |>
-  tab_style(
-    style = 
-      cell_fill(
-        color = "coral1", alpha = 0.1),
-        locations = cells_body(rows = !overlap)
-  ) |> 
-  tab_style(
-    style = cell_fill(color = "coral1", alpha = 0.3),
-    locations = cells_body(rows = crf20_start <= 35)
-  ) |> 
-    tab_style(
-      style = cell_fill(color = "coral1", alpha = 0.7),
-      locations = cells_body(rows = !overlap & PP & crf20_start <= 35)
-    )
+# suppl_antibiotics_crf31_long <- 
+#   suppl_antibiotics_crf31_long |> 
+#   group_by(pid, pid_label, site, study_day) |>
+#   summarise(
+#     abx_cat = paste(abx_cat, collapse = "; "),
+#     abx_compound = paste(abx_compound, collapse = "; "),
+#     .groups = "drop"
+#   )
 
-```
-
-
-We merged the add the information of CRF20 in the `suppl_antibiotics` dataset, incorporing new rows for the visits where antibiotics were reported in CRF20 but not in CRF31. We also created a variable `antibiotics_source` to indicate whether the information on supplementary antibiotics came from CRF20, CRF31, or both.
-
-```{r}
-
-suppl_antibiotics_crf20 <- 
+suppl_antibiotics_crf20_long <- 
   suppl_antibiotics_crf20 |>
-  # Separate multiple entries ("oral_antibiotic, oral_yeast")
-  separate_rows(used_during_past_week, sep = ",\\s*") |>
-  mutate(
-    is_antibiotic = str_detect(used_during_past_week, "antibiotic")
-  ) |>
+  select(pid, pid_label, site, crf20_start = window_start, crf20_end = window_end, antibiotics_crf20 = used_during_past_week)|>
   rowwise() |>
-  mutate(study_day = list(window_start:window_end)) |>
+  mutate(study_day = list(crf20_start:crf20_end)) |>
   unnest(study_day) |>
-  select(pid, study_day, used_during_past_week, is_antibiotic) |>
-  ungroup()
+  ungroup() |> 
+  select(pid, pid_label, site, study_day, antibiotics_crf20)
 
-suppl_antibiotics_crf20_to_add <-
-  suppl_antibiotics_crf20 |>
-  left_join(
-    suppl_antibiotics |> select(pid, study_day, crf31_med = supplementary_antibiotics),
-    by = c("pid", "study_day")
-  ) |>
-  mutate(
-    already_in_crf31 = !is.na(crf31_med) & is_antibiotic,
-    # Keep if: non-antibiotic (always) OR antibiotic not in CRF31
-    keep = !already_in_crf31
-  ) |>
-  filter(keep) |>
-  select(pid, study_day, supplementary_antibiotics = used_during_past_week)
-
-# combined dataset of supplementary antibiotics from both CRF31 and CRF20
-suppl_antibiotics <- 
-  suppl_antibiotics |>
-  mutate(source = "CRF31") |>
-  bind_rows(
-    suppl_antibiotics_crf20_to_add |> mutate(source = "CRF20")
-  ) |>
-  group_by(pid, study_day) |>
-  summarise(
-    supplementary_antibiotics = paste(supplementary_antibiotics, collapse = "; "),
-    source = paste(unique(source), collapse = " & "),
-    .groups = "drop"
-  )
 
 ```
 
 ```{r}
+#| fig.height: 8
+#| fig.width: 8
 
-#| fig.height: 10
-#| fig.width: 10
+library(ggnewscale)
 
-tmp <- 
-  suppl_antibiotics |>
-  separate_rows(supplementary_antibiotics, sep = ";\\s*") |>
-  arrange(pid, supplementary_antibiotics, study_day) |>
-  group_by(pid, supplementary_antibiotics, source) |>
-  mutate(
-    gap = study_day - lag(study_day, default = dplyr::first(study_day) - 1) > 1,
-    segment_id = cumsum(gap)
-  ) |>
-  group_by(pid, supplementary_antibiotics, source, segment_id) |>
-  summarise(
-    start = min(study_day),
-    end   = max(study_day),
-    .groups = "drop"
-  ) |>
-  left_join(
-    visits_crfs_merged |> select(pid, site, PP) |> distinct(),
-    by = "pid"
-  ) |> 
-  mutate(
-    pid_label = ifelse(!PP, paste("(*) ", pid), pid)
-  )
-
-# Graphe
-tmp |>
-  ggplot() +
-  aes(
-    x     = start,
-    xend  = end,
-    y     = pid_label,
-    color = supplementary_antibiotics,
-    linetype = source
+ggplot() +
+  # CRF31
+  geom_point(
+    data = suppl_antibiotics_crf31_long,
+    aes(x = study_day, y = pid_label, col = abx_cat),
+    alpha = 0.7
   ) +
+  scale_color_manual(
+    name   = "CRF31",
+    values = c(
+      "oral_mtz"       = "pink",
+      "oral_other_abx" = "purple",
+      "vaginal_mtz"    = "blue",
+      "other_route_mtz"      = "darkgreen",
+      "other_route_other_abx"      = "green"
+    )
+  ) +
+  
+  new_scale_color() +  
+  
+  # CRF20
+  geom_point(
+    data  = suppl_antibiotics_crf20_long,
+    aes(x = study_day, y = pid_label, col = antibiotics_crf20),
+    shape = 4,
+    size  = 3,
+    alpha = 0.7
+  ) +
+  scale_color_manual(
+    name   = "CRF20",
+    values = c(
+      "oral_antibiotic"    = "red",
+      "vaginal_antibiotic" = "cyan"
+    )
+  ) +
+  
   annotate(
     "rect",
     xmin = -Inf, xmax = 35,
     ymin = -Inf, ymax = Inf,
     fill = "pink", alpha = 0.2
   ) +
-  geom_segment(linewidth = 1.2, lineend = "round") +
-  geom_point(
-    data = tmp |> filter(start == end),
-    aes(x = start),
-    size = 1
-  ) +
   facet_grid(site ~ ., scales = "free_y", space = "free_y") +
-  scale_linetype_manual(
-    values = c(
-      "CRF31"          = "solid",
-      "CRF20"          = "dotted",
-      "CRF31 & CRF20"  = "solid"
-    )
-  ) +
-  labs(
-    x        = "Study day",
-    y        = "Participant",
-    color    = "Medication",
-    linetype = "Source",
-    title    = "Periods of supplementary medication use",
-    caption  = "(*) Randomized participants not included in the per-protocol population"
-  ) +
-  scale_x_continuous(breaks = seq(0, 100, by = 7))
+  labs(x = "Study day", y = NULL)
 
 ```
 
-We add the summary variables for sexual activity and semen exposure to the `calc_vars_study_day` table in the metadata of the `mae` object.
+### Combining CRF20 and CRF31 information
+
+We combine the information of both CRFs at the study_day level. 
+
+>TODO : harmonized the antibiotic categories between the two CRFs (e.g., oral_antibiotic in CRF20 could be oral_mtz or oral_other_abx in CRF31, etc.).
+>TODO : check if the antibiotics reported in CRF31 overlap with the periods of antibiotic use reported in CRF20, and choose a strategy to handle any discrepancies between the two sources of information. 
+
+We create two variables : `daily_exposure_add_abx` which take the value of `abx_cat` and  `daily_exposure_add_abx_source` which take the value of the source of information (CRF20 or CRF31).
 
 ```{r}
-mae@metadata$calc_vars_study_day <- 
-  mae@metadata$calc_vars_study_day |> 
-  left_join(
-    suppl_antibiotics |> 
-      select(pid, study_day, supplementary_antibiotics, source_supplementary_antibiotics = source),
-    by = join_by(pid, study_day)
+#| eval: false
+suppl_antibiotics_crf20_long <- 
+  suppl_antibiotics_crf20_long |>
+  mutate(
+    abx_cat = case_when(
+      antibiotics_crf20 == "oral_antibiotic" ~ "oral_other_abx",
+      antibiotics_crf20 == "vaginal_antibiotic" ~ "vaginal_other_abx",
+      TRUE ~ "???"
+    )
   )
+
 ```
+
+>TODO : 
+We add the summary variables for supplementary antibiotics to the `calc_vars_study_day` table in the metadata of the `mae` object.
+
 
 
 # Saving the `MultiAssayExperiment` objects

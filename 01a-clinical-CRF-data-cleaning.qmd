@@ -2486,26 +2486,6 @@ crf_raw <-
 
 ```
 
-```{r}
-#| eval: false
-# LV : to remove
-crf14 |> 
-  mutate(
-    vaginal_ph_value = vaginal_ph_value |> as.numeric(),
-    site = ifelse(str_detect(pid, "06810"), "MGH", "CAP")
-  ) |> 
-  ggplot() + 
-  aes(x = vaginal_ph_less_than, y = vaginal_ph_value, col = site) + 
-  geom_boxplot(varwidth = TRUE)
-  #geom_point(alpha = 0.4, size = 0.5, position = position_dodge(width = 0.55))
-# 
-crf14_old |>
-  mutate(vaginal_ph_value = vaginal_ph_value |> as.numeric(), 
-        site = ifelse(str_detect(pid, "06810"), "MGH", "CAP")) |>
-  ggplot() +
-  aes(x=vaginal_ph_greater_than, y = vaginal_ph_value, col = site) +
-  geom_boxplot(varwidth = TRUE)
-```
 
 ```{r}
 crf14 <- crf14 |> select(-any_of(columns_to_remove_for_clean), -vdate)
@@ -2566,6 +2546,23 @@ crf14 <-
     uid, pid, visit_code, dfseq, vdate_fixed, study_day,
     clue_cells, whiff_test, vaginal_discharge, vaginal_ph, amsel_criteria,
     starts_with("nugent_")
+  )
+
+```
+
+The Nugent score is the sum of the score for lactobacillus, gardenella and mobiluncus, so we check that the `nugent_total_score` variable is consistent with the sum of the three other variables. Four entries are not consistent, we flag them in `nugent_flag_inconsistent`.
+
+```{r}
+
+crf14 |> 
+  filter(nugent_total_score !=  nugent_lactobacillus + nugent_gardenella + nugent_mobiluncus) |> 
+  select(pid, visit_code, nugent_total_score, nugent_lactobacillus, nugent_gardenella, nugent_mobiluncus) |>
+  gt()
+
+crf14 <- 
+  crf14 |> 
+  mutate(
+    nugent_flag_inconsistent = (nugent_total_score !=  nugent_lactobacillus + nugent_gardenella + nugent_mobiluncus)
   )
 
 ```
