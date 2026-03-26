@@ -3603,13 +3603,13 @@ For these participants, the remaining doses are coded as “no info”.
 
 **Study product**
 
-For study product exposures, we create two variables, `study_product` and `study_product_PP`, as well as a `comment_studyproduct` variable.
+For study product exposures, we create two variables, `daily_self_reported_adherence_sp` and `daily_self_reported_exposure_sp`, as well as a `comment_studyproduct` variable.
 
 
--   `study_product`: a binary flag indicating whether the participant reported **inserting** the study product on that day. This variable is constructed using data from CRF23 (weekly study product form) and CRF32 (daily diary). We first use the `insert_study_product_time` variable from CRF32 to assign value of 1 when participants reported an insertion time (i.e. another value than "Not applicable" or "None"). We then use the CRF23 to adjust the previous number by reading the comments (e.g. some participants fill the `insert_study_product_time` but comments from CRF32 precise that participants does not take the tablets that day) 
+-   `daily_self_reported_adherence_sp`: a binary flag indicating whether the participant reported **inserting** the study product on that day. This variable is constructed using data from CRF23 (weekly study product form) and CRF32 (daily diary). We first use the `insert_study_product_time` variable from CRF32 to assign value of 1 when participants reported an insertion time (i.e. another value than "Not applicable" or "None"). We then use the CRF23 to adjust the previous number by reading the comments (e.g. some participants fill the `insert_study_product_time` but comments from CRF32 precise that participants does not take the tablets that day) 
 
 
--   `study_product_PP`: a continuous variable ranging from 0 to 1, indicating whether the study product **remained** in the vagina after insertion. Many participants reported that the (fully intact) tablet fell out (e.g., into the toilet bowl) a few hours after insertion.  
+-   `daily_self_reported_exposure_sp`: a continuous variable ranging from 0 to 1, indicating whether the study product **remained** in the vagina after insertion. Many participants reported that the (fully intact) tablet fell out (e.g., into the toilet bowl) a few hours after insertion.  
 
   -   If CRF23 reports the exact days when this happened, the variable is set to 0 for those days.  
   -   If CRF23 reports only the number of tablets that fell out (`n`), the variable is set to the fraction `(N - n) / N`, where `N` is the total number of inserted tablets.
@@ -3691,7 +3691,7 @@ pid_temp <-
 exposures <- 
   exposures |>
   mutate(
-    metronidazole =  case_when(
+    daily_self_reported_exposure_to_mtz =  case_when(
       pid %in% pid_temp & visit_code >= 1001 & visit_code <= 1007 ~ "2",
 
       TRUE ~ NA_character_)
@@ -3724,7 +3724,7 @@ exposures <-
         pid == "068200375" ~ "one tablet disappeared (3 doses one day ?)", 
         pid == "068200378" ~ "take one 1006 morning, 3 tablet return"
       ),
-    metronidazole = 
+    daily_self_reported_exposure_to_mtz = 
     case_when(
       pid %in% pid_ok & visit_code %in% c(1001:1007) ~ "2",
       pid == "068100006" & visit_code == 1002 ~"1", 
@@ -3801,7 +3801,7 @@ exposures <-
       pid == "068200465" & visit_code %in% c(1002:1004) ~"2",
       pid == "068200465" & visit_code %in% c(1001, 1005) ~"1",
       pid == "068200465" & visit_code %in% c(1006:1007) ~ "2",
-      TRUE ~ as.character(metronidazole)
+      TRUE ~ as.character(daily_self_reported_exposure_to_mtz)
       )
   )
 
@@ -3832,7 +3832,7 @@ exposures_studyproduct <-
   crf32_raw |> 
   select(pid, visit_code, insert_study_product_time) |> 
   filter(!(insert_study_product_time %in% c("Not applicable", "Blank"))) |> 
-  mutate(study_product = 1)
+  mutate(daily_self_reported_adherence_sp = 1)
 
 exposures <- 
   exposures |> 
@@ -3846,11 +3846,11 @@ exposures <-
 exposures |> 
   group_by(pid) |> 
   mutate(
-    n_study_product_doses = sum(study_product, na.rm = TRUE),
+    n_study_product_doses = sum(daily_self_reported_adherence_sp, na.rm = TRUE),
   ) |> 
   filter(
     n_study_product_doses != 7, 
-    study_product == 1
+    daily_self_reported_adherence_sp == 1
   )  
 
 # inconsistency between CRF23 and CRF32
@@ -3870,7 +3870,7 @@ inconsistency <-
   exposures |> 
   group_by(pid) |> 
   mutate(
-    n_study_product_doses_crf32 = sum(study_product, na.rm = TRUE),
+    n_study_product_doses_crf32 = sum(daily_self_reported_adherence_sp, na.rm = TRUE),
   ) |> 
   select(pid, n_study_product_doses_crf32) |> 
   distinct() |> 
@@ -3901,7 +3901,7 @@ exposures <-
       TRUE ~ NA_character_
     )
   ) |> 
-  mutate(study_product = case_when(
+  mutate(daily_self_reported_adherence_sp = case_when(
     pid %in% pid_temp & visit_code %in% c(1101:1107) ~ 1,
     pid %in% pid_temp & !(visit_code %in% c(1101:1107)) ~ NA,
 
@@ -3929,13 +3929,13 @@ exposures <-
     pid == "068200356" & visit_code == 1101 ~ 0,
     pid == "068200363" & visit_code == 1104 ~ 0,
     
-    TRUE ~ study_product
+    TRUE ~ daily_self_reported_adherence_sp
   ), 
-  study_product_PP = case_when(
+  daily_self_reported_exposure_sp = case_when(
     pid == "068100036" & visit_code %in% c(1101:1107) ~ 4/7, 
     pid == "068200028" &  visit_code %in% c(1101:1107) ~ 4/7,
     pid == "068200225" & visit_code == 1107 ~ 0, 
-    TRUE ~ study_product
+    TRUE ~ daily_self_reported_adherence_sp
   )
   )
 
@@ -3948,7 +3948,9 @@ exposures <-
 #| fig-width: 12
 
 exposures |>
-  ggplot(aes(y = factor(visit_code), x = factor(pid), color = metronidazole)) +
+  filter(!is.na(daily_self_reported_exposure_to_mtz)) |>
+  mutate(site = ifelse(str_detect(pid, "0681"), "MGH", "CAP")) |>
+  ggplot(aes(x = factor(visit_code), y = factor(pid), color = daily_self_reported_exposure_to_mtz)) +
   geom_point() +
   # scale_color_discrete(na.translate = FALSE) +  
   scale_color_manual(
@@ -3956,9 +3958,10 @@ exposures |>
     values = c("0" = "red", "1" = "orange", "2" = "steelblue2","no info" = "lightblue4"),
     na.translate = FALSE
     ) +
+  facet_grid(site ~ ., scales = "free_y", space = "free") +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), 
         plot.title = element_text(hjust = 0.5)) + 
-  labs(title = "Exposures metronidazole", y = "Visit code", x = "Pid")
+  labs(title = "Exposures metronidazole", x = "Visit code", y = "Pid")
 
 ```
 
@@ -3967,8 +3970,10 @@ exposures |>
 #| fig-width: 12
 
 exposures |>
-  ggplot(aes(y = factor(visit_code), x = factor(pid), color = study_product |> as.factor())) +
+  mutate(site = ifelse(str_detect(pid, "0681"), "MGH", "CAP")) |>
+  ggplot(aes(x = factor(visit_code), y = factor(pid), color = daily_self_reported_adherence_sp |> as.factor())) +
   geom_point() +
+  facet_grid(site ~ ., scales = "free_y", space = "free") +
   scale_color_discrete(na.translate = FALSE) +  
   scale_color_manual(
     "Nb of study product doses", 
@@ -3977,11 +3982,13 @@ exposures |>
     ) +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), 
         plot.title = element_text(hjust = 0.5)) + 
-  labs(title = "Exposures study product (insertion)", y = "Visit code", x = "Pid")
+  labs(title = "Exposures study product (insertion)", x = "Visit code", y = "Pid")
 
 exposures |>
-  ggplot(aes(y = factor(visit_code), x = factor(pid), color = study_product_PP)) +
+  mutate(site = ifelse(str_detect(pid, "0681"), "MGH", "CAP")) |>
+  ggplot(aes(x = factor(visit_code), y = factor(pid), color = daily_self_reported_exposure_sp)) +
   geom_point() +
+  facet_grid(site ~ ., scales = "free_y", space = "free") +
   scale_color_gradient(
     "Nb of study product doses", 
     low = "red", high= "steelblue2",
@@ -3989,7 +3996,7 @@ exposures |>
   ) +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), 
         plot.title = element_text(hjust = 0.5)) + 
-  labs(title = "Exposures study product", y = "Visit code", x = "Pid")
+  labs(title = "Exposures study product", x = "Visit code", y = "Pid")
 
 ```
 

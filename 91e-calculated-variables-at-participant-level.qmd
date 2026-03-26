@@ -135,6 +135,7 @@ education <-
 ```{r}
 #| fig-width: 8
 #| fig-height: 2.5
+
 education|> 
   ggplot() +
   aes(y = edu, fill = randomized) +
@@ -273,7 +274,7 @@ income <-
 # table summarizing proportions of participants in each category by site
 
 income |>
-  group_by(site, income_level) |>
+  group_by(site, randomized, income_level) |>
   summarise(n = n(), .groups = "drop") |>
   group_by(site) |>
   mutate(pct = round(n / sum(n) * 100, 1),
@@ -399,7 +400,7 @@ contraception |>
   ungroup() |>
   mutate(percent = round(n / sum(n) * 100, 1)) |>
   arrange(site, desc(n)) |>
-  gt(caption = "Distribution of contraception methods in the dataset")
+  gt(caption = "Distribution of contraception methods in the dataset\nAll participants (randomized and not randomized)")
 
 ```
 
@@ -663,8 +664,6 @@ worry_matrix_MGH <-
 
 ```{r}
 
-# Capturer CAP sans afficher
-pdf(NULL)
 upset(worry_matrix_CAP,
   nsets = ncol(worry_matrix_CAP),
   nintersects = NA,
@@ -674,12 +673,9 @@ upset(worry_matrix_CAP,
   sets.bar.color = "gray70",
   set_size.show = TRUE
 )
-grid.edit('arrange', name = 'arrange_CAP')
-vp_CAP <- grid.grab()
-dev.off()
 
-# Capturer MGH sans afficher
-pdf(NULL)
+
+
 upset(worry_matrix_MGH,
   nsets = ncol(worry_matrix_MGH),
   nintersects = NA,
@@ -689,19 +685,12 @@ upset(worry_matrix_MGH,
   sets.bar.color = "gray70",
   set_size.show = TRUE
 )
-grid.edit('arrange', name = 'arrange_MGH')
-vp_MGH <- grid.grab()
-dev.off()
 
-# Seul ce plot apparaîtra dans l'output
-dev.new()
-grid.arrange(vp_CAP, vp_MGH, ncol = 2,
-             top = "Worries by site (CAP and MGH)")
 
 ```
 
 
-We explore the correlations between the different types of worries using a multiple correspondence analysis (MCA). We can see that all *unchecked* worries are correlated together, and *checked* worries are correlated together by cluster. We see a first cluster of worries with worry about medical bills, education fees, utilities and mortgage, and a second cluster of worries with worry about food, childcare expenses. Worry about rent and worry about student loans are less correlated with the other worries.
+We explore the correlations between the different types of worries using a multiple correspondence analysis (MCA) on all participants (randomized and not randomized). We can see that all *unchecked* worries are correlated together, and *checked* worries are correlated together by cluster. We see a first cluster of worries with worry about medical bills, education fees, utilities and mortgage, and a second cluster of worries with worry about food, childcare expenses. Worry about rent and worry about student loans are less correlated with the other worries.
 
 ```{r}
 
@@ -763,14 +752,28 @@ worry <-
     ) 
 
 worry |>
+  mutate(
+    fill_var = case_when(
+      randomized == TRUE  & site == "CAP" ~ "CAP randomized",
+      randomized == TRUE  & site == "MGH" ~ "MGH randomized",
+      randomized == FALSE ~ "Not randomized"
+    ) |> factor(levels = c("Not randomized", "CAP randomized", "MGH randomized"))
+  ) |>
   ggplot() +
-  aes(x = worry_score, fill = site) +
+  aes(x = worry_score, fill = fill_var) +
   geom_histogram(binwidth = 1) +
   facet_wrap(. ~ site, scales = "free") +
-  scale_fill_manual(values = c("CAP" = "dodgerblue1", "MGH" = "coral1")) +
+  scale_fill_manual(
+    values = c(
+      "CAP randomized" = "dodgerblue1",
+      "MGH randomized" = "coral1",
+      "Not randomized" = "grey70"
+    ),
+    name = NULL
+  ) +
   xlab("Worry score") +
   ylab("Number of participants") +
-  theme(legend.position = "top")    
+  theme(legend.position = "top")
 
 ```
 
@@ -856,14 +859,15 @@ food_security <-
       select(pid, randomized) |> 
       distinct(),
     by = join_by(pid)
-  ) |> 
-  filter(randomized)
+  ) 
+  #filter(randomized)
 
 ```
 
 ```{r}
 
 food_security |>
+  filter(randomized) |>
   select(pid, site, 
          food_did_not_last, not_afford_balanced_meals, 
          cut_size_meals, often_cut_size_meals, 
@@ -880,8 +884,8 @@ food_security |>
   geom_bar(position = "dodge") +
   facet_wrap(~ question, scales = "free_x", ncol = 2) +
   scale_fill_manual(values = c("CAP" = "dodgerblue1", "MGH" = "coral1")) +
-  scale_x_discrete(labels = scales::label_wrap(12))
-  labs(x = "", y = "Number of participants", title = "Food security items by site") +
+  scale_x_discrete(labels = scales::label_wrap(12)) +
+  labs(x = "", y = "Number of participants", title = "Food security items by site", subtitle = "Randomized participants only") +
   theme(
     legend.position = "top"
   )
@@ -922,10 +926,17 @@ food_security <-
 ```{r}
 
 food_security |>
-  ggplot(aes(x = food_security_score, fill = site)) +
-  geom_bar(position = "dodge") +
+   mutate(
+    fill_var = case_when(
+      randomized == TRUE  & site == "CAP" ~ "CAP randomized",
+      randomized == TRUE  & site == "MGH" ~ "MGH randomized",
+      randomized == FALSE ~ "Not randomized"
+    ) |> factor(levels = c("Not randomized", "CAP randomized", "MGH randomized"))
+  ) |> 
+  ggplot(aes(x = food_security_score, fill = fill_var)) +
+  geom_bar(position = "stack") +
   facet_grid(site ~ food_security_cat, scales = "free") +
-  scale_fill_manual(values = c("CAP" = "dodgerblue1", "MGH" = "coral1")) +
+  scale_fill_manual(values = c("Not randomized" = "grey", "CAP randomized" = "dodgerblue1", "MGH randomized" = "coral1")) +
   scale_x_continuous(breaks = 0:6) +
   labs(x = "Raw score (0–6)", y = "Number of participants",
        title = "Food security score by site") +
@@ -950,7 +961,7 @@ food_security |>
   geom_text(aes(label = n)) +
   facet_wrap(. ~ site, scales = "free") +
   scale_fill_gradient(low = "white", high = "dodgerblue1") +
-  labs(x = "Food security category", y = "Worry score", title = "Food security category vs worry score by site") +
+  labs(x = "Food security category", y = "Worry score", title = "Food security category vs worry score by site", subtitle = "All participants (randomized and not randomized)") +
   theme(legend.position = "none")
 
 ```
@@ -981,8 +992,8 @@ pre_existing_conditions <-
       select(pid, randomized) |> 
       distinct(),
     by = join_by(pid)
-  ) |> 
-  filter(randomized)
+  ) #|> 
+  #filter(randomized)
 
 ```
 
@@ -990,6 +1001,7 @@ pre_existing_conditions <-
 #| fig-height: 7
 
 pre_existing_conditions |> 
+  filter(randomized) |>
   mutate(
     diagnosis_agg = case_when(
       no_pre_existing_condition ~ "No pre-existing condition",
@@ -1006,14 +1018,13 @@ pre_existing_conditions |>
   ggplot() +
   aes(y = diagnosis_agg, fill = site) +
   geom_bar() +
-  xlab("Number of participants") +
-  ylab("") +
+  labs(x = "Number of participants", y = "", title = "Distribution of pre-existing conditions by site", subtitle = "Randomized participants only") +
   scale_fill_manual(
     name = "Site",
     values = c("CAP" = "dodgerblue1", "MGH" = "coral1")
   ) +
-  scale_y_discrete(labels = scales::label_wrap(30)) +
-  theme(legend.position = "top")
+  scale_y_discrete(labels = scales::label_wrap(50)) +
+  theme(legend.position = "right")
 
 ```
 
@@ -1061,9 +1072,9 @@ stress <-
       select(pid, randomized) |> 
       distinct(),
     by = join_by(pid)
-  ) |> 
-  filter(randomized) |> 
-  select(-randomized)
+  ) #|> 
+  #filter(randomized) |> 
+  #select(-randomized)
 
 
 
@@ -1074,6 +1085,7 @@ stress <-
 #| fig-width: 8
 
 stress |> 
+  filter(randomized) |>
   filter(!is.na(upset)) |>
   pivot_longer(
     cols = c(all_of(negative_items), all_of(positive_items)),
@@ -1092,6 +1104,7 @@ stress |>
   facet_grid(site ~ ., scales = "free_y", space = "free") +
   geom_tile() +
   scale_fill_brewer(type = "div", palette = "PRGn") +
+  labs(x = "PSS-10 items", y = "Participants", title = "PSS-10 item responses by site", subtitle = "Randomized participants only") +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1),
     strip.text.y = element_text(angle = 0)
@@ -1103,8 +1116,9 @@ stress |>
 #| eval: false
 
 stress |> 
+  filter(randomized) |>
   pivot_longer(
-    cols = -c(pid, site),
+    cols = -c(pid, site, randomized),
     names_to = "item",
     values_to = "response"
   ) |>
@@ -1120,6 +1134,7 @@ stress |>
   aes(x = response, fill = group) +
   geom_bar() +
   facet_wrap( ~ item, ncol=2) + 
+  labs(x = "Response", y = "Number of participants", title = "PSS-10 item responses", subtitle = "Randomized participants only", fill = "") +
   scale_fill_manual(values = c("Negative items" = "tomato", "Positive items" = "steelblue")) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
@@ -1129,8 +1144,9 @@ stress |>
 ```{r}
 
 stress |> 
+  filter(randomized) |>
   pivot_longer(
-    cols = -c(pid, site),
+    cols = -c(pid, site, randomized),
     names_to = "item",
     values_to = "response"
   ) |>
@@ -1146,12 +1162,13 @@ stress |>
   aes(x = response, fill = group) +
   geom_bar() +
   facet_grid(item ~ site, scales = "free_y") + 
+  labs(x = "Response", y = "Number of participants", title = "PSS-10 item responses by site", subtitle = "Randomized participants only", fill = "") +
   scale_fill_manual(values = c("Negative items" = "tomato", "Positive items" = "steelblue")) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 ```
 
-We explore the relationship between the stress items using a PCA and a correlation matrix. For that we first need to convert the responses to numeric values (0, 1, 2, 3, 4) and reverse the scores for the positive items. The reverse-scoring of the four positively worded items (items 4, 5, 7 and 8: `confident`, `going_your_way`, `control_irritations`, `on_top_of_things`) is done by transforming 0 → 4, 1 → 3, 2 → 2, 3 → 1 and 4 → 0. The six negatively worded items (`upset`, `unable_to_control`, `nervous_stressed`, `could_not_cope`, `outside_your_control`, `difficulties_piling_up`) are scored directly. 
+We explore the relationship between the stress items using a PCA and a correlation matrix (on all participants - randomized and not randomized). For that we first need to convert the responses to numeric values (0, 1, 2, 3, 4) and reverse the scores for the positive items. The reverse-scoring of the four positively worded items (items 4, 5, 7 and 8: `confident`, `going_your_way`, `control_irritations`, `on_top_of_things`) is done by transforming 0 → 4, 1 → 3, 2 → 2, 3 → 1 and 4 → 0. The six negatively worded items (`upset`, `unable_to_control`, `nervous_stressed`, `could_not_cope`, `outside_your_control`, `difficulties_piling_up`) are scored directly. 
 
 ```{r}
 
@@ -1172,9 +1189,12 @@ stress <-
 
 ```{r}
 
-pca_stress <- 
+stress_pca_data <- 
   stress |>
-  select(all_of(c(negative_items, positive_items))) |>
+  drop_na()
+
+pca_stress <- 
+  stress_pca_data |> select(all_of(c(negative_items, positive_items))) |>
   prcomp(scale. = TRUE)
 
 fviz_eig(pca_stress, addlabels = TRUE) +
@@ -1200,7 +1220,7 @@ fviz_pca_var(
 fviz_pca_ind(
   pca_stress,
   geom = "point",
-  habillage = stress$site,
+  habillage = stress_pca_data$site,
   palette = c("CAP" = "dodgerblue1", "MGH" = "coral1"),
   addEllipses = TRUE,
   title = "PSS-10 — Participants by site"
@@ -1233,20 +1253,34 @@ stress <-
 
 
 stress |>
-  ggplot(aes(x = pss_total, fill = site)) +
+  mutate(
+    fill_var = case_when(
+      randomized == TRUE  & site == "CAP" ~ "CAP randomized",
+      randomized == TRUE  & site == "MGH" ~ "MGH randomized",
+      randomized == FALSE ~ "Not randomized"
+    ) |> factor(levels = c("Not randomized", "CAP randomized", "MGH randomized"))
+  ) |>
+  ggplot(aes(x = pss_total, fill = fill_var)) +
   geom_histogram(binwidth = 2) +
   geom_vline(xintercept = c(13, 26), linetype = "dashed", color = "red") +
   facet_wrap(. ~ site, scales = "free") +
-  scale_fill_manual(values = c("CAP" = "dodgerblue1", "MGH" = "coral1")) +
+  scale_fill_manual(values = c("Not randomized" = "gray70", "CAP randomized" = "dodgerblue1", "MGH randomized" = "coral1")) +
   xlab("PSS total score") +
   ylab("Number of participants") +
   theme(legend.position = "top")
 
 stress |> 
-  ggplot(aes(x = stress_category, fill = site)) +
-  geom_bar(position = "dodge") +
+  mutate(
+    fill_var = case_when(
+      randomized == TRUE  & site == "CAP" ~ "CAP randomized",
+      randomized == TRUE  & site == "MGH" ~ "MGH randomized",
+      randomized == FALSE ~ "Not randomized"
+    ) |> factor(levels = c("Not randomized", "CAP randomized", "MGH randomized"))
+  ) |>
+  ggplot(aes(x = stress_category, fill = fill_var)) +
+  geom_bar(position = "stack") +
   facet_wrap(. ~ site, scales = "free") +
-  scale_fill_manual(values = c("CAP" = "dodgerblue1", "MGH" = "coral1")) +
+  scale_fill_manual(values = c("Not randomized" = "gray70", "CAP randomized" = "dodgerblue1", "MGH randomized" = "coral1")) +
   xlab("Stress category") +
   ylab("Number of participants") +
   theme(legend.position = "top")
@@ -1268,19 +1302,67 @@ mae@metadata$calc_vars_pid <-
 ```
 
 
+## Menstrual protection
 
+We explore the different types of menstrual protection used by participants. We explore the distribution of this variable by site and we also explore the combinations of menstrual protection used by participants using an upset plot. We only consider randomized participants for this analysis.
 
-## TODO ? 
+```{r}
 
-## Number of product doses 
+menstrual_protection <- 
+  mae@metadata$participant_crfs_merged |> 
+  select(pid, site, protection_type) |> 
+  left_join(
+    mae@colData |> as_tibble() |> 
+      select(pid, randomized) |> 
+      distinct(),
+    by = join_by(pid)
+  )
 
-We create the variable `n_product_doses` to summarize the number of doses of the study product received by each participant. This variable is calculated based on ....
+menstrual_protection_CAP <- 
+  menstrual_protection |>
+  #filter(protection_type != "") |>
+  filter(site == "CAP") |>
+  filter(randomized) |>
+  mutate(protection_type = strsplit(as.character(protection_type), ", ")) |>
+  unnest(protection_type) |>
+  mutate(value = 1) |>
+  pivot_wider(names_from = protection_type, values_from = value, values_fill = 0) |> 
+  select(-pid, -site) |> 
+  as.data.frame()
 
-## Last dose at week 2 
+upset(menstrual_protection_CAP,
+  nsets = ncol(menstrual_protection_CAP),
+  nintersects = NA,
+  keep.order = TRUE,
+  order.by = "freq",
+  main.bar.color = "dodgerblue1",
+  sets.bar.color = "gray70",
+  set_size.show = TRUE
+)
 
-`last_dose_at_W2` 
+menstrual_protection_MGH <- 
+  menstrual_protection |>
+  #filter(protection_type != "") |>
+  filter(site == "MGH") |>
+  filter(randomized) |>
+  mutate(protection_type = strsplit(as.character(protection_type), ", ")) |>
+  unnest(protection_type) |>
+  mutate(value = 1) |>
+  pivot_wider(names_from = protection_type, values_from = value, values_fill = 0) |> 
+  select(-pid, -site) |> 
+  as.data.frame()
 
-`pid_exposed_by_qPCR`, `n_days_exposed_by_qPCR`, `n_days_exp_dosed`
+upset(menstrual_protection_MGH,
+  nsets = ncol(menstrual_protection_MGH),
+  nintersects = NA,
+  keep.order = TRUE,
+  order.by = "freq",
+  main.bar.color = "coral1",
+  sets.bar.color = "gray70",
+  set_size.show = TRUE
+)
+
+```
 
 
 # Saving the `MultiAssayExperiment` objects

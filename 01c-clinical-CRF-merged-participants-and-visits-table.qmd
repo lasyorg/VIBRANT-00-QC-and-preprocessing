@@ -1294,9 +1294,12 @@ visits_crfs_merged |>
   dplyr::filter(n > 1)
 ```
 
-## New sexual partner
 
 ```{r}
+#| eval: false
+
+## New sexual partner
+
 visits_crfs_merged |> 
   select(pid, visit_code, new_sex_partner)
 ```

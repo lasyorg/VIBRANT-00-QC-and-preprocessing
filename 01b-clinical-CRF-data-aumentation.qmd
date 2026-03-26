@@ -915,7 +915,7 @@ exposures_studyproduct_summary <-
   mutate(pid = pid |> as.character()) |> 
   group_by(pid) |> 
   summarise(
-    n_study_product_doses = sum(as.numeric(study_product), na.rm = TRUE),
+    n_study_product_doses = sum(as.numeric(daily_self_reported_adherence_sp), na.rm = TRUE),
   ) |> 
   mutate(
     n_missed_days = 7 - n_study_product_doses

@@ -58,21 +58,42 @@ rm(mae_files)
 
 ```
 
-# Visit-level variables
 
-The objective of this section is to create a new table `calc_vars_study_day` in the metadata of the `MultiAssayExperiment` object, containing calculated variables at the participant and study day level. This table is initialized with one row per participant per study day, including the `uid`, `pid`, and `study_day` variables.
+The objective of this document is to create a new table `calc_vars_study_day` in the metadata of the `MultiAssayExperiment` object, containing calculated variables at the participant and study day level. 
 
-Some participants have duplicate study day entries arising from multiple visits occurring on the same calendar day (e.g., a clinic visit and a home visit). These duplicate entries are merged to yield a single row per participant per study day. In cases where data from visits occurring on the same day are discordant, a resolution strategy is applied. For each variable, a decision rule is defined and explicitly described in the corresponding subsection below. In the majority of cases, discordances are resolved according to the worst-case scenario — that is, the value reflecting the most severe or conservative clinical interpretation is retained.
+The table is initialized with one row per participant and study day, 
+combining two sources:
+
+- **Days 1–35**: a complete grid (`expand_grid`) covering all participants and all study days from 1 to 35.
+- **Days > 35**: participant-specific study days beyond day 35, appended from the `colData` of the `MAE` object — only days that were actually observed for a given participant are added.
+
+The resulting table is stored in `mae@metadata$calc_vars_study_day` and contains one row per participant and study day.
+
 
 
 ```{r}
 
+# Iinitialize the table with one row per participant and study day until day 35 
+pid <- mae@colData |> as_tibble() |> pull(pid) |> unique()
+study_day <- 1:35
+
+calc_vars_study_day <- 
+  expand_grid(pid, study_day) 
+
+# add the rest of study_day (>35) to the table 
+
+calc_vars_study_day <- 
+  calc_vars_study_day |> 
+  bind_rows(
+    mae@colData |> 
+      as_tibble() |> 
+      select(pid, study_day) |> 
+      filter(!is.na(pid), !is.na(study_day), study_day > 35) |>
+      distinct()
+  )
+
 mae@metadata$calc_vars_study_day <- 
-  mae@colData |> 
-  as_tibble() |> 
-  select(uid, pid, study_day) |> 
-  filter(!is.na(pid), !is.na(study_day)) |>
-  distinct()
+  calc_vars_study_day
 
 ```
 
@@ -252,6 +273,7 @@ sex |>
              ) +
   labs(x = "Condom use", y = "Lubricant use") +
   guides(fill = "none")
+
 ```
 
 We look at the relationship between condom use, sex type and sex. All participants that reported no sex in the past 24 hours reported "Blank" for condom use and "NA" for sex type. Participants that reported having sex in the past 24 hours reported mainly "Never" for condom use and "Vaginal" for sex type.
@@ -279,6 +301,7 @@ sex |>
              ) +
   labs(x = "Condom use", y = "Sex type") +
   guides(fill = "none")
+
 ```
 
 Three participants that reported having sex in the last 24 hours reported "Unknown" for condom use and lubricant use. For two of them, the type of sex was "mounth-vagina".
@@ -302,6 +325,7 @@ At the clinical visits, participants were ask about her sexual behavior in the l
 We first look at the past week sex partner and the condom use. 
 
 ```{r}
+
 sex |> 
   filter(visit_type == "Clinic") |> 
   filter(randomized) |>
@@ -310,6 +334,7 @@ sex |>
   dplyr::count(visit_code, past_week_sex_partner) |> 
   pivot_wider(names_from = past_week_sex_partner, values_from = n, values_fill = 0) |>
   gt(caption = "Past week sex partner by visit")
+
 ```
 
 ```{r}
@@ -354,6 +379,7 @@ sex |>
         x = "Visit code", y = "Participants",
         shape = "Sex past 24h\n(=Sex type)"
     )
+
 ```
 
 ```{r}
@@ -398,6 +424,7 @@ sex |>
         shape = "Past week sexual partner(s)",
         col = "Condom use in the past week"
     )
+
 ```
 
 
@@ -410,7 +437,6 @@ Is it possible that the inconsistencies are due to the fact that the question "D
 ```{r}
 #| fig.height: 8
 #| fig.width: 10
-
 
 sex |> 
   filter(visit_type == "Clinic") |> 
@@ -427,6 +453,7 @@ sex |>
         shape = "Did you have sex in the past 24 hour ?",
         col = "In the past week have you had sex with"
     )
+
 ```
 
 ```{r}
@@ -527,7 +554,6 @@ sex |>
   select(pid, study_day, sex_past_24hours, condom_use, sex_type, psa_results) |>
   arrange(pid, study_day) |>
   gt(caption = "Duplicated (pid, study_day) before harmonisation") 
-
 
 ```
 
@@ -678,6 +704,7 @@ We do the same with the condom use. At the weekly clinical visits, participants 
 #| eval: false
 #| fig-height: 10
 #| fig-width: 10
+
 sex |> 
   filter(!is.na(visit_code)) |> 
   ggplot() + 
@@ -1118,6 +1145,7 @@ sex |>
 We add the summary variables for sexual activity and semen exposure to the `calc_vars_study_day` table in the metadata of the `mae` object.
 
 ```{r}
+
 mae@metadata$calc_vars_study_day <- 
   mae@metadata$calc_vars_study_day |> 
   left_join(
@@ -1126,184 +1154,215 @@ mae@metadata$calc_vars_study_day <-
         pid, study_day, sex_past_24hours, condom_use, sf_days_since_last_sex_wo_cndm, sf_days_since_last_sex_w_cndm, pv_sex_w_semen_exposure, sf_days_since_last_sex_unknown_cndm, pv_sex_wo_semen_exposure, other_sex_wo_semen_exp),
     by = join_by(pid, study_day)
   )
-```
-
-## Metronidazole use
-
-```{r}
-#| eval: false
-
-mtz_crf_raw <- 
-  mae@metadata$crf_data_raw$crf22 |> 
-  left_join(
-    mae@colData |> as_tibble() |> 
-      select(pid, site, randomized) |> 
-      distinct(),
-    by = join_by(pid)
-  )
-
-mtz_crf_raw |> 
-  dplyr::count(dfseq)
-
-
-mtz_crf_raw |> 
-  filter(randomized) |> 
-  dplyr::count(dfseq)
-
-
-mtz_crf_raw |> 
-  filter(randomized) |> 
-  dplyr::filter(dfseq == 1200) 
-
-mtz_crf_raw |> 
-  filter(randomized) |> 
-  dplyr::count(pid) |> 
-  arrange(-n) |> 
-  dplyr::count(n)
-
-mtz_crf_raw |> 
-  group_by(pid) |> 
-  mutate(min_study_day = min(study_day)) |> 
-  ungroup() |> 
-  mutate(pid = pid |> fct_reorder(min_study_day)) |>
-  ggplot() +
-  aes(x = study_day, y = pid, col = dfseq |> as.character()) +
-  geom_point()
-
-mae@metadata$exposures |> 
-  ggplot() +
-  aes(x = study_day, y = pid, col = metronidazole |> factor()) + geom_point() +
-  scale_color_manual(
-    name = "Metronidazole use",
-    na.value = "lightgray",
-    values = c("0" = "red", "1" = "purple", "2" = "blue")
-  ) +
-  geom_point()
-  
 
 ```
 
-## Study product exposure related variables
-
-
-### Number of self-reported study product doses taken
-
+## Metronidazole exposure
 
 ```{r}
-#| eval: false
 
-n_self_reported_doses <- 
-  metadata(mae)$exposures |>
-  group_by(pid) |>
-  summarize(
-    n_product_doses = sum(study_product |> as.integer(), na.rm = TRUE),
-    n_product_doses_PP = sum(study_product_PP, na.rm = TRUE),
-    comments_studyproduct = str_c(comments_studyproduct[!is.na(comments_studyproduct)], collapse = "; "),
-    .groups = "drop"
-  )
-
-
-mae@metadata$calc_vars_pid <- 
-  mae@metadata$calc_vars_pid |> 
-  left_join(n_self_reported_doses, by = join_by(pid))
-
-rm(n_self_reported_doses)
+mtz <- 
+  mae@metadata$exposures |> 
+  select(uid, pid, visit_code, study_day, daily_self_reported_exposure_to_mtz, comments_mtz) |> 
+  #filter(!is.na(daily_self_reported_exposure_to_mtz)) |> 
+  distinct()
 
 ```
 
-
-### Time since last self-reported study product doses at Week 2 in-clinic visit
-
-
-We document the time between the last dose taken prior to the in-person visit at week 2 and the swab collected at that visit. This is relevant because the primary outcome is detection of the LBP strain at the week 2 visit, and the time since last dose may influence the likelihood of detection.
-
-Information on the self-reported time of last study product use comes from `exposures`, while the study day of the week 2 in-person visit is taken from `visits_crfs_merged.`
-
-We define the following categories for the timing of the last study product use:
--   "same day": last dose taken on the same day as the visit (before 6 p.m.)
--   "day before": last dose taken the day before the visit
--   "more than 1 day": last dose taken more than one day before the visit
-
+Metronadizole exposure is alreay calculate in the `01a-clinical-CRF-data-cleaning.qmd` in the `exposures` table of the metadata. This variable is calculated at the `visit_code` level, and study day have not been harmonized in this table. Some participants have a value of `daily_self_reported_exposure_to_mtz` but no study day associated with this value. 
 
 ```{r}
-#| eval: false
 
-study_product <-
-  mae@colData |>
-  as_tibble() |>
-  select(pid, site, randomized, arm, ITT, mITT, PP) |>
-  distinct() |>
-  filter(randomized, mITT) |>
-  left_join(
-    metadata(mae)$exposures |> select(pid, visit_code, study_product),
-    by = "pid"
-  ) |>
-  left_join(
-    metadata(mae)$visits_crfs_merged |> as_tibble() |> select(pid, visit_code, study_day, insert_study_product_time),
-    by = (c("pid", "visit_code"))) |>
-  dplyr::rename(
-    study_day_product = study_day,
-    visit_code_product = visit_code
-  ) 
+mtz |> 
+  filter(!is.na(daily_self_reported_exposure_to_mtz)) |>
+  filter(is.na(study_day)) |> 
+  gt()
 
-# study_day visit 2 in person
-# ! pid 068100026 appear 2 times ! -> removed using filter(!is.na(study_day_visit2))
-visit2_studyday <- 
-  metadata(mae)$visits_crfs_merged |> 
-  as_tibble() |> 
+# mtz |> 
+#   filter(!is.na(study_day)) |> 
+#   dplyr::count(pid, study_day, daily_self_reported_exposure_to_mtz) |> 
+#   filter(n>1) |> 
+#   gt(caption = "Participants with information on metronidazole exposure and study day")
+
+```
+
+The missing study day for those participants occurs at the visit 1001 or 1002, which is the first home visit after the study start. Those participants have no entry in the `visits_crfs_merged` table for those visits, which is why we don't have the study day for those visits in the `exposures` table.
+
+```{r}
+
+pid_tmp <- mtz |> filter(!is.na(daily_self_reported_exposure_to_mtz)) |> filter(is.na(study_day)) |> pull(pid)
+
+mtz |> 
+  filter(pid %in% pid_tmp) |> 
+  filter(visit_code %in% c("1001", "1002", "1003", "1004")) |> 
   select(pid, visit_code, study_day) |> 
   distinct() |> 
-  filter(visit_code == "1200") |> 
-  dplyr::rename(study_day_v2 = study_day) |> 
-  dplyr::filter(!is.na(study_day_v2))
+  arrange(pid, visit_code) |>
+  pivot_wider(names_from = visit_code, values_from = study_day) |>
+  gt(caption = "Visits for participants with missing study day for metronidazole exposure")
 
-  
-study_prod_time <- 
-  study_product |> 
-  left_join(visit2_studyday |> select(-visit_code), by = "pid") |> 
-  filter(arm != "Pl") |> 
-  group_by(pid) |> 
-  filter(study_product == "1") |> 
-  filter(study_day_product <= study_day_v2) |>  # only consider doses taken before v2
-  filter(!((study_day_product == study_day_v2) & (insert_study_product_time %in% c("Late evening (9pm-midnight)", "Evening (6pm-9pm)")))) |> 
-  arrange(study_day_product) |> 
-  slice_tail(n = 1) |>              
-  ungroup() 
+```
 
-# create category 
-time_since_last_dose_week2 <- 
-  study_prod_time |> 
-  mutate(
-    last_dose = 
-      case_when(
-        study_day_product == study_day_v2 ~ "same day", 
-        study_day_product == study_day_v2-1 ~ "day before", 
-        study_day_product < study_day_v2-1~ "more than one day"
-      ), 
-    last_dose_at_W2 = factor(last_dose, levels = c("same day", "day before", "more than one day"))
-  ) |> 
-  select(pid, last_dose_at_W2)
+We will use the `colData` from the `mae` object to impute the missing study day for those participants.  
 
+```{r}
 
-mae@metadata$calc_vars_pid <- 
-  mae@metadata$calc_vars_pid |> 
-  left_join(time_since_last_dose_week2, by = join_by(pid))
+mtz <- 
+  mtz |>
+  filter(!is.na(daily_self_reported_exposure_to_mtz)) |> 
+  select(-study_day) |> 
+  left_join(
+    mae@colData |> as_tibble() |> select(pid, visit_code, study_day) |> distinct(),
+    by = join_by(pid, visit_code)
+  ) 
 
-rm(study_product, visit2_studyday, study_prod_time, time_since_last_dose_week2)
+```
+
+There is no duplicate study day for the metronidazole variable after the imputation.
+
+```{r}
+#| include: false
+
+mtz |> 
+  dplyr::count(pid, study_day) |> 
+  filter(n>1) |> 
+  gt(caption = "Participants with duplicate study day after imputation")
 
 ```
 
 ```{r}
-#| eval: false
 
-mae@metadata$calc_vars_pid |> 
+mtz |> 
+  mutate(site = ifelse(str_detect(pid, "0681"), "MGH", "CAP")) |> 
+  ggplot() +
+  aes(x = study_day, y = pid, fill = daily_self_reported_exposure_to_mtz) +
+  geom_tile() + 
+  facet_grid(site ~ ., scales = "free_y", space = "free") +
+  scale_x_continuous(breaks = seq(0, 10, by = 1)) +
+  scale_fill_manual(
+    name = "Daily self-reported\nmetronidazole exposure",
+    values = c("purple", "steelblue1", "steelblue", "lightgoldenrod1")
+  )
+
+# mtz |> 
+#   filter(daily_self_reported_exposure_to_mtz == "no info") |> 
+#   select(pid, study_day, comments_mtz) |> 
+#   distinct() |> 
+#   gt(caption = "Participants with no information on metronidazole exposure but with comments")
+
+```
+
+Some participants have a value of `daily_self_reported_exposure_to_mtz` equal to "no info". We will set those values to NA since we have no information about their metronidazole exposure.
+
+```{r}
+
+mtz <- 
+  mtz |> 
+  mutate(
+    daily_self_reported_exposure_to_mtz = ifelse(daily_self_reported_exposure_to_mtz == "no info", NA, daily_self_reported_exposure_to_mtz)
+  )
+
+```
+
+We add the variable `daily_self_reported_exposure_to_mtz` and `comments_daily_self_reported_exposure_to_mtz` to the `calc_vars_study_day` table in the metadata of the `mae` object.
+
+```{r}
+
+mae@metadata$calc_vars_study_day <- 
+  mae@metadata$calc_vars_study_day |> 
   left_join(
-    mae@colData |> as_tibble() |> select(pid, arm, mITT) |> distinct(),
-    by = join_by(pid)
-  ) |>
-  filter(mITT) |> 
-  dplyr::count(arm, last_dose_at_W2) |> 
-  gt::gt()
+    mtz |> select(pid, study_day, daily_self_reported_exposure_to_mtz, comments_daily_self_reported_exposure_to_mtz = comments_mtz) |> distinct(),
+    by = join_by(pid, study_day)
+  )
+
+```
+
+## Study product variables
+
+Two study_product variable are available in the `exposures` table of the metadata of the `mae` object :
+
+- `daily_self_reported_adherence_sp` : the self reported  number of study product doses insert by the participant (0 or 1) 
+- `daily_self_reported_exposure_sp` : the self-reported exposure to the study product (between 0 and 1). This variable take nto account the doses that fall out. 
+
+Those variable are collected at the `visit_code` level, the goal of this analyses is to report the study product adherence and exposure at the `study_day` level. 
+
+```{r}
+
+sp <- 
+  mae@metadata$exposures |> 
+  select(uid, pid, visit_code, study_day, daily_self_reported_adherence_sp, daily_self_reported_exposure_sp, comments_studyproduct) |> 
+  #filter(!is.na(daily_self_reported_exposure_to_study_product)) |> 
+  distinct()
+
+```
+
+There is no missing or duplicates study day for the study product variables. 
+
+```{r}
+#| include: false
+sp |> 
+  filter(!is.na(daily_self_reported_adherence_sp)) |>
+  filter(is.na(study_day)) |> 
+  gt()
+
+```
+
+
+```{r}
+#| include: false
+
+sp |> 
+  filter(!is.na(daily_self_reported_exposure_sp)) |>
+  dplyr::count(pid, study_day) |>
+  filter(n>1) |> 
+  gt(caption = "Participants with duplicate study day for study product variables")
+
+```
+
+```{r}
+
+
+sp |> 
+  filter(!is.na(daily_self_reported_adherence_sp)) |>
+  mutate(site = ifelse(str_detect(pid, "0681"), "MGH", "CAP")) |>
+  ggplot() +
+  aes(x = study_day, y = pid, fill = daily_self_reported_adherence_sp |> factor()) +
+  geom_tile() +
+  facet_grid(site ~ ., scales = "free_y", space = "free") + 
+  scale_fill_manual(
+    name = "Daily self-reported\nadherence to study product",
+    values = c("0" = "lightgoldenrod1", "1" = "steelblue")
+  )
+
+```
+```{r}
+
+sp |> 
+  filter(!is.na(daily_self_reported_exposure_sp)) |>
+  mutate(site = ifelse(str_detect(pid, "0681"), "MGH", "CAP")) |>
+  ggplot() +
+  aes(x = study_day, y = pid, fill = daily_self_reported_exposure_sp) +
+  geom_tile() +
+  facet_grid(site ~ ., scales = "free_y", space = "free") + 
+  scale_fill_gradient(
+    name = "Daily self-reported\nexposure to study product",
+    low = "lightgoldenrod1", high = "steelblue", na.value = "grey90"
+  )
+
+```
+
+We add the variable `daily_self_reported_adherence_sp`, `daily_self_reported_exposure_sp` and the `comments_daily_self_reported_exposure_sp` to the `calc_vars_study_day` table in the metadata of the `mae` object.
+
+```{r}
+
+mae@metadata$calc_vars_study_day <- 
+  mae@metadata$calc_vars_study_day |> 
+  left_join(
+    sp |> 
+      filter(!is.na(daily_self_reported_adherence_sp)) |>
+      select(pid, study_day, daily_self_reported_adherence_sp, daily_self_reported_exposure_sp, comments_daily_self_reported_exposure_sp = comments_studyproduct) |> distinct(),
+    by = join_by(pid, study_day)
+  )
 
 ```
 
