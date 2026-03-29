@@ -1046,7 +1046,376 @@ se_sample_and_visit_info_assay <-
   )
 ```
 
+## Creating a sample manifest linking `uid` to sample barcodes
 
+In this section, we create a `sample_manifest` table which links each `uid` (unique identifier of the VIBRANT study, concatenation of study number, study site number, participant screening number, and visit code) to the corresponding biological sample `barcode` (the unique sample ID) for each assay. 
+
+This will be useful to catch any mislabeling of sample and to do cross-assay QC as some assays (metagenomics and 16S amplicon sequencing and qPCR) were performed on the same sample, so they should have the same barcode.
+
+We will also add to this manifest the DNA extraction related data (*e.g.*, extraction library plate nb) as they are shared across sequencing and qPCR assays.
+
+
+```{r}
+
+sample_manifest <- 
+  bind_rows(
+    se_mg |> colData() |> as.data.frame() |> as_tibble() |> 
+      mutate(ext_lib_plate_nb = ext_lib_plate_nb |> as.character()) |> 
+      select(
+        uid, barcode = swab_barcode, 
+             ext_lib_plate_nb, ext_lib_plate_id, ext_lib_position
+        ) |> 
+      mutate(source = "mg", sample_type = "swab"),
+    se_qPRC |> colData() |> as.data.frame() |> as_tibble() |> 
+      select(uid, barcode = vibr_sample_id, ext_lib_plate_nb) |> 
+      mutate(source = "qPCR", sample_type = "swab"),
+    se_daily_qPRC |> colData() |> as.data.frame() |> as_tibble() |> 
+      select(
+        uid, barcode = vibr_sample_id, 
+             ext_lib_plate_nb, pcr_plate_id, pcr_plate_nb, ext_lib_plate_nb
+        ) |>
+      mutate(source = "qPCR_daily", sample_type = "swab"),
+    se_16S_ASV |> colData() |> as.data.frame() |> as_tibble() |> 
+      mutate(ext_lib_plate_nb = ext_lib_plate_nb |> as.character())  |> 
+      select(
+        uid, barcode = sample_id_barcode, 
+        ext_lib_plate_type, ext_lib_plate_nb
+        ) |>
+      mutate(source = "16S_ASV", sample_type = "swab")
+    # TODO: in the Luminex data processing, add the barcode information to the SE,
+    # Same with the flow data (less critical)
+  )
+
+```
+
+
+```{r}
+sample_manifest 
+```
+
+
+### Consistency check: entries without barcodes
+
+Some entries have no barcode:
+
+```{r}
+
+sample_manifest |> 
+  dplyr::count(is.na(barcode), name = "n entries") |> 
+  gt()
+
+```
+
+This is not unexpected as our data also contain data from positive/negative controls.
+
+
+We check that all clinical samples have a barcode:
+
+```{r}
+
+sample_manifest <- 
+  sample_manifest |> 
+  select(-any_of("sample_type")) |> 
+  left_join(
+    mae_coldata |> select(uid, sample_type),
+    by = join_by(uid)
+  )
+
+```
+
+```{r}
+
+sample_manifest |> 
+  dplyr::count(is.na(barcode), sample_type, name = "n entries") |> 
+  gt()
+
+```
+
+There is one clinical sample without barcode, which is problematic:
+
+```{r}
+
+sample_manifest |> 
+  filter(sample_type == "Clinical sample", is.na(barcode)) |> 
+  select(uid, barcode, source)
+
+
+```
+
+We check the barcodes for the "surrounding" `uid`s, which are from the same participant and previous/next visits:
+
+```{r}
+
+sample_manifest |> 
+  filter(str_detect(uid, "068200278_140[1-5]")) |> 
+  arrange(uid, source) |> 
+  select(uid, barcode, source)
+
+```
+
+
+The sample with a missing barcode is a daily swab for which we do not have qPCR data.
+
+Following the barcode order, the expected barcode would be `"2293841"`.
+
+There are however no entries with that barcode.
+
+```{r}
+
+
+sample_manifest |> 
+  filter(barcode == "2293841") |> 
+  select(uid, barcode, source)
+
+
+```
+
+But that `uid` has data in the 16S assay, with compositions that appear to be consistent with that of surrounding visits:
+
+```{r}
+
+
+se_16S[, "068200278_1404"] |> assay("rel_ab") |> head()
+
+
+```
+
+
+```{r}
+
+uids_to_check <- 
+  sample_manifest |> 
+  filter(str_detect(uid, "068200278_140[1-7]")) |> 
+  pull(uid) |> sort() |> unique()
+
+
+```
+
+```{r}
+#| fig-width: 8
+#| fig-height: 2.5
+
+se_16S[, uids_to_check] |>
+  as_tibble() |> 
+  filter(counts > 0, rel_ab > 1/100) |> 
+  ggplot() +
+  aes(y = uid |> fct_rev(), x = rel_ab, fill = .feature) +
+  geom_col() +
+  ylab("") +
+  theme(
+    strip.text.y = element_text(angle = 0),
+    legend.key.size = unit(0.2, "cm")
+  )
+
+```
+
+:::callout-important
+Check with the 16S amplicon data generator what the barcode for that sample is.
+:::
+
+### Consistency check: barcodes with different assignments across assays
+
+```{r}
+
+sample_manifest_summary_by_barcode <- 
+  sample_manifest |> 
+  filter(!is.na(barcode)) |>
+  group_by(barcode) |> 
+  summarize(
+    n = n(), 
+    n_uids = n_distinct(uid),
+    uids = str_c(unique(uid), collapse = ", "),
+    sources = str_c(unique(source), collapse = ", "),
+    sample_types = str_c(unique(sample_type), collapse = ", "),
+    .groups = "drop"
+    ) 
+
+sample_manifest_summary_by_barcode |> 
+  arrange(-n_uids) |> 
+  slice_head(n = 10)
+
+```
+There are 2 barcodes that have been assigned to different `uid`s, which is unexpected and may indicate a mislabeling of samples.
+
+
+#### 2286665
+
+```{r}
+
+sample_manifest |> 
+  filter(str_detect(uid, "068200385_120[2-7]")) |> 
+  arrange(barcode, source) |> 
+  select(barcode, uid, source)
+
+```
+
+```{r}
+
+se_16S[, c("068200385_1204","068200385_1205", "068200385_1206", "068200385_1207")] |>
+  assay("rel_ab") |> head() |> round(4)
+
+```
+The 16S data looks legit and distinct for these two samples... 
+
+:::callout-important
+Check with the 16S amplicon data generator what the barcode for that sample is.
+:::
+
+Until we have figured this out, we set the barcode of sample `068200385_1206` to NA as it is the one that looks more likely to be mislabelled.
+
+```{r}
+sample_manifest <- 
+  sample_manifest |> 
+  mutate(
+    barcode = case_when(
+      uid == "068200385_1206" ~ NA_character_,
+      TRUE ~ barcode
+    )
+  )
+```
+
+
+
+#### 2292179
+
+
+```{r}
+
+sample_manifest |> 
+  filter(barcode == "2292179") |>  
+  arrange(barcode, source) |> 
+  select(barcode, uid, source)
+
+```
+Again it appears to be something unexpected in the 16S amplicon data...
+
+
+```{r}
+
+sample_manifest |> 
+  filter(str_detect(uid, "068200356_130[4-6]|068200439_110[5-7]")) |>  
+  arrange(barcode, source) |> 
+  select(barcode, uid, source)
+
+```
+
+From this data, it looks like the barcode "2292179" should be assigned to "068200439_1107" and not to "068200356_1305".
+
+The barcode of "068200356_1305" should likely be "2292083" or "2292085" to follow the logical sequence in barcode numbers, but these two barcodes do not exist:
+
+```{r}
+
+sample_manifest |> 
+  filter(barcode %in% c("2292083", "2292085")) |>  
+  arrange(barcode, source) |> 
+  select(barcode, uid, source)
+
+```
+
+We check the 16S data just to be sure that, besides a barcode mislabeling, there is no other issue with the data for these two samples:
+
+```{r}
+
+uids_to_check <- 
+  sample_manifest |> 
+  filter(str_detect(uid, "068200356_130[4-6]|068200439_110[5-7]")) |> 
+  pull(uid) |> sort() |> unique()
+
+se_16S[, uids_to_check] |>
+  assay("rel_ab") |> head() |> round(4)
+
+```
+
+```{r}
+#| fig-width: 8
+#| fig-height: 2.5
+
+se_16S[, uids_to_check] |>
+  as_tibble() |> 
+  filter(counts > 0, rel_ab > 1/100) |> 
+  ggplot() +
+  facet_grid(sample_id_barcode ~ ., scales = "free", space = "free") +
+  aes(y = uid, x = rel_ab, fill = .feature) +
+  geom_col() +
+  ylab("") +
+  theme(
+    strip.text.y = element_text(angle = 0),
+    legend.key.size = unit(0.2, "cm")
+  )
+
+```
+
+Fortunately, the `uid` assignments look correct and we can likely consider that the barcode is missing for the `068200356_1305` sample.
+
+:::callout-important
+Check with the 16S amplicon data generator what the barcode for that sample is.
+:::
+
+Until we have figured this out, we set the barcode of sample `068200356_1305` to NA as it is the one that looks more likely to be mislabelled.
+
+```{r}
+
+sample_manifest <- 
+  sample_manifest |> 
+  mutate(
+    barcode = case_when(
+      uid == "068200356_1305" ~ NA_character_,
+      TRUE ~ barcode
+    )
+  )
+```
+
+
+
+
+
+### Consistency check: extraction data
+
+```{r}
+#| eval: false
+
+sample_manifest |> 
+  dplyr::count(ext_lib_plate_nb, ext_lib_plate_id, ext_lib_plate_type, pcr_plate_id, pcr_plate_nb)
+
+
+```
+
+
+We now check that all samples with the same `uid` (and `barcode`) have consistent extraction data across assays.
+
+:::callout
+In progress...
+:::
+
+```{r}
+
+sample_manifest_summary_by_uid <- 
+  sample_manifest |> 
+  filter(!is.na(ext_lib_plate_nb)) |> 
+  group_by(uid) |> 
+  summarize(
+    n = n(), 
+    n_plate_nb = n_distinct(ext_lib_plate_nb),
+    plate_nbs = str_c(unique(ext_lib_plate_nb) |> str_replace_na("NA"), collapse = " | "),
+    n_sources = n_distinct(source),
+    .groups = "drop"
+    ) 
+
+sample_manifest_summary_by_uid |> 
+  arrange(-n_plate_nb) |> 
+  head()
+
+
+sample_manifest_summary_by_uid |> 
+  dplyr::count(n_plate_nb)
+
+```
+
+... to be continued...
+
+:::callout
+Once this is done, update the code for the MAE creation to keep the extraction library plate numbers.
+:::
 
 
 ## Creating the `MultiAssayExperiment` object
@@ -1087,7 +1456,8 @@ mae <-
       crf_data_clean = crf_clean, 
       participant_crfs_merged = participant_crfs_merged,
       visits_crfs_merged = visits_crfs_merged,
-      exposures = exposures
+      exposures = exposures,
+      sample_manifest = sample_manifest |> select(uid, barcode, source_assay = source)
     )
   )
 
