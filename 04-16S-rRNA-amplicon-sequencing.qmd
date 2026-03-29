@@ -1560,6 +1560,9 @@ tmp |>
 
 Relatively good agreement between the replicates; for the longitudinal profiles below, when we have replicates, we'll use the replicate that had the most total reads.
 
+> TODO: check whether some of these samples match those that have been re-extracted (and re-sequenced?)
+
+
 
 ## Longitudinal profiles for randomized participants
 
