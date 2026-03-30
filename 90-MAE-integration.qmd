@@ -1504,6 +1504,9 @@ sample_manifest |>
 
 ```
 
+
+#### Imputing extraction plate numbers for amplicon data (and a few missing values in the metagenomics assay)
+
 Since we didn't have the extraction library plate number for the 16S data, we will use the data from the qPCR assays to fill in the information for the amplicon data.
 
 ```{r}
@@ -1525,44 +1528,207 @@ ext_plate_amplicon <-
   arrange(-n_ext_batches, -n_plate_nb, uid, min_plate_nb) |> 
   slice_head(n = 1) |> 
   ungroup() |> 
-  mutate(
-    ext_lib_plate_id = 
-      str_c(
-        ext_lib_plate_batch, "s plate ", 
-        str_pad(min_plate_nb, width = 2, pad = "0")
-        ),
-    ext_lib_plate_nb = min_plate_nb
-  ) |> 
-  arrange(ext_lib_plate_batch, ext_lib_plate_nb) |> 
-  mutate(ext_lib_plate_id = ext_lib_plate_id |> fct_inorder()) |> 
-  select(uid, ext_lib_plate_batch, ext_lib_plate_nb, ext_lib_plate_id)
+  mutate(ext_lib_plate_nb = min_plate_nb) |> 
+  select(uid, ext_lib_plate_batch, ext_lib_plate_nb)
   
 ```
+
+
+
 
 ```{r}
 
 sample_manifest <- 
   sample_manifest |> 
-  select(uid, barcode, source, sample_type, visit_type, ext_lib_plate_batch, ext_lib_plate_nb) |> 
+  select(
+    uid, barcode, source, sample_type, visit_type, 
+    ext_lib_plate_batch, ext_lib_plate_nb
+    ) |> 
+  select(-any_of(ends_with("_new"))) |> 
   left_join(
     ext_plate_amplicon |> 
       select(
+        uid,
         ext_lib_plate_batch_new = ext_lib_plate_batch, 
-        ext_lib_plate_nb_new = ext_lib_plate_nb,
-        ext_lib_plate_id_new = ext_lib_plate_id
-        ) |> 
-      mutate(source = "16S_ASV")
+        ext_lib_plate_nb_new = ext_lib_plate_nb
+        ),
+    by = join_by(uid)
+  ) 
+
+```
+
+
+```{r}
+
+sample_manifest <- 
+  sample_manifest |> 
+  mutate(
+    ext_lib_plate_batch =
+      ifelse(
+        (source == "16S_ASV") & !is.na(ext_lib_plate_batch_new), 
+        ext_lib_plate_batch_new, ext_lib_plate_batch
+      ),
+    ext_lib_plate_nb_origin = ext_lib_plate_nb,
+    ext_lib_plate_nb = 
+      ifelse(
+        ((source == "16S_ASV") & !is.na(ext_lib_plate_nb_new)) | 
+          ((source == "mg") & is.na(ext_lib_plate_nb)), 
+        ext_lib_plate_nb_new, ext_lib_plate_nb
+      ),
+    ext_lib_plate_id = 
+      ifelse(
+        ext_lib_plate_batch != "???",
+        str_c(
+          ext_lib_plate_batch, "s plate ", 
+          str_pad(ext_lib_plate_nb, width = 2, pad = "0")
+        ),
+        NA_character_
+      ),
+    ext_lib_plate_nb_num = ext_lib_plate_nb |> str_remove(",.*") |> parse_number(),
+    ext_lib_info_source = 
+      case_when(
+        !is.na(ext_lib_plate_nb) & (ext_lib_plate_nb == ext_lib_plate_nb_origin) ~ "colData of source assay",
+        !is.na(ext_lib_plate_nb) ~ "imputed from qPCR or mg",
+        TRUE ~ NA_character_
+      )
+  ) |> 
+  arrange(ext_lib_plate_batch, ext_lib_plate_nb_num) |> 
+  mutate(ext_lib_plate_id = ext_lib_plate_id |> fct_inorder()) 
+  
+```
+
+
+```{r}
+
+sample_manifest <- 
+  sample_manifest |> 
+  select(
+    uid, barcode, source, sample_type, visit_type, 
+    ext_lib_plate_batch, ext_lib_plate_nb, ext_lib_plate_id, ext_lib_info_source
   )
 
+```
+
+```{r}
+sample_manifest |> 
+  dplyr::count(ext_lib_info_source)
 ```
 
 
 
 
 
-:::callout
-Once this is done, update the code for the MAE creation to keep the extraction library plate numbers.
-:::
+
+
+After imputation, there are still a few samples with missing extraction data:
+
+```{r}
+
+sample_manifest |> filter(is.na(ext_lib_plate_id), sample_type == "Clinical sample") 
+
+```
+We impute the plates from these samples from the surrounding samples of the same participant when possible:
+
+```{r} 
+
+
+sample_manifest |> 
+  filter(uid |> str_detect("068200356_130[3-7]")) |> 
+  arrange(uid) |> 
+  select(uid, barcode, ext_lib_plate_nb, ext_lib_plate_id) |> 
+  distinct()
+# 19
+
+sample_manifest |> 
+  filter(uid |> str_detect("068200385_120[3-7]")) |> 
+  arrange(uid) |> 
+  select(uid, barcode, ext_lib_plate_nb, ext_lib_plate_id) |> 
+  distinct()
+# 17
+
+
+sample_manifest |> 
+  filter(uid |> str_detect("068200278_140[2-7]")) |> 
+  arrange(uid) |> 
+  select(uid, barcode, ext_lib_plate_nb, ext_lib_plate_id) |> 
+  distinct()
+
+# 21 or 22
+
+```
+
+```{r}
+#| fig-width: 10
+#| fig-height: 3
+#| eval: false
+
+sample_manifest |> 
+  filter(ext_lib_plate_batch == "Daily swab", sample_type == "Clinical sample") |>
+  select(uid, barcode, ext_lib_plate_nb) |> 
+  distinct() |> 
+  dplyr::count(ext_lib_plate_nb) |> 
+  ggplot() +
+  aes(x = ext_lib_plate_nb, y = n) +
+  geom_label(aes(label = n), size = 3) 
+
+```
+
+
+
+```{r}
+
+sample_manifest <- 
+  sample_manifest |> 
+  mutate(
+    ext_lib_plate_batch =
+      case_when(
+        uid %in% c("068200278_1404", "068200356_1305", "068200385_1205", "068200385_1206")  ~ "Daily swab",
+        TRUE ~ ext_lib_plate_batch
+      ),
+    ext_lib_plate_nb =
+      case_when(
+        uid == "068200278_1404" ~ "21", # not sure...
+        uid == "068200356_1305" ~ "19", # not sure....
+        uid == "068200385_1205" ~ "17",
+        uid == "068200385_1206" ~ "17",
+        TRUE ~ ext_lib_plate_nb
+      ),
+    ext_lib_plate_id =
+      case_when(
+        uid == "068200278_1404" ~ "Daily swabs plate 21" |> factor(levels = levels(ext_lib_plate_id)),
+        uid == "068200356_1305" ~ "Daily swabs plate 19" |> factor(levels = levels(ext_lib_plate_id)),
+        uid == "068200385_1205" ~ "Daily swabs plate 17" |> factor(levels = levels(ext_lib_plate_id)),
+        uid == "068200385_1206" ~ "Daily swabs plate 17" |> factor(levels = levels(ext_lib_plate_id)),
+        TRUE ~ ext_lib_plate_id
+      ),
+    ext_lib_info_source = 
+      case_when(
+        uid %in% c("068200278_1404", "068200356_1305", "068200385_1205", "068200385_1206")  ~ "imputed from surrounding samples of the same participant",
+        TRUE ~ ext_lib_info_source
+      )
+  )
+
+```
+
+
+```{r}
+
+sample_manifest <- 
+  sample_manifest |> 
+  select(
+    uid, barcode, source, 
+    ext_lib_plate_batch, ext_lib_plate_nb, ext_lib_plate_id, ext_lib_info_source
+  ) |> 
+  arrange(source, ext_lib_plate_id, uid)
+
+```
+
+
+
+```{r}
+sample_manifest |> 
+  dplyr::count(ext_lib_info_source)
+```
 
 
 ## Creating the `MultiAssayExperiment` object
@@ -1604,7 +1770,7 @@ mae <-
       participant_crfs_merged = participant_crfs_merged,
       visits_crfs_merged = visits_crfs_merged,
       exposures = exposures,
-      sample_manifest = sample_manifest |> select(uid, barcode, source_assay = source)
+      sample_manifest = sample_manifest |> select(uid, barcode, source_assay = source, starts_with("ext_lib_"))
     )
   )
 
