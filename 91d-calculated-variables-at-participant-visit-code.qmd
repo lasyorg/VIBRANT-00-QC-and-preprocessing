@@ -91,18 +91,18 @@ Since the rationale behind this variable is to assess the number of days since l
 
 ```{r}
 
-tmp <- mae@metadata$calc_vars_study_day$uid |> unique() |> sort()
+tmp <- mae@metadata$calc_vars_study_day |> select(pid, study_day) |> distinct() |> arrange(pid, study_day)
 
 exposure <- 
-  tibble(uid = tmp) |>
+  tibble(tmp) |>
   left_join(
     mae@metadata$exposures |> 
-      select(uid, daily_self_reported_exposed_sp),
-    by = join_by(uid)
+      select(pid, study_day, daily_self_reported_exposure_sp),
+    by = join_by(pid, study_day)
   ) |>
   left_join(
     mae@colData |> as_tibble() |> select(uid, pid, study_day, visit_code, visit_type, site),
-    by = join_by(uid)
+    by = join_by(pid, study_day)
   )
 
 exposure <-
@@ -111,7 +111,7 @@ exposure <-
   group_by(pid) |>
   mutate(
     last_sp_dose_day = case_when(
-      daily_self_reported_exposed_sp > 0 ~ study_day,
+      daily_self_reported_exposure_sp > 0 ~ study_day,
       TRUE ~ NA_integer_
     ),
     last_sp_dose_day = zoo::na.locf(last_sp_dose_day, na.rm = FALSE),
@@ -149,43 +149,48 @@ tmp <- mae@metadata$calc_vars_weekly_visit_code$uid |> unique() |> sort()
 sex <- 
     mae@metadata$calc_vars_study_day |> 
     select(
-        uid, pid, study_day, pv_sex_w_semen_exposure, pv_sex_wo_semen_exposure, other_sex_wo_semen_exp
+       pid, study_day, pv_sex_w_semen_exposure, pv_sex_wo_semen_exposure, other_sex_wo_semen_exp
     )
 
 ```
 
 
 ```{r}
+
 sex <- 
-    sex |>
-    arrange(pid, study_day) |>
-    group_by(pid) |> 
-    mutate(
+  sex |>
+  arrange(pid, study_day) |>
+  group_by(pid) |> 
+  mutate(
     # with condom only
-        last_sex_day_w_semen_exp = case_when(
-        pv_sex_w_semen_exposure > 0 ~ study_day,
-        TRUE ~ NA_integer_
-        ),
-        last_sex_day_w_semen_exp = zoo::na.locf(last_sex_day_w_semen_exp, na.rm = FALSE), 
-        days_since_last_sex_w_semen_exp = study_day - last_sex_day_w_semen_exp,
-        
-        # without condom only
-        last_sex_day_wo_semen_exp = case_when(
-        pv_sex_wo_semen_exposure > 0 ~ study_day,
-        TRUE ~ NA_integer_
-        ),
-        last_sex_day_wo_semen_exp = zoo::na.locf(last_sex_day_wo_semen_exp, na.rm = FALSE),
-        days_since_last_sex_wo_semen_exp = study_day - last_sex_day_wo_semen_exp, 
-        # unknown condom use
-        last_other_sex_day = case_when(
-        other_sex_wo_semen_exp > 0 ~ study_day,
-        TRUE ~ NA_integer_
-        ),
-        last_other_sex_day = zoo::na.locf(last_other_sex_day, na.rm = FALSE),
-        days_since_last_other_sex = study_day - last_other_sex_day
-    ) |> 
-    ungroup() |> 
-    select(-c(last_sex_day_wo_semen_exp, last_sex_day_w_semen_exp, last_other_sex_day))
+    last_sex_day_w_semen_exp = case_when(
+      pv_sex_w_semen_exposure > 0 ~ study_day,
+      TRUE ~ NA_integer_
+    ),
+    last_sex_day_w_semen_exp = zoo::na.locf(last_sex_day_w_semen_exp, na.rm = FALSE), 
+    days_since_last_sex_w_semen_exp = study_day - last_sex_day_w_semen_exp,
+    
+    # without condom only
+    last_sex_day_wo_semen_exp = case_when(
+      pv_sex_wo_semen_exposure > 0 ~ study_day,
+      TRUE ~ NA_integer_
+    ),
+    last_sex_day_wo_semen_exp = zoo::na.locf(last_sex_day_wo_semen_exp, na.rm = FALSE),
+    days_since_last_sex_wo_semen_exp = study_day - last_sex_day_wo_semen_exp, 
+    # unknown condom use
+    last_other_sex_day = case_when(
+      other_sex_wo_semen_exp > 0 ~ study_day,
+      TRUE ~ NA_integer_
+    ),
+    last_other_sex_day = zoo::na.locf(last_other_sex_day, na.rm = FALSE),
+    days_since_last_other_sex = study_day - last_other_sex_day
+  ) |> 
+  ungroup() |> 
+  select(-c(last_sex_day_wo_semen_exp, last_sex_day_w_semen_exp, last_other_sex_day)) |>
+  left_join(
+    mae@colData |> as_tibble() |> select(uid, pid, study_day, visit_code, visit_type, site),
+    by = join_by(pid, study_day)
+  )
 
 ```
 
