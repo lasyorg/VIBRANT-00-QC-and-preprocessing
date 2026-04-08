@@ -2136,12 +2136,15 @@ dictionnary <-
       TRUE ~ "Non ABX"
     ), 
     abx_cat = case_when(
-      is_abx & abx_compound == "Metronidazole" & route == "PO" ~ "oral_mtz", 
-      is_abx & abx_compound == "Metronidazole" & route == "VAG" ~ "vaginal_mtz",
-      is_abx & abx_compound == "Metronidazole" & !(route %in% c("PO", "VAG")) ~ "other_route_mtz",
-      is_abx & abx_compound != "Metronidazole" & route == "PO" ~ "oral_other_abx",
-      is_abx & abx_compound != "Metronidazole" & route == "VAG" ~ "vaginal_other_abx",
-      is_abx & abx_compound != "Metronidazole" & !(route %in% c("PO", "VAG")) ~ "other_route_other_abx",
+      is_abx & abx_compound == "Metronidazole" & route == "PO" ~ "cm_oral_mtz", 
+      is_abx & abx_compound == "Metronidazole" & route == "VAG" ~ "cm_vag_mtz",
+      is_abx & abx_compound == "Metronidazole" & !(route %in% c("PO", "VAG")) ~ "cm_oral_mtz", #other_route_mtz
+      is_abx & abx_compound != "Metronidazole" ~ "cm_other_abx",
+      
+      #is_abx & abx_compound != "Metronidazole" & route == "PO" ~ "oral_other_abx",
+      #is_abx & abx_compound != "Metronidazole" & route == "VAG" ~ "vaginal_other_abx",
+      #is_abx & abx_compound != "Metronidazole" & !(route %in% c("PO", "VAG")) ~ "other_route_other_abx",
+      
       TRUE ~ "Non ABX"
     )
   )
@@ -2157,7 +2160,11 @@ dictionnary |> arrange(-is_abx, abx_compound) |> gt()
 t1 <- dictionnary |> distinct(medication, is_abx) |> arrange(-is_abx, medication)
 t2 <- dictionnary |> distinct(route, route_description) |> arrange(route)
 t3 <- dictionnary |> filter(is_abx) |> distinct(medication, abx_compound) |> arrange(abx_compound, medication)
-t4 <- dictionnary |> filter(is_abx) |> distinct(abx_compound, route_description, abx_cat) |> arrange(abx_compound, route_description)
+t4 <- dictionnary |> filter(is_abx) |> distinct(abx_compound, route_description, abx_cat) |> arrange(abx_compound, route_description) |> mutate(comments = case_when(
+  abx_compound == "Metronidazole" & route_description == "Intramuscular" ~ "Is it ok to categorize intramuscular metronidazole as oral metronidazole (cm_oral_mtz) ?",
+  abx_compound == "Metronidazole" & route_description == "Blank" ~ "Is it ok to categorize metronidazole with missing route as oral metronidazole (cm_oral_mtz) ?",
+  TRUE ~ ""
+))
 
 openxlsx::write.xlsx(
   list(
@@ -2172,7 +2179,7 @@ openxlsx::write.xlsx(
 ```
 
 
-We only are interest in th esupplementary antibiotics taken during the study period. 
+We only are interest in supplementary antibiotics taken during the study period. 
 
 ```{r}
 
