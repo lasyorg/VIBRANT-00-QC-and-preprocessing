@@ -966,13 +966,13 @@ The unblinded and augmented `MAE` object is saved to disk as an `.rds` file that
 
 ```{r}
 
-# saveRDS(
-#   mae, 
-#   str_c(
-#     get_05_output_dir(),  
-#     "mae_full_", today() |> str_remove_all("-"), ".rds"
-#   )
-# )
+saveRDS(
+  mae,
+  str_c(
+    get_05_output_dir(),
+    "mae_full_", today() |> str_remove_all("-"), ".rds"
+  )
+)
 
 ```
 
