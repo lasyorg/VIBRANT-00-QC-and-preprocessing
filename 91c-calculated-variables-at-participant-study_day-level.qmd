@@ -1405,7 +1405,8 @@ All those data are available in the `visits_crfs_merged` table stored in the met
 
 bleeding <- 
   visits_crfs_merged |> 
-  select(uid, pid, visit_code, study_day, visit_type, site, randomized, vaginal_bleeding.crf33, vaginal_bleeding.crf19)
+  select(uid, pid, visit_code, study_day, visit_type, site, randomized, vaginal_bleeding.crf33, vaginal_bleeding.crf19) |>
+  arrange(pid, visit_code)
 
 ```
 
@@ -1558,8 +1559,8 @@ bleeding |>
   scale_color_identity() +
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
-    labs(x = "Visit code", y = "Participants")
-  )
+  ) +
+  labs(x = "Visit code", y = "Participant")
 
 ```
 
@@ -1581,20 +1582,56 @@ bleeding |>
 
 ```
 
-We notice that for several values, there is missing vaginal bleeding but a corresponding study day exists, so for these we will assign the value Blank for the vaginal bleeding.
+```{r}
+
+bleeding |>
+  select(pid, study_day, visit_code, vaginal_bleeding) |>
+  dplyr::count(pid, study_day) |>
+  filter(n > 1) |>
+  left_join(bleeding, by = c("pid", "study_day")) |>
+  group_by(pid, study_day) |>
+  filter(n_distinct(vaginal_bleeding, na.rm = TRUE) > 1) |>
+  ggplot() +
+  aes(x = visit_code, y = pid, fill = vaginal_bleeding) +
+  geom_tile() +
+  geom_text(aes(label = study_day,
+                col = ifelse(vaginal_bleeding == "Heavy", "white", "black")), size = 3) +
+  scale_fill_manual("Vaginal bleeding", 
+                    values =  c("None" = "grey90", "Light" = "pink", "Medium" = "red", "Heavy" = "red4")) +
+  scale_color_identity() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
+  labs(x = "Visit code", y = "Participants", subtitle = "Duplicated (pid, study day) pairs with inconsistent vaginal bleeding values")
+
+```
+
+```{r}
+
+duplicated_bleeding <- 
+  bleeding |>
+  dplyr::count(pid, study_day) |>
+  filter(n > 1) |>
+  left_join(bleeding, by = c("pid", "study_day")) |>
+  group_by(pid, study_day) |>
+  filter(n_distinct(vaginal_bleeding, na.rm = TRUE) > 1) |>
+  ungroup() |>
+  pull(pid) |>
+  unique()
+
+```
+
 
 We will create a confusion matrix to evaluate, when there are duplicates in `study_day`, to check if the values are mostly the same or different.
 
 ```{r}
 
-bleeding <- 
+tmp <- 
   bleeding |>
   group_by(pid, study_day) |>
   filter(n() > 1) |>
   ungroup()
 
 vb_pairs <- 
-  bleeding |>
+  tmp |>
   group_by(pid, study_day) |>
   mutate(dup_id = row_number()) |>
   ungroup() |>
@@ -1629,13 +1666,11 @@ bleeding <-
   group_by(pid, study_day) |>
   mutate(
     vaginal_bleeding = case_when(
-      
       "Heavy" %in% vaginal_bleeding ~ ifelse(vaginal_bleeding == "Heavy", "Heavy", "Excluded"),
       "Medium" %in% vaginal_bleeding ~ ifelse(vaginal_bleeding == "Medium", "Medium", "Excluded"),
       "Light" %in% vaginal_bleeding ~ ifelse(vaginal_bleeding == "Light", "Light", "Excluded"),
       "None" %in% vaginal_bleeding ~ ifelse(vaginal_bleeding == "None", "None", "Excluded"),
       "Blank" %in% vaginal_bleeding ~ ifelse(vaginal_bleeding == "Blank", "Blank", "Excluded"),
-      
       TRUE ~ NA_character_
     ), 
     vaginal_bleeding = if_else(
@@ -1648,11 +1683,17 @@ bleeding <-
 
 
 ```{r}
-#| fig-height: 10
-#| fig-width: 10
+#| eval: false
 
 bleeding |>
+  filter(randomized) |>
   select(pid, study_day, visit_code, vaginal_bleeding) |>
+  filter(pid %in% duplicated_bleeding) |>
+  dplyr::count(pid, study_day) |>
+  filter(n > 1) |>
+  left_join(bleeding, by = c("pid", "study_day")) |>
+  group_by(pid, study_day) |>
+  filter(n_distinct(vaginal_bleeding, na.rm = TRUE) > 1) |>
   ggplot() +
   aes(x = visit_code, y = pid, fill = vaginal_bleeding) +
   geom_tile() +
@@ -1662,9 +1703,9 @@ bleeding |>
                     values =  c("Excluded" = "yellow", "None" = "grey90", "Light" = "pink", "Medium" = "red", "Heavy" = "red4")) +
   scale_color_identity() +
   theme(
-    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
-    labs(x = "Visit code", y = "Participants")
-  )
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
+  ) +
+  labs(x = "Visit code", y = "Participant")
 
 ```
 

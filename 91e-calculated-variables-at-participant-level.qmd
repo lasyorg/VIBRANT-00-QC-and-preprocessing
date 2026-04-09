@@ -321,11 +321,11 @@ mae@metadata$calc_vars_pid <-
 
 We explore the self-reported contraception method variable by first performing an exploratory analysis for weekly responses, checking for missing values and consistency between reported contraception methods.
 
-For this variable, we have available the following informations:
+For this variable, we have available the following information:
 
 * From weekly CRF21:
 
-  - `contraception`: weekly self-reported contraception method (between visits 1000 and 2120). Participants were asked the question: "What are you using for contraception?". Possible responses were categorized into 4 levels: Depo provera, Net-En, Continuous combined oral contraceptives pills (skip placebo), and Other, in which they could specify the method they were using. The "Other" category includes the following methods: Completed 3mo of BC pills, Condoms, Implant (Nexplanon), Injection (Noristerate), IUD, IUD (Kyleena), IUD (Mirena), No sex, None, Not applicable, Tubal ligation or removed tubes, and Vasectomy.
+  - `contraception`: weekly self-reported contraception method (between visits 1000 and 2120). Participants were asked the question: "What are you using for contraception?". Possible responses were categorized into 4 levels: Depo provera, Net-En, Continuous combined oral contraceptives pills (skip placebo), and Other, in which they could specify the method they were using. The "Other" category includes the following methods: Completed 3mo of BC pills, Condoms, Implant (Nexplanon), Injection (Noristerate), IUD, IUD (Kyleena), IUD (Mirena), No sex, None, Not applicable, Tubal ligation or removed tubes, Vasectomy and Nuvaring.
 
   - `contraceptive_missing_doses`: weekly self-reported number of missed contraceptive doses (between visits 1000 and 2120). Participants were asked the question: "How many doses have you missed".
 
@@ -522,9 +522,9 @@ contraception <-
 ```
 
 
-We add a new variable called `contraception_group`, which summarize the information in `contraception` into four categories, namely "Pills", "Injection or implant", "IUD", and "non-hormonal or none", where:
+We add a new variable called `contraception_group`, which summarize the information in `contraception` into four categories, namely "Pills or implant", "Injection or implant", "IUD", and "non-hormonal or none", where:
 
-`pill` : Completed 3mo of BC pills, Continuous combined oral contraceptives pills (skip placebo), Implant (Nexplanon), Vaginal ring (NuvaRing)
+`pills_or_implant` : Completed 3mo of BC pills, Continuous combined oral contraceptives pills (skip placebo), Implant (Nexplanon), Vaginal ring (NuvaRing)
 
 `injection`: Depo provera, Injection (Noristerate)
 
@@ -547,7 +547,7 @@ contraception <-
         "Continuous COC pills",
         "Implant (Nexplanon)", 
         "Nuvaring"
-      ) ~ "pills",
+      ) ~ "pills_or_implant",
       
       contraception %in% c(
         "IUD", "IUD (Kyleena)", "IUD (Mirena)"
@@ -585,7 +585,6 @@ contraception |>
   gt() 
 
 ```
-
 
 
 ### Saving the `contraception` variable
