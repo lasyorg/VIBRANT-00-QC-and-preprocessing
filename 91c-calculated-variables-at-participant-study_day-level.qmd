@@ -64,7 +64,7 @@ The objective of this document is to create a new table `calc_vars_study_day` in
 The table is initialized with one row per participant and study day, 
 combining two sources:
 
-- **Days 1–35**: a complete grid (`expand_grid`) covering all participants and all study days from 1 to 35.
+- **Days 0–35**: a complete grid (`expand_grid`) covering all participants and all study days from 0 to 35.
 - **Days > 35**: participant-specific study days beyond day 35, appended from the `colData` of the `MAE` object — only days that were actually observed for a given participant are added.
 
 The resulting table is stored in `mae@metadata$calc_vars_study_day` and contains one row per participant and study day.
@@ -73,9 +73,9 @@ The resulting table is stored in `mae@metadata$calc_vars_study_day` and contains
 
 ```{r}
 
-# Iinitialize the table with one row per participant and study day until day 35 
-pid <- mae@colData |> as_tibble() |> pull(pid) |> unique()
-study_day <- 1:35
+# Initialize the table with one row per participant and study day until day 35 
+pid <- mae@colData |> as_tibble() |> filter(!is.na(pid)) |>  pull(pid) |> unique()
+study_day <- 0:35
 
 calc_vars_study_day <- 
   expand_grid(pid, study_day) 
@@ -1661,20 +1661,49 @@ Only participant 068200247 has NA values for both vaginal bleeding duplicates on
 
 ```{r}
 
-bleeding <- 
-  bleeding |>
+# bleeding <-
+#   bleeding |>
+#   group_by(pid, study_day) |>
+#   mutate(
+#     vaginal_bleeding = case_when(
+#       "Heavy" %in% vaginal_bleeding ~ ifelse(vaginal_bleeding == "Heavy", "Heavy", "Excluded"),
+#       "Medium" %in% vaginal_bleeding ~ ifelse(vaginal_bleeding == "Medium", "Medium", "Excluded"),
+#       "Light" %in% vaginal_bleeding ~ ifelse(vaginal_bleeding == "Light", "Light", "Excluded"),
+#       "None" %in% vaginal_bleeding ~ ifelse(vaginal_bleeding == "None", "None", "Excluded"),
+#       "Blank" %in% vaginal_bleeding ~ ifelse(vaginal_bleeding == "Blank", "Blank", "Excluded"),
+#       TRUE ~ NA_character_
+#     ),
+#     vaginal_bleeding = if_else(
+#       duplicated(vaginal_bleeding) & !is.na(vaginal_bleeding), "Excluded", vaginal_bleeding
+#     )
+#   ) |>
+#   ungroup()
+
+bleeding <- bleeding |>
   group_by(pid, study_day) |>
   mutate(
     vaginal_bleeding = case_when(
-      "Heavy" %in% vaginal_bleeding ~ ifelse(vaginal_bleeding == "Heavy", "Heavy", "Excluded"),
-      "Medium" %in% vaginal_bleeding ~ ifelse(vaginal_bleeding == "Medium", "Medium", "Excluded"),
-      "Light" %in% vaginal_bleeding ~ ifelse(vaginal_bleeding == "Light", "Light", "Excluded"),
-      "None" %in% vaginal_bleeding ~ ifelse(vaginal_bleeding == "None", "None", "Excluded"),
-      "Blank" %in% vaginal_bleeding ~ ifelse(vaginal_bleeding == "Blank", "Blank", "Excluded"),
+      any(vaginal_bleeding == "Heavy", na.rm = TRUE) ~
+        if_else(vaginal_bleeding == "Heavy", "Heavy", "Excluded"),
+
+      any(vaginal_bleeding == "Medium", na.rm = TRUE) ~
+        if_else(vaginal_bleeding == "Medium", "Medium", "Excluded"),
+
+      any(vaginal_bleeding == "Light", na.rm = TRUE) ~
+        if_else(vaginal_bleeding == "Light", "Light", "Excluded"),
+
+      any(vaginal_bleeding == "None", na.rm = TRUE) ~
+        if_else(vaginal_bleeding == "None", "None", "Excluded"),
+
+      any(vaginal_bleeding == "Blank", na.rm = TRUE) ~
+        if_else(vaginal_bleeding == "Blank", "Blank", "Excluded"),
+
       TRUE ~ NA_character_
-    ), 
+    ),
     vaginal_bleeding = if_else(
-      duplicated(vaginal_bleeding) & !is.na(vaginal_bleeding), "Excluded", vaginal_bleeding
+      !is.na(vaginal_bleeding) & duplicated(vaginal_bleeding),
+      "Excluded",
+      vaginal_bleeding
     )
   ) |>
   ungroup()

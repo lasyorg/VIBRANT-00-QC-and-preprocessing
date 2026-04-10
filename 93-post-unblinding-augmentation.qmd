@@ -856,7 +856,7 @@ mae@metadata$calc_vars_study_day |>
          daily_exposure_to_placebo = case_when(
             arm == "Pl" ~ daily_self_reported_exposure_sp,
             arm == "LC106-3" ~ daily_self_reported_exposure_sp * dosing_days_placebo,
-            TRUE ~ 0
+            TRUE ~ NA
          ))
 ```
 
