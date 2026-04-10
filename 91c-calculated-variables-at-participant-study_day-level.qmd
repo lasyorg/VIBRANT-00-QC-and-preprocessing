@@ -64,7 +64,7 @@ The objective of this document is to create a new table `calc_vars_study_day` in
 The table is initialized with one row per participant and study day, 
 combining two sources:
 
-- **Days 1–35**: a complete grid (`expand_grid`) covering all participants and all study days from 1 to 35.
+- **Days 0–35**: a complete grid (`expand_grid`) covering all participants and all study days from 0 to 35.
 - **Days > 35**: participant-specific study days beyond day 35, appended from the `colData` of the `MAE` object — only days that were actually observed for a given participant are added.
 
 The resulting table is stored in `mae@metadata$calc_vars_study_day` and contains one row per participant and study day.
@@ -75,7 +75,7 @@ The resulting table is stored in `mae@metadata$calc_vars_study_day` and contains
 
 # Initialize the table with one row per participant and study day until day 35 
 pid <- mae@colData |> as_tibble() |> filter(!is.na(pid)) |>  pull(pid) |> unique()
-study_day <- 1:35
+study_day <- 0:35
 
 calc_vars_study_day <- 
   expand_grid(pid, study_day) 
