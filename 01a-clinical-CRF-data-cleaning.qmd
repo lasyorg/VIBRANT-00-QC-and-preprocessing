@@ -513,7 +513,7 @@ all_visit_dates |>
 Some general rules: 
 
 - we do not fix the dates of Adverse events or Protocol deviations - these dates are expected to be different;
-- we do not fix the dates when we do not have a visit code (`dfseq`)
+- we do not fix the dates from CRFs with no visit code (`dfseq`)
 - when there were only 2 dates, we manually check which one was likely wrong and fix accordingly;
 - we further manually review all dates and note any discrepancies.
 
@@ -524,6 +524,7 @@ Some general rules:
 # 068200397 it's crf 16 date that is likely wrong (not crf 35)
 # 068200281 their dates are fine (except for crf 32 for v 1400, but entry needs to be removed)
 # 068200407 visit code for crf 45 (PSA) is likely wrong (but the date is correct), it should be 1500 instead of 1300
+# 068200150 date for visit code 1302 is likely wrong (by 1 day), it should be JUN 2 and not JUN 3
 
 
 all_visit_dates <- 
@@ -534,6 +535,7 @@ all_visit_dates <-
         # manual fixes
         (pid == "068100010") & (crf_nb %in% c(16, 35)) & (dfseq == 1300) ~ as.Date("2024-04-22"),
         (pid == "068200397") & (crf_nb %in% c(16, 35)) & (dfseq == 1900) ~ as.Date("2024-12-18"),
+        (pid == "068200150") & (crf_nb %in% c(32)) & (dfseq == 1302) ~ as.Date("2024-06-02"),
         new_flag & (pid == "068200281") ~ vdate_fixed, # this is likely correct
         new_flag & (pid == "068200407") & (crf_nb == 45) & (dfseq == 1300) ~ vdate_fixed, # this is likely correct, but we fix the visit code below
 
