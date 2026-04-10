@@ -54,7 +54,7 @@ This document loads these files and add the study arm to the MAE via merging by 
 mae_files <- 
   fs::dir_ls(
     get_03_output_dir(),
-    regexp = "mae_full_03_.*\\.rds$"
+    regexp = "mae_full_06_.*\\.rds$"
   ) |> 
   sort(decreasing = TRUE) |>
   magrittr::extract(1)
