@@ -845,7 +845,7 @@ calc_var <-
 mae@metadata$calc_vars_study_day |>
   select(pid, study_day, daily_self_reported_exposure_sp) |>
   left_join(df_summ_pid |> select(pid, exposed_by_qPCR_lc106, exposed_by_qPCR_lc115)) |>
-  left_join(df_summ |> select(pid, study_day, arm, site, dosing_days_sp, dosing_days_placebo)) |>
+  left_join(df_summ |> select(pid, study_day, arm, site, dosing_days_sp, dosing_days_placebo) |> distinct()) |>
   mutate(
          daily_exposure_to_lc106 = case_when(
             arm == "LC106-3" ~ daily_self_reported_exposure_sp * exposed_by_qPCR_lc106 * dosing_days_sp,
@@ -934,6 +934,7 @@ calc_var |>
 # Saving pid-level and daily-level variables
 
 We add these variables to the calculated variables table in the MAE metadata.
+
 
 ```{r}
 

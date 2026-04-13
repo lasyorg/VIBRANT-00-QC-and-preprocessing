@@ -133,7 +133,7 @@ sex <-
 
 ```
 
-### PSA
+### PSA results
 
 PSA was performed on swabs collecetd at the clinic visits 1000, 1200, 1500 and 2120. Results are collected in CRF45. Possible values are "Positive", "Negative", "Invalid" and "not done". We explore the distribution of PSA results across visits and sites.
 
@@ -921,10 +921,12 @@ sex |>
 ```
 
 
-### PSA and self-reported sexual activity
+### Comparison of PSA and SF sexual activity
 
 
 We compare the PSA results and the self-reported sexual behavior (`SF_pv_sex_w_semen_exposure` and `SF_pv_sex_unknown_semen_exposure`) to look at the consistency between those two variables.
+
+Each time a participant report a sexual intercourse in the past 24h with semen exposure (either known or unknown), we plot a point on the graph. Each time a participant have a positive PSA result, we plot a cross on the graph. We can see that some of the positive PSA results are consistent with self-reported sexual activity with semen exposure, but there are some inconsistencies (positive PSA without self-reported sexual activity with semen exposure and vice versa).
 
 ```{r}
 #| fig-height: 10
@@ -1051,7 +1053,33 @@ sex |>
 
 ```
 
-### Create summary variable for semen exposure 
+### Summary variable for semen exposure 
+
+Three numeric variables are created to summarize self-reported sexual behaviour,
+each taking a value between 0 and 1 where **0** indicates no event, **1** indicates
+a confirmed event, and **0.5** indicates a possible or uncertain event :
+
+- `pv_sex_w_semen_exposure` : penile-vaginal sex with semen exposure 
+- `pv_sex_wo_semen_exposure` : penile-vaginal sex without semen exposure 
+- `other_sex_wo_semen_exp` : other type of sexual activity without semen exposure 
+
+The two latter variables are derived directly from their boolean counterparts
+(`SF_pv_sex_wo_semen_exposure` and `SF_other_sex_wo_semen_exposure`), converted
+to numeric (FALSE → 0, TRUE → 1). The first variable, `pv_sex_w_semen_exposure`,
+follows the same base conversion from `SF_pv_sex_w_semen_exposure` but is further
+refined using PSA results to resolve ambiguous self-reports :
+
+- If `SF_pv_sex_unknown_semen_exposure` is TRUE and the PSA result is **positive**,
+  semen exposure is considered possible (`pv_sex_w_semen_exposure` = 0.5). If the
+  PSA result is **negative**, the event is instead recorded as sex without semen
+  exposure (`pv_sex_wo_semen_exposure` = 1).
+
+- If `pv_sex_w_semen_exposure` is still 0 but a **positive PSA** is recorded on
+  the same day or within the two following days, semen exposure is considered
+  possible (= 0.5), since PSA can remain detectable up to 3 days after a sexual
+  intercourse with semen exposure.
+
+
 
 ```{r}
 
@@ -1116,31 +1144,17 @@ sex |>
     inherit.aes = FALSE,
     shape = 4, size = 2, color = "red"
   ) +
-  facet_grid(variable ~ ., scales = "free_y") +
-  scale_fill_gradient("Value", low = "white", high = "steelblue", na.value = "grey90") +
-  geom_vline(
-    data = sex |> filter(visit_type == "Clinic", study_day >= 0) |> distinct(study_day),
-    aes(xintercept = study_day), color = "gray50", linetype = "dashed", linewidth = 0.3
-  ) + 
-  scale_x_continuous(breaks = seq(0, 100, by = 7))
+  facet_grid(.~variable, scales = "free_y") +
+  scale_fill_gradient("Value", low = "white", high = "steelblue", na.value = "grey90")+ 
+  scale_x_continuous(breaks = seq(0, 100, by = 7)) + 
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
 
 ```
 
-```{r}
-#| fig.height: 10
-#| fig.width: 10
-
-sex |>
-  filter(randomized, study_day >= 0) |>
-  pivot_longer(
-    cols = c(pv_sex_w_semen_exposure, pv_sex_wo_semen_exposure, other_sex_wo_semen_exp),
-    names_to = "variable", values_to = "value"
-  ) |>
-  ggplot(aes(x = study_day, y = pid, col = value, shape = variable)) +
-  geom_point()
-  
-
-```
+### Adding semen exposure variables to the metadata 
 
 We add the summary variables for sexual activity and semen exposure to the `calc_vars_study_day` table in the metadata of the `mae` object.
 
@@ -1264,6 +1278,8 @@ mtz <-
 
 ```
 
+### Adding metronidazole exposure variable to the metadata
+
 We add the variable `daily_self_reported_exposure_to_mtz` and `comments_daily_self_reported_exposure_to_mtz` to the `calc_vars_study_day` table in the metadata of the `mae` object.
 
 ```{r}
@@ -1350,6 +1366,8 @@ sp |>
   )
 
 ```
+
+### Adding study product variables to the metadata
 
 We add the variable `daily_self_reported_adherence_sp`, `daily_self_reported_exposure_sp` and the `comments_daily_self_reported_exposure_sp` to the `calc_vars_study_day` table in the metadata of the `mae` object.
 
@@ -1748,6 +1766,8 @@ bleeding <-
 
 ```
 
+### Adding vaginal bleeding variable to the metadata
+
 We add the summary variables for sexual activity and semen exposure to the `calc_vars_study_day` table in the metadata of the `mae` object.
 
 ```{r}
@@ -2034,7 +2054,9 @@ vaginal_insertions <-
   slice_max(order_by = n_put_in_vagina, with_ties = FALSE)
 ```
 
-We add the summary variables for sexual activity and semen exposure to the `calc_vars_study_day` table in the metadata of the `mae` object.
+### Adding the vaginal insertion variable to the metadata
+
+We add the summary variables for vaginal insertion to the `calc_vars_study_day` table in the metadata of the `mae` object.
 
 ```{r}
 mae@metadata$calc_vars_study_day <- 
@@ -2547,10 +2569,50 @@ suppl_antibiotics_crf20_long <-
 
 ```
 
->TODO : 
-We add the summary variables for supplementary antibiotics to the `calc_vars_study_day` table in the metadata of the `mae` object.
+
+### Adding the supplementary antibiotic variable to the metadata
+ 
+:::callout
+We only add the values of CRF31 in the metadata for now.
+:::
+
+We add the summary variables for supplementary antibiotics to the `calc_vars_study_day` table in the metadata of the `mae` object. We create three dummy variable based on the `abx_cat` variable : `daily_exposure_cm_oral_mtz`, `daily_exposure_cm_vag_mtz`, and `daily_exposure_cm_other_abx`. 
 
 
+
+```{r}
+
+# for now we only add the information about crf31
+abx_dummies <- 
+  suppl_antibiotics_crf31_long |>
+  select(pid, study_day, abx_cat) |>
+  mutate(value = 1) |>
+  pivot_wider(
+    names_from   = abx_cat,
+    values_from  = value,
+    values_fill  = 0,
+    values_fn    = max,          
+    names_prefix = "daily_exposure_"
+  )
+
+mae@metadata$calc_vars_study_day <- 
+  mae@metadata$calc_vars_study_day |>
+  left_join(abx_dummies, by = c("pid", "study_day")) |>
+  mutate(across(starts_with("daily_exposure_"), \(x) replace_na(x, 0)))
+
+```
+
+## Checking duplicates
+
+We check if there are some duplicate combination of `pid` and `study_day` in the `calc_vars_study_day` table after adding the new variables. We don't expect to have duplicates at this stage as we already removed duplicates for the vaginal insertion variable and we don't expect any duplicates for the supplementary antibiotic variable.
+
+```{r}
+
+mae@metadata$calc_vars_study_day|> 
+  dplyr::count(pid, study_day) |>
+  filter(n > 1)
+
+```
 
 # Saving the `MultiAssayExperiment` objects
 
