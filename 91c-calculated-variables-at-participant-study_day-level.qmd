@@ -1780,7 +1780,7 @@ mae@metadata$calc_vars_study_day <-
   )
 ```
 
-## Vaginal insertions
+## Vaginal insertions - deprecated
 
 
 We explore the self-reported vaginal insertions variable by first performing an exploratory analysis for both daily and weekly responses, checking for missing values.
@@ -2059,6 +2059,7 @@ vaginal_insertions <-
 We add the summary variables for vaginal insertion to the `calc_vars_study_day` table in the metadata of the `mae` object.
 
 ```{r}
+#| eval: false
 mae@metadata$calc_vars_study_day <- 
   mae@metadata$calc_vars_study_day |> 
   left_join(
@@ -2067,6 +2068,95 @@ mae@metadata$calc_vars_study_day <-
     by = join_by(pid, study_day)
   )
 ```
+
+
+## Vaginal insertions
+
+```{r}
+
+vaginal_insertions <- 
+  bind_rows(
+    mae@metadata$crf_data_clean$crf33 |> 
+      select(pid, uid, put_in_vagina_type) |> mutate(crf = 33),
+    mae@metadata$crf_data_clean$crf21 |> 
+      select(pid, uid, put_in_vagina_type) |> mutate(crf = 21)
+  ) |> 
+  distinct()
+
+vaginal_insertions_long <- 
+  vaginal_insertions |> 
+  mutate(
+    put_in_vagina_type_split = str_split(put_in_vagina_type, ", ")
+  ) |> 
+  unnest(put_in_vagina_type_split) |>
+  mutate(
+    put_in_vagina_type_split = 
+      ifelse(
+        (put_in_vagina_type_split == "") | is.na(put_in_vagina_type_split), 
+        "unknown", 
+        put_in_vagina_type_split
+        ) |> 
+      str_replace("put_other", "other") |> 
+      str_replace_all("_", " ") |> 
+      str_to_sentence()
+    )
+
+vaginal_insertions_long |> dplyr::count(put_in_vagina_type_split)
+
+
+vaginal_insertions_summary <- 
+  vaginal_insertions_long |> 
+  filter(!(put_in_vagina_type_split %in% c("Nothing", "Water", "None of the above", "Unknown", "Water"))) |> 
+  group_by(pid, uid) |> 
+  summarize(n_put_in_vagina = put_in_vagina_type_split |> n_distinct(), .groups = "drop") 
+
+vaginal_insertions_summary |> 
+  dplyr::count(n_put_in_vagina)
+
+# vaginal_insertions_wide <- 
+#   vaginal_insertions_long |> 
+#   mutate(tmp = TRUE) |> 
+#   pivot_wider(
+#     names_from = put_in_vagina_type_split, 
+#     values_from = tmp, 
+#     values_fill = FALSE
+#   ) 
+
+
+```
+
+
+```{r}
+vaginal_insertions_summary <- 
+  vaginal_insertions_summary |> 
+  left_join(
+    mae@colData |> as_tibble() |> select(uid, study_day) |> 
+      distinct(),
+    by = join_by(uid)
+  )
+
+vaginal_insertions_summary <- 
+  vaginal_insertions_summary |> 
+  group_by(pid, study_day) |> 
+  summarize(n_put_in_vagina = max(n_put_in_vagina), .groups = "drop") 
+
+```
+
+
+```{r}
+
+mae@metadata$calc_vars_study_day <- 
+  mae@metadata$calc_vars_study_day |> 
+  select(-any_of("n_put_in_vagina")) |> 
+  left_join(
+    vaginal_insertions_summary |> 
+      select(pid, study_day, n_put_in_vagina),
+    by = join_by(pid, study_day)
+  ) |> 
+  mutate(n_put_in_vagina = n_put_in_vagina |> replace_na(0))
+
+```
+
 
 ## Supplementary antibiotics 
 
