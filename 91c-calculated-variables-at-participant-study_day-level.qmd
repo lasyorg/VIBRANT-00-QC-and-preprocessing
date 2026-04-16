@@ -2101,14 +2101,16 @@ vaginal_insertions_long <-
       str_to_sentence()
     )
 
-vaginal_insertions_long |> dplyr::count(put_in_vagina_type_split)
+vaginal_insertions_long |> dplyr::count(put_in_vagina_type_split) |> 
+  arrange(-n)
 
 
 vaginal_insertions_summary <- 
   vaginal_insertions_long |> 
   filter(!(put_in_vagina_type_split %in% c("Nothing", "Water", "None of the above", "Unknown", "Water"))) |> 
   group_by(pid, uid) |> 
-  summarize(n_put_in_vagina = put_in_vagina_type_split |> n_distinct(), .groups = "drop") 
+  summarize(n_put_in_vagina = put_in_vagina_type_split |> n_distinct(), .groups = "drop") |> 
+  arrange(-n_put_in_vagina)
 
 vaginal_insertions_summary |> 
   dplyr::count(n_put_in_vagina)
@@ -2141,6 +2143,30 @@ vaginal_insertions_summary <-
   summarize(n_put_in_vagina = max(n_put_in_vagina), .groups = "drop") 
 
 ```
+
+```{r}
+#| fig-height: 8
+#| fig-width: 6
+
+vaginal_insertions_summary |> 
+  right_join(
+    mae@colData |> as_tibble() |> select(pid, site, arm, randomized) |> 
+      distinct() |> filter(randomized),
+    by = join_by(pid)
+    ) |> 
+  filter(randomized) |> 
+  ggplot() +
+  facet_grid(site ~ ., scales = "free", space = "free", drop = FALSE) +
+  aes(x = study_day, y = pid, col = n_put_in_vagina |> factor()) +
+  geom_point() +
+  scale_color_brewer("N of vag. insertions", na.value = "gray") + #
+  scale_x_continuous("Study day", breaks = seq(0, 140, by = 7), minor_breaks = NULL) +
+  ylab("Participants") +
+  theme(axis.text.y = element_blank())
+  
+
+```
+
 
 
 ```{r}

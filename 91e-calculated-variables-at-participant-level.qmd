@@ -264,10 +264,30 @@ income <-
       gross_income %in% c("$70,000 - $140,000", "Greater than $140,000") ~ "High",
       
       gross_income == "Prefer not to answer" ~ "Missing"
-    )
+    ) |> factor(levels = c("Low", "Mid", "High", "Missing"))
   )
 
 ```
+
+
+```{r}
+
+income |> 
+  filter(!is.na(income_level)) |> 
+  ggplot() +
+  facet_wrap(. ~ site, scales = "free", space = "free_y") +
+  aes(y = gross_income, fill = income_level, alpha = randomized) +
+  geom_bar() +
+  scale_alpha_manual("", values = c("TRUE" = 1, "FALSE" = 0.3), labels = c("TRUE" = "Randomized", "FALSE" = "Not randomized")) +
+  scale_fill_manual(
+    "Income level",
+    values = c("Low" = "tomato", "Mid" = "gold", "High" = "springgreen3", "Missing" = "gray70")
+  ) +
+  xlab("Number of participants") +
+  ylab("")
+
+```
+
 
 
 ```{r}
@@ -283,6 +303,26 @@ income |>
   pivot_wider(names_from = income_level, values_from = label) |>
   ungroup() |>
   gt(caption = "Distribution of participants across income levels by site")
+
+```
+
+
+```{r}
+# table summarizing proportions of participants in each category by site
+
+income |>
+  filter(randomized) |> 
+  group_by(site, income_level) |>
+  summarise(n = n(), .groups = "drop") |>
+  group_by(site) |>
+  mutate(pct = round(n / sum(n) * 100, 1),
+         label = paste0(n, " (", pct, "%)")) |>
+  select(-n, -pct) |>
+  pivot_wider(names_from = income_level, values_from = label) |>
+  ungroup() |>
+  gt(caption = "Distribution of income levels by site (randomized p.)") |> 
+  # replace NAs by 0
+  fmt_missing(columns = everything(), missing_text = "0")
 
 ```
 
@@ -363,6 +403,8 @@ contraception_colors <- c(
   "NA" = "grey" 
 )
 
+p <- 
+
 contraception |> 
   filter(!is.na(contraception)) |> 
   mutate(randomized = if_else(randomized, "Randomized", "Not randomized")) |>
@@ -386,6 +428,9 @@ contraception |>
   labs(
     x = "Visit code", y = "Participants"
   ) 
+
+
+p + theme(axis.text.y = element_blank())
 
 ```
 
@@ -535,10 +580,10 @@ We add a new variable called `contraception_group`, which summarize the informat
 ```{r}
 # group into categories
 
-contraception <-
+contraception_enrollment <-
   contraception |> 
   filter(visit_code == "1000") |> 
-  select(pid, contraception) |> 
+  select(pid, site, randomized, contraception) |> 
   distinct(pid, .keep_all = TRUE) |> 
   mutate(
     contraception_group = case_when(
@@ -569,20 +614,54 @@ contraception <-
 
 ```
 
+```{r}
+
+contraception_enrollment |> 
+  filter(randomized) |> 
+  group_by(site, contraception_group, contraception) |>
+  summarise(n = n(), .groups = "drop") |> 
+  group_by(site, contraception_group) |>
+  mutate(n_in_group = sum(n)) |> 
+  ungroup() |>
+  arrange(-n_in_group, -n) |> 
+  select(-n_in_group) |> 
+  group_by(site) |> 
+  gt(
+    caption = "Randomized participants",
+    row_group_as_column = TRUE
+    ) |> 
+  cols_label(
+    contraception_group = "Contraception category",
+    contraception = "Contraception method",
+    n = "Number of participants"
+  )
+
+```
+
+
+
 We document the proportion of participants (in %) in each contraception group.
 
 ```{r}
 
-contraception |>
-  group_by(contraception_group) |>
-  summarise(n = n()) |>
-  ungroup() |>
+contraception_enrollment |>
+  group_by(site, contraception_group) |>
+  summarise(n = n(), .groups = "drop") |>
+  group_by(site) |>
   mutate(
     percent = round(n / sum(n) * 100, 1),
     n = paste0(n, " (", percent, "%)")
   ) |>
-  select(contraception_group, n) |>
-  gt() 
+  ungroup() |> 
+  select(site, contraception_group, n) |>
+  pivot_wider(
+    names_from = site, values_from = n, values_fill = "0",
+    names_glue = "{site}\n(n, %)"
+    ) |>
+  gt() |> 
+  cols_label(
+    contraception_group = "Contraception category"
+  ) 
 
 ```
 
@@ -596,7 +675,7 @@ We save the cleaned variable in the `calc_vars_pid` variable.
 mae@metadata$calc_vars_pid <-
   mae@metadata$calc_vars_pid |> 
   left_join(
-    contraception |> select(pid, contraception, contraception_group) |> distinct(),
+    contraception_enrollment |> select(pid, contraception, contraception_group) |> distinct(),
     by = "pid"
   )
 
@@ -668,7 +747,7 @@ upset(worry_matrix_CAP,
   nintersects = NA,
   keep.order = TRUE,
   order.by = "freq",
-  main.bar.color = "dodgerblue1",
+  main.bar.color = site_colors["CAP"],
   sets.bar.color = "gray70",
   set_size.show = TRUE
 )
@@ -680,7 +759,7 @@ upset(worry_matrix_MGH,
   nintersects = NA,
   keep.order = TRUE,
   order.by = "freq",
-  main.bar.color = "coral1",
+  main.bar.color = site_colors["MGH"],
   sets.bar.color = "gray70",
   set_size.show = TRUE
 )
@@ -762,10 +841,11 @@ worry |>
   aes(x = worry_score, fill = fill_var) +
   geom_histogram(binwidth = 1) +
   facet_wrap(. ~ site, scales = "free") +
+  scale_x_continuous(breaks = seq(0, max(worry$worry_score, na.rm = TRUE), by = 1)) +
   scale_fill_manual(
     values = c(
-      "CAP randomized" = "dodgerblue1",
-      "MGH randomized" = "coral1",
+      "CAP randomized" = site_colors["CAP"] |> set_names(NULL),
+      "MGH randomized" = site_colors["MGH"] |> set_names(NULL),
       "Not randomized" = "grey70"
     ),
     name = NULL
@@ -775,6 +855,36 @@ worry |>
   theme(legend.position = "top")
 
 ```
+
+```{r}
+
+worry |>
+  filter(randomized) |>
+  select(pid, site, worry_score) |> 
+  left_join(income |> select(pid, income_level) |> distinct(), by = "pid") |>
+  dplyr::count(site, income_level, worry_score) |> 
+  group_by(site, income_level) |> 
+  mutate(f = n/sum(n)) |> 
+  ungroup() |> 
+  ggplot() +
+  facet_grid(. ~ site) +
+  aes(x = worry_score, y = income_level, fill = f) +
+  geom_tile() +
+  geom_text(aes(label = n)) +
+  scale_fill_gradient(
+    "proportion within income level",
+    low = "white", high = "steelblue") +
+  ylab("Income level") +
+  xlab("Worry score") +
+  coord_fixed() +
+  theme(
+    legend.position = "bottom"
+  )
+  
+
+```
+
+
 
 ### Exploration of the relationship between economic worry and food insecurity
 
