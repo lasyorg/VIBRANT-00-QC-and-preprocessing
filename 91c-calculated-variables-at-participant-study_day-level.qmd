@@ -2698,7 +2698,7 @@ We add the summary variables for supplementary antibiotics to the `calc_vars_stu
 
 ```{r}
 
-# for now we only add the information about crf31
+# for now we only add the information from crf31
 abx_dummies <- 
   suppl_antibiotics_crf31_long |>
   select(pid, study_day, abx_cat) |>
@@ -2711,9 +2711,11 @@ abx_dummies <-
     names_prefix = "daily_exposure_"
   )
 
+tmp <- mae@metadata$calc_vars_study_day
+
 mae@metadata$calc_vars_study_day <- 
   mae@metadata$calc_vars_study_day |>
-  left_join(abx_dummies, by = c("pid", "study_day")) |>
+  full_join(abx_dummies, by = c("pid", "study_day")) |>
   mutate(across(starts_with("daily_exposure_"), \(x) replace_na(x, 0)))
 
 ```

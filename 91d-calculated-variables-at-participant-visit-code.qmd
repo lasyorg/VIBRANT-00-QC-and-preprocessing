@@ -208,9 +208,124 @@ mae@metadata$calc_vars_weekly_visit_code <-
 
 ```
 
-# Calculated variables at the daily visit code level
+## Any antibiotics since last visit
 
-> TODO
+```{r}
+
+antibiotics <- 
+  mae@metadata$calc_vars_study_day |> 
+  select(pid, study_day, starts_with("daily_exposure_cm_")) |> 
+  pivot_longer(
+    cols = starts_with("daily_exposure_cm_"),
+    names_to = "antibiotics", names_prefix = "daily_exposure_cm_",
+    values_to = "exposure"
+  ) |>
+  left_join(
+    mae@colData |> 
+      as_tibble() |> 
+      filter(visit_type == "Clinic") |> 
+      select(uid, pid, study_day, visit_code, site),
+    by = join_by(pid, study_day)
+  ) |> 
+  arrange(pid, antibiotics, study_day) |> 
+  group_by(pid, antibiotics) |> 
+  mutate(
+    # we expand the weekly visit code backward to be able to report whether any antibiotics were taken since last dose
+    exp_visit_code = visit_code |> zoo::na.locf(na.rm = FALSE, fromLast = TRUE),
+    exp_visit_code = 
+      case_when(
+        (exp_visit_code == visit_code) ~ lead(exp_visit_code),
+        TRUE ~ exp_visit_code
+        ),
+    
+    # we also count the number of days since last antibiotics dose for each antibiotic class
+    last_antibiotics_day = case_when(exposure > 0 ~ study_day, TRUE ~ NA_integer_),
+    last_antibiotics_day = zoo::na.locf(last_antibiotics_day, na.rm = FALSE),
+    days_since_last_antibiotics = study_day - last_antibiotics_day
+  )
+  
+  
+```
+```{r}
+
+antibiotics_at_clinic_visits <- 
+  left_join(
+    antibiotics |> 
+      group_by(pid, antibiotics, exp_visit_code) |>
+      summarize(since_last_visit = sum(exposure, na.rm = TRUE), .groups = "drop") |>
+      dplyr::rename(visit_code = exp_visit_code),
+    
+    antibiotics |> 
+      filter(!is.na(visit_code)) |> 
+      select(pid, antibiotics, visit_code, study_day, days_since_last_abx = days_since_last_antibiotics),
+    
+    by = join_by(pid, antibiotics, visit_code)  
+  ) |> 
+  mutate(
+    days_since_last_abx =
+      case_when(
+        (days_since_last_abx == 0) & (since_last_visit == 0) ~ NA_integer_,
+        TRUE ~ days_since_last_abx
+      )
+  ) |> 
+  filter(!is.na(visit_code)) |> 
+  select(pid, antibiotics, study_day, visit_code, everything()) 
+
+```
+
+```{r}
+#| fig-width: 12
+#| fig-height: 8
+
+antibiotics |> 
+  filter(exposure > 0) |>  
+  ggplot() +
+  facet_grid(. ~ antibiotics) +
+  aes(x = study_day, y = pid) +
+  geom_point(
+    data = antibiotics_at_clinic_visits |> filter(study_day < 125),
+    aes(col = visit_code), shape = 1
+  ) +
+  geom_label(
+    data = antibiotics_at_clinic_visits |> filter(since_last_visit > 0),
+    aes(col = visit_code, label = since_last_visit), size = 3
+  ) +
+  geom_point(alpha = 0.5) +
+  guides(col = "none") +
+  theme(axis.text.y = element_blank())
+
+
+```
+
+We add this data to the `calc_vars_weekly_visit_code` table. We will have one variable for each antibiotic class indicating whether the participant took any antibiotics of that class since last clinic visit, and another variable indicating the number of days since last dose of antibiotics of that class.
+
+
+```{r}
+
+tmp <- 
+  mae@metadata$calc_vars_weekly_visit_code |> 
+  left_join(
+    antibiotics_at_clinic_visits |> 
+      dplyr::rename(
+        n_since_last_visit = since_last_visit, 
+        days_since_last = days_since_last_abx
+        ) |> 
+      pivot_wider(
+        names_from = antibiotics, 
+        values_from = c(n_since_last_visit, days_since_last),
+        names_vary = "slowest"
+      ) |> 
+      mutate(uid = str_c(pid, "_", visit_code)) |> 
+      relocate(uid, .before = everything()) |> 
+      select(-pid, -study_day, -visit_code),
+    by = join_by(uid)
+  )
+
+mae@metadata$calc_vars_weekly_visit_code <- tmp
+
+```
+
+
 
 # Saving the `MultiAssayExperiment` objects
 
