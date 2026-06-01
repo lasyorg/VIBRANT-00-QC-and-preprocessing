@@ -948,9 +948,10 @@ mae@metadata$calc_vars_pid <-
 
 ## Food security
 
-We process food security data collected at the screening visit using the six-item short form of the USDA Household Food Security Survey Module (HFSSM) questionnaire. Six questions were asked to assess food security status over the past 12 months. Based on the number of affirmative responses, we classify participants into high/marginal, low, or very low food security categories.
+We process food security data collected at the screening visit in CRF12 using the six-item short form of the USDA Household Food Security Survey Module (HFSSM) questionnaire. Six questions were asked to assess food security status over the past 12 months. Based on the number of affirmative responses, we classify participants into high/marginal, low, or very low food security categories.
 
 Affirmative responses are defined as follows:
+
 - Food did not last: "Often true" or "Sometimes true"
 - Not afford balanced meals: "Often true" or "Sometimes true"
 - Cut size meals: "Yes"
@@ -1151,7 +1152,7 @@ mae@metadata$calc_vars_pid <-
 
 ## Psychological wellbeing - Perceived Stress Scale (PSS)
 
-We are interest in perceived stress of the participants. Questions about their feelings and thoughts during the last month were ask at the screening visit only. Therefore, we consider stress as a time-invariant variable.
+We are interest in perceived stress of the participants. Questions about their feelings and thoughts during the last month were ask at the screening visit only in CRF 11. Therefore, we consider stress as a time-invariant variable.
 
 The Perceived Stress scale used was developed by Sheldon Cohen and his colleagues in 1983. Nowadays, the PSS is most commonly implemented as the 10-item scale assessing the perceived stress degree based on that individual’s subjective interpretation of their reactions to stressors during a 1 month period.
 
