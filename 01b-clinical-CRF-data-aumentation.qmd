@@ -31,11 +31,10 @@ library(tidyverse)
 library(gt)
 library(labelled)
 library(gtsummary)
-tmp <- fs::dir_map("R scripts/", source) 
+tmp <- fs::dir_map("R scripts/", source)
 tmp <- fs::dir_map("../VIBRANT-99-utils/R/", source)
 rm(tmp)
 theme_set(theme_bw())
-
 ```
 
 The purpose of this document is to create
@@ -70,15 +69,22 @@ the population flags (`ITT`, `mITT` and `PP`).
 
 data_dir <- get_01_output_dir()
 
-crf_clean_file <- data_dir |> fs::dir_ls() |> str_subset("01_crf_clean") |> sort(decreasing = TRUE) |> magrittr::extract(1)
+crf_clean_file <- data_dir |>
+  fs::dir_ls() |>
+  str_subset("01_crf_clean") |>
+  sort(decreasing = TRUE) |>
+  magrittr::extract(1)
 load(crf_clean_file, verbose = TRUE)
 crf_clean |> names()
 rm(crf_clean_file)
 
-exposure_file <- data_dir |> fs::dir_ls() |> str_subset("01_exposures") |> sort(decreasing = TRUE) |> magrittr::extract(1)
+exposure_file <- data_dir |>
+  fs::dir_ls() |>
+  str_subset("01_exposures") |>
+  sort(decreasing = TRUE) |>
+  magrittr::extract(1)
 load(exposure_file, verbose = TRUE)
 rm(exposure_file)
-
 ```
 
 # `participants` table
@@ -109,32 +115,31 @@ The `participants` table will contain one row per `pid` for all `pids` identifie
 
 ```{r}
 
-participants <- 
+participants <-
   map(
-    crf_clean, 
-    function(x) x |> filter(!is.na(pid)) |> select(pid) |> distinct() |> mutate(pid = pid |> as.character())
-  ) |> 
-  bind_rows() |> 
+    crf_clean,
+    function(x) {
+      x |> filter(!is.na(pid)) |> select(pid) |> distinct() |> mutate(pid = pid |> as.character())
+    }
+  ) |>
+  bind_rows() |>
   distinct()
-
 ```
 
 ## Study site
 
 ```{r}
 
-participants <- 
-  participants |> 
+participants <-
+  participants |>
   mutate(
-    site = 
-      case_when(
-        str_detect(pid, "^06810") | str_detect(pid, "^10") ~ "MGH",
-        str_detect(pid, "^06820") | str_detect(pid, "^20")  ~ "CAP",
-        TRUE ~ NA_character_
-        ),
+    site = case_when(
+      str_detect(pid, "^06810") | str_detect(pid, "^10") ~ "MGH",
+      str_detect(pid, "^06820") | str_detect(pid, "^20") ~ "CAP",
+      TRUE ~ NA_character_
+    ),
     location = ifelse(site == "MGH", "US", "SA")
   )
-
 ```
 
 ## Randomization (`randomized` and `arm`)
@@ -161,17 +166,18 @@ all(crf_clean$crf13$dfseq == 1000)
 
 ```{r}
 
-participants <- 
-  participants |> 
-  select(-any_of(c("randomized", "group4", "arm"))) |> 
+participants <-
+  participants |>
+  select(-any_of(c("randomized", "group4", "arm"))) |>
   left_join(
-    crf_clean$crf13 |> select(pid, group4) |> mutate(randomized = TRUE, pid = pid |> as.character()),
+    crf_clean$crf13 |>
+      select(pid, group4) |>
+      mutate(randomized = TRUE, pid = pid |> as.character()),
     by = join_by(pid)
-  ) |> 
+  ) |>
   mutate(
     randomized = randomized |> replace_na(FALSE)
   )
-
 ```
 
 
@@ -179,30 +185,27 @@ participants <-
 
 # For now, we do not know the arms yet, only whether participants were in the overlap arm or not.
 
-participants <- 
-  participants |> 
+participants <-
+  participants |>
   mutate(
-    arm = 
-      case_when(
-        group4 == "Yes" ~ "LC106-o",
-        group4 == "No" ~ "Blinded",
-        is.na(group4) ~ NA_character_
-      ) |> 
+    arm = case_when(
+      group4 == "Yes" ~ "LC106-o",
+      group4 == "No" ~ "Blinded",
+      is.na(group4) ~ NA_character_
+    ) |>
       factor(
         levels = c("Pl", "LC106-7", "LC106-3", "LC106-o", "LC115", "Blinded")
-        )
-  ) |> 
+      )
+  ) |>
   select(-group4)
-
 ```
 
 
 ```{r}
 
-participants |> 
-  dplyr::count(site, randomized, arm) |> 
+participants |>
+  dplyr::count(site, randomized, arm) |>
   gt(caption = "Number of randomized participants per site and per arm")
-
 ```
 
 
@@ -223,22 +226,22 @@ We build the `visits_long` table by concatenating the `pid`, `visit_code`, and `
 
 visit_crfs <- crf_clean |> names() |> unique()
 # we remove CRF 29, (and 29_bis below) (AE), 31 (CM), and 34 (Protocol deviation)
-visit_crfs <- visit_crfs |> setdiff(str_c("crf", c("27_long", "29", "29_summary", "31", "34", "47_long")))
+visit_crfs <- visit_crfs |>
+  setdiff(str_c("crf", c("27_long", "29", "29_summary", "31", "34", "47_long")))
 
-visits_long <- 
+visits_long <-
   map(
     visit_crfs,
-    ~ crf_clean[[.x]] |> 
-      select(pid, any_of(c("visit_code", "study_day"))) |> 
+    ~ crf_clean[[.x]] |>
+      select(pid, any_of(c("visit_code", "study_day"))) |>
       mutate(crf_plate = .x |> str_remove("crf"))
   ) |>
-  bind_rows() |> 
-  filter(crf_plate != "29_bis") |> 
+  bind_rows() |>
+  filter(crf_plate != "29_bis") |>
   mutate(
     pid = pid |> as.character(),
     crf_plate = crf_plate |> fct_inorder()
-    ) 
-
+  )
 ```
 
 Overview of visits's `study_day` by CRF plates. 
@@ -247,24 +250,23 @@ Overview of visits's `study_day` by CRF plates.
 #| fig-width: 10
 #| fig-height: 12
 
-visits_long |> 
-  left_join(participants, by = join_by(pid)) |> 
+visits_long |>
+  left_join(participants, by = join_by(pid)) |>
   ggplot() +
   aes(x = study_day, y = pid, col = crf_plate) +
   geom_point(size = 0.5, alpha = 0.5) +
   ggh4x::facet_nested(vars(site, randomized), scales = "free_y", space = "free_y") +
   ggtitle("All participants")
-
 ```
 
 ```{r}
 #| fig-width: 10
 #| fig-height: 12
 
-g_randomized <- 
-  visits_long |> 
-  left_join(participants, by = join_by(pid)) |> 
-  filter(randomized) |> 
+g_randomized <-
+  visits_long |>
+  left_join(participants, by = join_by(pid)) |>
+  filter(randomized) |>
   ggplot() +
   aes(x = study_day, y = pid, col = crf_plate) +
   geom_point(size = 0.5, alpha = 0.5) +
@@ -272,7 +274,6 @@ g_randomized <-
   ggtitle("Randomized participants")
 
 g_randomized + scale_x_continuous(limits = c(-100, 150))
-
 ```
 
 And by visit code. 
@@ -281,19 +282,18 @@ And by visit code.
 #| fig-width: 10
 #| fig-height: 12
 
-g_randomized <- 
-  visits_long |> 
-  left_join(participants, by = join_by(pid)) |> 
-  filter(randomized) |> 
+g_randomized <-
+  visits_long |>
+  left_join(participants, by = join_by(pid)) |>
+  filter(randomized) |>
   ggplot() +
   aes(x = study_day, y = pid, col = visit_code) +
   geom_point(size = 0.5, alpha = 0.5) +
-  facet_grid(site + randomized ~ ., scales = "free_y", space = "free_y") + 
+  facet_grid(site + randomized ~ ., scales = "free_y", space = "free_y") +
   # scale_x_continuous(limits = c(-100, 150)) +
   ggtitle("Randomized participants")
 
 g_randomized + scale_x_continuous(limits = c(-100, 150))
-
 ```
 
 Overview of `visit_code`
@@ -302,54 +302,57 @@ Overview of `visit_code`
 #| fig-width: 20
 #| fig-height: 10
 
-g_randomized <- 
-  visits_long |> 
-  filter(!is.na(visit_code)) |> 
-  arrange(pid, visit_code) |> 
-  group_by(pid, visit_code) |> 
-  mutate(n_distinct_study_days = study_day |> na.omit() |>  n_distinct()) |> 
-  ungroup() |> 
-  left_join(participants, by = join_by(pid)) |> 
-  filter(randomized) |> 
+g_randomized <-
+  visits_long |>
+  filter(!is.na(visit_code)) |>
+  arrange(pid, visit_code) |>
+  group_by(pid, visit_code) |>
+  mutate(n_distinct_study_days = study_day |> na.omit() |> n_distinct()) |>
+  ungroup() |>
+  left_join(participants, by = join_by(pid)) |>
+  filter(randomized) |>
   ggplot() +
   aes(x = study_day, y = pid, col = n_distinct_study_days |> factor()) +
   geom_point(size = 0.5, alpha = 0.5) +
-  facet_grid(~ visit_code , scales = "free", space = "free") + 
-  scale_color_manual(values = c("steelblue1", colorRampPalette(c("red","black"))(3))) +
+  facet_grid(~visit_code, scales = "free", space = "free") +
+  scale_color_manual(values = c("steelblue1", colorRampPalette(c("red", "black"))(3))) +
   # scale_x_continuous(limits = c(-100, 150)) +
   ggtitle("Randomized participants") +
   theme(strip.text.x = element_text(angle = 90))
 
-g_randomized 
-
+g_randomized
 ```
 
 ```{r}
 
-mismatched_study_days <- 
-  visits_long |> 
-  filter(!is.na(visit_code)) |> 
-  arrange(pid, visit_code) |> 
-  group_by(pid, visit_code) |> 
-  mutate(n_distinct_study_days = study_day |> na.omit() |>  n_distinct()) |> 
-  ungroup() |> 
-  filter(n_distinct_study_days > 1) |> 
-  filter(!is.na(study_day)) |> 
-  group_by(pid, visit_code) |> 
+mismatched_study_days <-
+  visits_long |>
+  filter(!is.na(visit_code)) |>
+  arrange(pid, visit_code) |>
+  group_by(pid, visit_code) |>
+  mutate(n_distinct_study_days = study_day |> na.omit() |> n_distinct()) |>
+  ungroup() |>
+  filter(n_distinct_study_days > 1) |>
+  filter(!is.na(study_day)) |>
+  group_by(pid, visit_code) |>
   mutate(
-    most_freq_study_day = study_day |> factor() |> fct_infreq() |> levels() |> magrittr::extract(1) |> as.numeric(),
+    most_freq_study_day = study_day |>
+      factor() |>
+      fct_infreq() |>
+      levels() |>
+      magrittr::extract(1) |>
+      as.numeric(),
     diff_with_most_freq_study_day = (study_day - most_freq_study_day),
     n_same = sum(study_day == most_freq_study_day),
     n_diff = sum(study_day != most_freq_study_day),
     n = n(),
     f_diff = n_diff / n
-    ) |> 
+  ) |>
   ungroup()
 
-mismatched_study_days |> 
-  filter(visit_code >= 1000) |> 
+mismatched_study_days |>
+  filter(visit_code >= 1000) |>
   gt()
-
 ```
 All mismatches are for screening visits and for just one participant (068200281), it looks like she had some of her 2120 CRF done at one visit and came back for the others.
 
@@ -373,112 +376,119 @@ We do not document the home swab collection because it looks like there are more
 
 ```{r}
 
-observed_visits <- 
+observed_visits <-
   visits_long |>
-  filter(!is.na(visit_code)) |> 
-  group_by(pid, visit_code) |> 
+  filter(!is.na(visit_code)) |>
+  group_by(pid, visit_code) |>
   summarize(
-    study_day = study_day |> na.omit() |> factor() |> fct_infreq() |> levels() |> magrittr::extract(1) |> as.numeric(),
+    study_day = study_day |>
+      na.omit() |>
+      factor() |>
+      fct_infreq() |>
+      levels() |>
+      magrittr::extract(1) |>
+      as.numeric(),
     n_distinct_study_days = study_day |> na.omit() |> n_distinct(),
     crf_plates = crf_plate |> na.omit() |> unique() |> sort() |> str_c(collapse = ", "),
     .groups = "drop"
-  ) |> 
-  select(pid, visit_code, everything()) |> 
+  ) |>
+  select(pid, visit_code, everything()) |>
   mutate(visit_attended = TRUE)
-
 ```
 
 ```{r}
 
-expected_visits <- 
+expected_visits <-
   bind_rows(
-    participants |> 
-      filter(!randomized) |> 
-      select(pid) |> 
+    participants |>
+      filter(!randomized) |>
+      select(pid) |>
       mutate(visit_code = "0000"),
-    participants |> 
-      filter(randomized) |> 
-      select(pid) |> 
+    participants |>
+      filter(randomized) |>
+      select(pid) |>
       expand_grid(
-        visit_code = 
-          c(
-            0, 
-            seq(1000, 1500, by = 100), 1700, 1900, 2120,
-            1001:1007, 1101:1107, 1201:1207, 1301:1307, 1401:1407, 1501:1503,
-            8999
-          ) |> sort() |> str_pad(width = 4, pad = "0")
-      ) 
-  ) |> 
+        visit_code = c(
+          0,
+          seq(1000, 1500, by = 100),
+          1700,
+          1900,
+          2120,
+          1001:1007,
+          1101:1107,
+          1201:1207,
+          1301:1307,
+          1401:1407,
+          1501:1503,
+          8999
+        ) |>
+          sort() |>
+          str_pad(width = 4, pad = "0")
+      )
+  ) |>
   mutate(
     expected = !(visit_code %in% c(1501:1503)) # we noticed that a few participants had these visits, but they are not "expected"
   )
-
 ```
 
 ```{r}
 
-visits <- 
+visits <-
   full_join(
     observed_visits,
     expected_visits,
     by = join_by(pid, visit_code)
-  ) |> 
+  ) |>
   mutate(
     expected = expected |> replace_na(FALSE),
     visit_attended = visit_attended |> replace_na(FALSE)
   )
-
 ```
 
 ```{r}
 
-visits <- 
-  visits |> 
+visits <-
+  visits |>
   left_join(
     crf_clean$crf41 |>
-      mutate(pid = pid |> as.character()) |> 
-      select(pid, visit_code) |> 
-      mutate(interim_visit = TRUE) ,
+      mutate(pid = pid |> as.character()) |>
+      select(pid, visit_code) |>
+      mutate(interim_visit = TRUE),
     by = join_by(pid, visit_code)
-  ) |> 
+  ) |>
   mutate(
-    visit_planned = 
-      case_when(
-        !is.na(interim_visit) ~ "Documented interim or unscheduled visit (CRF41)",
-        expected ~ "Planned visit",
-        !expected & visit_attended ~ "Undocumented visit (CRF 41)",
-        !expected & !visit_attended ~ "Potential additional daily visit",
-        TRUE ~ "???"
-      )
-  ) |> 
+    visit_planned = case_when(
+      !is.na(interim_visit) ~ "Documented interim or unscheduled visit (CRF41)",
+      expected ~ "Planned visit",
+      !expected & visit_attended ~ "Undocumented visit (CRF 41)",
+      !expected & !visit_attended ~ "Potential additional daily visit",
+      TRUE ~ "???"
+    )
+  ) |>
   select(-interim_visit)
-
-
 ```
 
 
 ```{r}
 
-visits <- 
-  visits |> 
+visits <-
+  visits |>
   mutate(
-    visit_type = 
-      case_when(
-        !expected & !(visit_code %in% 1501:1503) ~ "Unclear",
-        visit_code == "8999" ~ "Clinic",
-        str_detect(visit_code, "0$") ~ "Clinic",
-        TRUE ~ "Home"
-      ),
+    visit_type = case_when(
+      !expected & !(visit_code %in% 1501:1503) ~ "Unclear",
+      visit_code == "8999" ~ "Clinic",
+      str_detect(visit_code, "0$") ~ "Clinic",
+      TRUE ~ "Home"
+    ),
   )
-
 ```
 
 ```{r}
 #| fig-width: 15
 #| fig-height: 15
 
-visits |> 
-  left_join(participants) |> 
+visits |>
+  left_join(participants) |>
   ggplot() +
   aes(x = visit_code, y = pid, col = visit_planned) +
   geom_point() +
@@ -486,7 +496,6 @@ visits |>
   theme(
     axis.text.x = element_text(angle = 90, vjust = 0.5)
   )
-
 ```
 
 
@@ -495,30 +504,28 @@ visits |>
 #| fig-width: 15
 #| fig-height: 8
 
-
-visits |> 
-  left_join(participants) |> 
-  filter(randomized) |> 
+visits |>
+  left_join(participants) |>
+  filter(randomized) |>
   ggplot() +
   aes(x = visit_code, y = pid, col = visit_attended) +
   geom_point() +
-  facet_grid(site + randomized ~ . , scales = "free", space = "free") +
+  facet_grid(site + randomized ~ ., scales = "free", space = "free") +
   theme(
     axis.text.x = element_text(angle = 90, vjust = 0.5)
   )
 
 
-visits |> 
-  left_join(participants) |> 
-  filter(randomized) |> 
+visits |>
+  left_join(participants) |>
+  filter(randomized) |>
   ggplot() +
   aes(x = visit_code, y = pid, col = visit_type) +
   geom_point() +
-  facet_grid(site + randomized ~ . , scales = "free", space = "free") +
+  facet_grid(site + randomized ~ ., scales = "free", space = "free") +
   theme(
     axis.text.x = element_text(angle = 90, vjust = 0.5)
   )
-
 ```
 
 ```{r}
@@ -537,41 +544,51 @@ visits <- visits |> select(-expected)
 
 ```{r}
 
-visits <- 
-  visits |> 
+visits <-
+  visits |>
   left_join(
     crf_clean$crf35 |>
-      mutate(pid = pid |> as.character()) |> 
-      select(pid, visit_code, self_collected_swabs, starts_with("softcup"), endocervical_cytobrush) |> 
+      mutate(pid = pid |> as.character()) |>
+      select(
+        pid,
+        visit_code,
+        self_collected_swabs,
+        starts_with("softcup"),
+        endocervical_cytobrush
+      ) |>
       mutate(
         specimen_collection_swab = self_collected_swabs,
-        specimen_collection_softcup = 
-          case_when(
-            (softcup_time_placed == "Not done") ~ "not collected",
-            (softcup == "Checked") & str_detect(softcup_time_placed, "[0-9]*:[0-0]*")  ~ "collected",
-            (softcup == "Checked") & is.na(softcup_time_placed) ~ "likely collected (duration unknown)",
-            (softcup == "Unchecked") & str_detect(softcup_time_placed, "[0-9]*:[0-0]*") ~ "likely collected",
-            (softcup == "Unchecked") & !is.na(softcup_time_placed) ~ "unclear",
-            ((softcup == "Unchecked") | (softcup == "Not done")) & is.na(softcup_time_placed) ~ "not collected",
-            TRUE ~ "???"
-          ),
-        specimen_collection_cytobrush = 
-          case_when(
-            (endocervical_cytobrush == "Checked") ~ "collected",
-            (endocervical_cytobrush == "Unchecked") ~ "not collected",
-            (endocervical_cytobrush == "Not done") ~ "not collected",
-            TRUE ~ "???"
-          )
-      ) |> 
+        specimen_collection_softcup = case_when(
+          (softcup_time_placed == "Not done") ~ "not collected",
+          (softcup == "Checked") & str_detect(softcup_time_placed, "[0-9]*:[0-0]*") ~ "collected",
+          (softcup == "Checked") &
+            is.na(softcup_time_placed) ~ "likely collected (duration unknown)",
+          (softcup == "Unchecked") &
+            str_detect(softcup_time_placed, "[0-9]*:[0-0]*") ~ "likely collected",
+          (softcup == "Unchecked") & !is.na(softcup_time_placed) ~ "unclear",
+          ((softcup == "Unchecked") | (softcup == "Not done")) &
+            is.na(softcup_time_placed) ~ "not collected",
+          TRUE ~ "???"
+        ),
+        specimen_collection_cytobrush = case_when(
+          (endocervical_cytobrush == "Checked") ~ "collected",
+          (endocervical_cytobrush == "Unchecked") ~ "not collected",
+          (endocervical_cytobrush == "Not done") ~ "not collected",
+          TRUE ~ "???"
+        )
+      ) |>
       select(pid, visit_code, starts_with("specimen")),
     by = join_by(pid, visit_code)
   )
-
 ```
 
 ```{r}
-visits |> 
-  dplyr::count(specimen_collection_swab > 0, specimen_collection_softcup, specimen_collection_cytobrush) |> 
+visits |>
+  dplyr::count(
+    specimen_collection_swab > 0,
+    specimen_collection_softcup,
+    specimen_collection_cytobrush
+  ) |>
   gt()
 ```
 
@@ -579,18 +596,18 @@ visits |>
 ```{r}
 #| eval: false
 
-crf47_long <- 
+crf47_long <-
   crf_clean$crf47 |>
   select(pid, dfseq, study_day, swabs_brought, abnormal_swabs, contains("_visit_code")) |> # , contains("abnormal_swab")
-  rename(crf_visit_code = dfseq) |> 
+  rename(crf_visit_code = dfseq) |>
   pivot_longer(
-    cols = -c(pid, crf_visit_code, study_day, swabs_brought, abnormal_swabs), 
-    names_to = "home_swab_nb", values_to = "home_swab_visit_code"
-    ) |>
+    cols = -c(pid, crf_visit_code, study_day, swabs_brought, abnormal_swabs),
+    names_to = "home_swab_nb",
+    values_to = "home_swab_visit_code"
+  ) |>
   mutate(
     home_swab_nb = home_swab_nb |> parse_number()
-  ) 
-
+  )
 ```
 
 
@@ -598,29 +615,34 @@ crf47_long <-
 
 ```{r}
 
-visits_variable_dictionary <- 
+visits_variable_dictionary <-
   tibble(
     variable = colnames(visits)
-  ) |> 
+  ) |>
   mutate(
-    description = 
-      case_when(
-        variable == "pid" ~ "Participant ID",
-        variable == "visit_code" ~ "4-digit visit code (character)",
-        variable == "study_day" ~ "Relative study day with respect to the enrollment visit (day 0)",
-        variable == "n_distinct_study_days" ~ "Number of distinct study day for that visit code (most often a number larger than 1 denotes a re-screening visit)",
-        variable == "crf_plates" ~ "CRF plates that have been filled at that visit for that participant.",
-        variable == "visit_attended" ~ "Whether the visit was attended by the participant. For home visit, it is whether a CRF was filled for that visit code.",
-        variable == "visit_planned" ~ "Whether the visit was planned or not.",
-        variable == "visit_type" ~ "Type of the visit: clinic or home (or unclear for some 'unexpected' visit codes)",
-        variable == "specimen_collection_swab" ~ "Number of self-collected swabs at that visit (CRF35)",
-        variable == "specimen_collection_softcup" ~ "Whether softcup was collected at that visit (CRF35)",
-        variable == "specimen_collection_cytobrush" ~ "Whether endocervical cytobrush was collected at that visit (CRF35)",
-        
-        TRUE ~ "???"
-      )
-  )
+    description = case_when(
+      variable == "pid" ~ "Participant ID",
+      variable == "visit_code" ~ "4-digit visit code (character)",
+      variable == "study_day" ~ "Relative study day with respect to the enrollment visit (day 0)",
+      variable ==
+        "n_distinct_study_days" ~ "Number of distinct study day for that visit code (most often a number larger than 1 denotes a re-screening visit)",
+      variable ==
+        "crf_plates" ~ "CRF plates that have been filled at that visit for that participant.",
+      variable ==
+        "visit_attended" ~ "Whether the visit was attended by the participant. For home visit, it is whether a CRF was filled for that visit code.",
+      variable == "visit_planned" ~ "Whether the visit was planned or not.",
+      variable ==
+        "visit_type" ~ "Type of the visit: clinic or home (or unclear for some 'unexpected' visit codes)",
+      variable ==
+        "specimen_collection_swab" ~ "Number of self-collected swabs at that visit (CRF35)",
+      variable ==
+        "specimen_collection_softcup" ~ "Whether softcup was collected at that visit (CRF35)",
+      variable ==
+        "specimen_collection_cytobrush" ~ "Whether endocervical cytobrush was collected at that visit (CRF35)",
 
+      TRUE ~ "???"
+    )
+  )
 ```
 
 ```{r}
@@ -685,32 +707,34 @@ We first look at the eligibility from CRF7.
 # ELIGIBILITY
 
 # we add information about eligibility (CRF7)
-eligibility <- 
-  crf_clean$crf7 |> 
-  select(pid, dfseq, meet_eligibility) |> 
-  arrange(pid, dfseq) |> 
-  mutate(pid = pid |> as.character()) |> 
-  group_by(pid) |> 
+eligibility <-
+  crf_clean$crf7 |>
+  select(pid, dfseq, meet_eligibility) |>
+  arrange(pid, dfseq) |>
+  mutate(pid = pid |> as.character()) |>
+  group_by(pid) |>
   summarize(
     n = n(),
     meet_eligibility = last(meet_eligibility, order_by = dfseq),
     eligibility_all = str_c(meet_eligibility |> unique(), collapse = ", ")
   )
 
-participants <- 
+participants <-
   participants |>
   left_join(
-   eligibility |> select(pid, meet_eligibility) |> mutate(meet_eligibility = (meet_eligibility == "Yes")),
+    eligibility |>
+      select(pid, meet_eligibility) |>
+      mutate(meet_eligibility = (meet_eligibility == "Yes")),
     by = join_by(pid)
-  ) |> 
+  ) |>
   mutate(meet_eligibility = meet_eligibility |> replace_na(FALSE))
 
 rm(eligibility)
 
 
-participants |> dplyr::count(meet_eligibility, randomized) |> 
-  gt::gt(caption = "All eligible participants were randomized") 
-
+participants |>
+  dplyr::count(meet_eligibility, randomized) |>
+  gt::gt(caption = "All eligible participants were randomized")
 ```
 
 Then, we look at the swabs collected at in-person visits from CRF35.
@@ -719,38 +743,44 @@ Then, we look at the swabs collected at in-person visits from CRF35.
 # COLLECTED SWABS
 
 # We add information from CRF35 about collected swabs at in-person visits
-crf35_sub <- 
+crf35_sub <-
   crf_clean$crf35 |>
   select(pid, dfseq, self_collected_swabs) |>
-  mutate(pid = pid |> as.character()) |> 
+  mutate(pid = pid |> as.character()) |>
   group_by(pid) |>
-  # we count how many swabs were collected after the end of intervention (i.e., from visit 1200, for all intervention arms) 
+  # we count how many swabs were collected after the end of intervention (i.e., from visit 1200, for all intervention arms)
   mutate(
     n_swabs_post_product = sum(self_collected_swabs[dfseq >= 1200], na.rm = TRUE),
-    n_swabs_post_product_prior_week7 = sum(self_collected_swabs[(dfseq >= 1200) & (dfseq <= 1500)], na.rm = TRUE)
-    ) |>
-  ungroup() |> 
+    n_swabs_post_product_prior_week7 = sum(
+      self_collected_swabs[(dfseq >= 1200) & (dfseq <= 1500)],
+      na.rm = TRUE
+    )
+  ) |>
+  ungroup() |>
   select(pid, n_swabs_post_product, n_swabs_post_product_prior_week7) |>
   distinct()
 
-participants <- 
-  participants |> 
+participants <-
+  participants |>
   select(-any_of(c("n_swabs_post_product", "n_swabs_post_product_prior_week7"))) |>
-  left_join(crf35_sub, by = "pid")  |> 
+  left_join(crf35_sub, by = "pid") |>
   mutate(
     n_swabs_post_product = n_swabs_post_product |> replace_na(0),
     n_swabs_post_product_prior_week7 = n_swabs_post_product_prior_week7 |> replace_na(0)
-    )
+  )
 rm(crf35_sub)
 
 
-participants |> dplyr::count(randomized, n_swabs_post_product > 0, n_swabs_post_product_prior_week7 > 0) |> gt()
+participants |>
+  dplyr::count(randomized, n_swabs_post_product > 0, n_swabs_post_product_prior_week7 > 0) |>
+  gt()
 
-participants |> 
-  filter(randomized, n_swabs_post_product > 0, n_swabs_post_product_prior_week7 == 0) |> 
-  left_join(crf_clean$crf35 |> mutate(pid = pid |> as.character()), by = join_by(pid)) |> 
-  gt::gt(caption = "Participants that had swabs collected in the extended follow-up period but not in the follow-up period.")
-
+participants |>
+  filter(randomized, n_swabs_post_product > 0, n_swabs_post_product_prior_week7 == 0) |>
+  left_join(crf_clean$crf35 |> mutate(pid = pid |> as.character()), by = join_by(pid)) |>
+  gt::gt(
+    caption = "Participants that had swabs collected in the extended follow-up period but not in the follow-up period."
+  )
 ```
 
 We then check if the participants have been replaced (CRF44) or met any of the replacement criteria (CFR33 for bleeding, CRF20/31 for antibiotics), CRF15 for HSIL pap).
@@ -759,16 +789,19 @@ We then check if the participants have been replaced (CRF44) or met any of the r
 # REPLACEMENT
 # we check if participants have been replaced
 
-crf44_sub <- 
+crf44_sub <-
   crf_clean$crf44 |>
-  select(pid, reason_replacement) |> 
-  mutate(replaced = TRUE) 
+  select(pid, reason_replacement) |>
+  mutate(replaced = TRUE)
 
-participants <- 
+participants <-
   participants |>
   select(-any_of(c("replaced"))) |>
-  left_join(crf44_sub |> select(pid, replaced) |> mutate(pid = pid |> as.character()), by = "pid") |> 
-  mutate(replaced = replaced |> replace_na(FALSE)) 
+  left_join(
+    crf44_sub |> select(pid, replaced) |> mutate(pid = pid |> as.character()),
+    by = "pid"
+  ) |>
+  mutate(replaced = replaced |> replace_na(FALSE))
 
 rm(crf44_sub)
 
@@ -778,114 +811,121 @@ rm(crf44_sub)
 # If a participant has 3 days of heavy bleeding (i.e. soaking a pad at least once in a day) during study product dosing, or more than 5 days in a row of heavy bleeding during follow-up, an additional participant will be added to that study arm in the remaining randomization matrix.
 # 3.6.4	Antibiotics
 # If a participant needs antibiotic treatment for any reason (recurrent BV, urinary tract infection, other) before the week 5 visit, an additional participant will be added to that study arm in the remaining randomization matrix.
-# 3.6.5	HSIL pap 
+# 3.6.5	HSIL pap
 # If the Pap smear obtained at the screening visit is read as HSIL, an additional participant will be added to that study arm in the remaining randomization matrix.
-
 
 # we use CRF 33 (daily diary) for bleeding
 
-crf33_sub <- 
-  crf_clean$crf33 |> 
-  select(pid, visit_code, vaginal_bleeding) |> 
-  left_join(crf_clean$crf13 |> select(pid, group4), by = join_by(pid)) |> 
+crf33_sub <-
+  crf_clean$crf33 |>
+  select(pid, visit_code, vaginal_bleeding) |>
+  left_join(crf_clean$crf13 |> select(pid, group4), by = join_by(pid)) |>
   mutate(
-    period = 
-      case_when(
-        (visit_code < 1000) ~ "pre-mtz",
-        (group4 == "No") & (visit_code %in% 1000:1099) ~ "mtz",
-         (group4 == "Yes") & (visit_code %in% 1001:1200) ~ "product",
-        (group4 == "No") & (visit_code %in% 1100:1200) ~ "product",
-        (visit_code %in% 1201:1500) ~ "follow-up",
-        TRUE ~ NA_character_
-      )
-  ) |> 
-  filter(period %in% c("product", "follow-up")) |> 
-  group_by(pid, period) |> 
+    period = case_when(
+      (visit_code < 1000) ~ "pre-mtz",
+      (group4 == "No") & (visit_code %in% 1000:1099) ~ "mtz",
+      (group4 == "Yes") & (visit_code %in% 1001:1200) ~ "product",
+      (group4 == "No") & (visit_code %in% 1100:1200) ~ "product",
+      (visit_code %in% 1201:1500) ~ "follow-up",
+      TRUE ~ NA_character_
+    )
+  ) |>
+  filter(period %in% c("product", "follow-up")) |>
+  group_by(pid, period) |>
   summarize(
-    n_heavy_bleeding = sum(vaginal_bleeding == "Yes - Heavy", na.rm = TRUE), 
-    n_max_consecutive_heavy_bleeding = 
-      max(
-        rle(vaginal_bleeding == "Yes - Heavy")$lengths[rle(vaginal_bleeding == "Yes - Heavy")$values],
-        na.rm = TRUE
-      ),
+    n_heavy_bleeding = sum(vaginal_bleeding == "Yes - Heavy", na.rm = TRUE),
+    n_max_consecutive_heavy_bleeding = max(
+      rle(vaginal_bleeding == "Yes - Heavy")$lengths[rle(vaginal_bleeding == "Yes - Heavy")$values],
+      na.rm = TRUE
+    ),
     .groups = "drop"
-    ) |> 
+  ) |>
   mutate(
-    replacement_criteria_bleeding = 
-      case_when(
-        (period == "product" & n_heavy_bleeding >= 3) ~ TRUE,
-        (period == "follow-up" & n_max_consecutive_heavy_bleeding >= 5) ~ TRUE,
-        TRUE ~ FALSE
-      )
-  ) |> 
-  group_by(pid) |> 
+    replacement_criteria_bleeding = case_when(
+      (period == "product" & n_heavy_bleeding >= 3) ~ TRUE,
+      (period == "follow-up" & n_max_consecutive_heavy_bleeding >= 5) ~ TRUE,
+      TRUE ~ FALSE
+    )
+  ) |>
+  group_by(pid) |>
   summarise(
     replacement_criteria_bleeding = any(replacement_criteria_bleeding, na.rm = TRUE),
     .groups = "drop"
-  ) 
-
-
+  )
 
 
 # 3.6.4	Antibiotics
 # If a participant needs antibiotic treatment for any reason (recurrent BV, urinary tract infection, other) before the week 5 visit, an additional participant will be added to that study arm in the remaining randomization matrix.
 
 # we use CRF 20 (follow-up questionnaire) for antibiotics
-crf20_sub <- 
-  crf_clean$crf20 |> 
-  select(pid, visit_code, used_during_past_week) |> 
-  filter(visit_code > 1000, visit_code <= 1500) |> 
-  group_by(pid) |> 
+crf20_sub <-
+  crf_clean$crf20 |>
+  select(pid, visit_code, used_during_past_week) |>
+  filter(visit_code > 1000, visit_code <= 1500) |>
+  group_by(pid) |>
   summarize(
     any_antibiotics = any(str_detect(used_during_past_week, "antibiotic"))
   )
 
 # we use CRF 31 (concomitant medications) for antibiotics, we filter participants who take ciprofloxacin, fosfomycin or metronidazole before study_day 35
 
-crf31_sub <- 
-  crf_clean$crf31 |> 
-  select(pid, med_start_relative_date, medication) |> 
-  left_join(visits |> filter(visit_code == "1500") |> select(pid, visit_code, study_day), by = "pid") |> 
-  filter(str_detect(medication, regex("METRONIDAZOLE|FLAGYL|FOSFOMYCIN|CIPROFLOXACIN|NITROFURANTOIN|CIPROBAY|MACROBID|AZITHROMYCIN|PENICILLIN|AMOXICILLIN|AUGMENTIN|CIPROFLOXACIN|CEFTRIAXONE|DOXYCYCLINE|BENZANINE", ignore_case = TRUE))) |>
-  filter(med_start_relative_date < study_day) |> #  med_start_relative_date > 7 
+crf31_sub <-
+  crf_clean$crf31 |>
+  select(pid, med_start_relative_date, medication) |>
+  left_join(
+    visits |> filter(visit_code == "1500") |> select(pid, visit_code, study_day),
+    by = "pid"
+  ) |>
+  filter(str_detect(
+    medication,
+    regex(
+      "METRONIDAZOLE|FLAGYL|FOSFOMYCIN|CIPROFLOXACIN|NITROFURANTOIN|CIPROBAY|MACROBID|AZITHROMYCIN|PENICILLIN|AMOXICILLIN|AUGMENTIN|CIPROFLOXACIN|CEFTRIAXONE|DOXYCYCLINE|BENZANINE",
+      ignore_case = TRUE
+    )
+  )) |>
+  filter(med_start_relative_date < study_day) |> #  med_start_relative_date > 7
   mutate(
     any_antibiotics_crf31 = TRUE
-  ) |> 
-    select(pid, any_antibiotics_crf31)
+  ) |>
+  select(pid, any_antibiotics_crf31)
 
-# 3.6.5	HSIL pap 
+# 3.6.5	HSIL pap
 # If the Pap smear obtained at the screening visit is read as HSIL, an additional participant will be added to that study arm in the remaining randomization matrix
 
-# we use CRF 15 (pap smear and blood) for HSIL pap 
-crf15_sub <- 
-  crf_clean$crf15 |> 
-  select(pid, visit_code, pap_smear_results) |> 
-  filter(visit_code <= 1000) |> 
-  group_by(pid) |> 
+# we use CRF 15 (pap smear and blood) for HSIL pap
+crf15_sub <-
+  crf_clean$crf15 |>
+  select(pid, visit_code, pap_smear_results) |>
+  filter(visit_code <= 1000) |>
+  group_by(pid) |>
   summarize(
     any_HSIL = any(str_detect(pap_smear_results, "HSIL"))
   )
 
 
-participants <- 
+participants <-
   participants |>
   select(-any_of(c("replacement_criteria_bleeding"))) |>
-  left_join(crf33_sub, by = "pid") |> 
-  mutate(replacement_criteria_bleeding = replacement_criteria_bleeding |> replace_na(FALSE)) |> 
+  left_join(crf33_sub, by = "pid") |>
+  mutate(replacement_criteria_bleeding = replacement_criteria_bleeding |> replace_na(FALSE)) |>
   select(-any_of(c("any_antibiotics"))) |>
-  left_join(crf20_sub, by = "pid") |> 
-  mutate(any_antibiotics = any_antibiotics |> replace_na(FALSE)) |> 
+  left_join(crf20_sub, by = "pid") |>
+  mutate(any_antibiotics = any_antibiotics |> replace_na(FALSE)) |>
   left_join(crf31_sub, by = "pid") |>
   mutate(any_antibiotics_crf31 = any_antibiotics_crf31 |> replace_na(FALSE)) |>
   select(-any_of(c("any_HSIL"))) |>
   left_join(crf15_sub, by = "pid") |>
-  mutate(any_HSIL = any_HSIL |> replace_na(FALSE)) |> 
-  mutate(meets_replacement_criteria = replacement_criteria_bleeding | any_antibiotics | any_antibiotics_crf31 | any_HSIL) 
+  mutate(any_HSIL = any_HSIL |> replace_na(FALSE)) |>
+  mutate(
+    meets_replacement_criteria = replacement_criteria_bleeding |
+      any_antibiotics |
+      any_antibiotics_crf31 |
+      any_HSIL
+  )
 
-participants |> 
-  dplyr::count(randomized, replaced, meets_replacement_criteria) |> 
+participants |>
+  dplyr::count(randomized, replaced, meets_replacement_criteria) |>
   gt(caption = "Replacement criteria")
-
 ```
 
 We finally look at the product use from CRF23 (Product Use) and/or our "consolidated" product exposure table to identify participants who took at least one dose of study product (mITT) or 80% of the doses (PP).
@@ -895,28 +935,27 @@ We finally look at the product use from CRF23 (Product Use) and/or our "consolid
 # we add information about product use
 
 # two ways: 1 = CRF23 aggregation
-crf23_sub <- 
+crf23_sub <-
   crf_clean$crf23 |>
-  select(pid, dfseq, n_missed_days) |> 
-  group_by(pid) |> 
+  select(pid, dfseq, n_missed_days) |>
+  group_by(pid) |>
   summarize(
-    n_missed_days = 
-      case_when(
-        all(is.na(n_missed_days)) ~ NA_integer_,
-        TRUE ~ sum(n_missed_days, na.rm = TRUE)
-      )
-    ) |> 
+    n_missed_days = case_when(
+      all(is.na(n_missed_days)) ~ NA_integer_,
+      TRUE ~ sum(n_missed_days, na.rm = TRUE)
+    )
+  ) |>
   mutate(n_study_product_doses = 7 - n_missed_days)
 
 # 2. exposures table
 # we use exposures table to get the number of study product doses
-exposures_studyproduct_summary <- 
-  exposures |> 
-  mutate(pid = pid |> as.character()) |> 
-  group_by(pid) |> 
+exposures_studyproduct_summary <-
+  exposures |>
+  mutate(pid = pid |> as.character()) |>
+  group_by(pid) |>
   summarise(
     n_study_product_doses = sum(as.numeric(daily_self_reported_adherence_sp), na.rm = TRUE),
-  ) |> 
+  ) |>
   mutate(
     n_missed_days = 7 - n_study_product_doses
   )
@@ -925,90 +964,93 @@ full_join(
   crf23_sub,
   exposures_studyproduct_summary,
   by = "pid"
-) |> 
+) |>
   filter(
-    is.na(n_study_product_doses.x) | 
-       is.na(n_study_product_doses.y) |
-    (n_study_product_doses.x != n_study_product_doses.y)
-    ) |> 
+    is.na(n_study_product_doses.x) |
+      is.na(n_study_product_doses.y) |
+      (n_study_product_doses.x != n_study_product_doses.y)
+  ) |>
   left_join(
     participants |> select(pid, randomized, arm),
     by = "pid"
-  ) |> 
+  ) |>
   gt(
     caption = "Disagreement between CRF23 and exposures table"
   )
-  
 
-participants <- 
-  participants |> 
+
+participants <-
+  participants |>
   select(-any_of(c("n_study_product_doses_crf23", "n_study_product_doses_exposures"))) |>
   left_join(
-    crf23_sub |> 
-      mutate(n_study_product_doses_crf23 = n_study_product_doses) |> 
+    crf23_sub |>
+      mutate(n_study_product_doses_crf23 = n_study_product_doses) |>
       select(pid, n_study_product_doses_crf23),
     by = "pid"
-  ) |> 
+  ) |>
   left_join(
-    exposures_studyproduct_summary |> 
-      mutate(n_study_product_doses_exposures = pmin(7, n_study_product_doses)) |> 
+    exposures_studyproduct_summary |>
+      mutate(n_study_product_doses_exposures = pmin(7, n_study_product_doses)) |>
       select(pid, n_study_product_doses_exposures),
     by = "pid"
-  ) |> 
+  ) |>
   mutate(
     n_study_product_doses_crf23 = n_study_product_doses_crf23 |> replace_na(0),
     n_study_product_doses_exposures = n_study_product_doses_exposures |> replace_na(0)
   )
 
-participants |> 
+participants |>
   dplyr::count(
-    randomized, 
+    randomized,
     arm,
-    n_study_product_doses_crf23 > 1, 
-    n_study_product_doses_exposures  > 1
-  ) |> 
+    n_study_product_doses_crf23 > 1,
+    n_study_product_doses_exposures > 1
+  ) |>
   gt(caption = "Number of participants with more than 1 dose according to CRF23 or exposures table")
 
 
-participants |> 
+participants |>
   dplyr::count(
-    randomized, 
+    randomized,
     arm,
-    n_study_product_doses_crf23 > 5, 
+    n_study_product_doses_crf23 > 5,
     n_study_product_doses_exposures > 5
-  ) |> 
-  gt(caption = "Number of participants with more than 5 doses according to CRF23 or exposures table")
-
+  ) |>
+  gt(
+    caption = "Number of participants with more than 5 doses according to CRF23 or exposures table"
+  )
 ```
 
 We create the population flags. 
 
 ```{r}
-# create the flag 
-participants <- 
-  participants |> 
+# create the flag
+participants <-
+  participants |>
   mutate(
     ITT = randomized,
     mITT = ITT & meet_eligibility & (n_study_product_doses_crf23 > 0) & (n_swabs_post_product > 0),
-    PP = ITT & !replaced & !meets_replacement_criteria & (n_study_product_doses_crf23 > 0.8 * 7) & (n_swabs_post_product_prior_week7 > 0)
+    PP = ITT &
+      !replaced &
+      !meets_replacement_criteria &
+      (n_study_product_doses_crf23 > 0.8 * 7) &
+      (n_swabs_post_product_prior_week7 > 0)
   )
 ```
 
 ```{r}
 
-participants |> 
-  dplyr::count(randomized, ITT, mITT, PP) |> 
+participants |>
+  dplyr::count(randomized, ITT, mITT, PP) |>
   gt()
-
 ```
 
 
 ```{r}
 
-participants <- 
-  participants |> 
-  select(pid, site, location, randomized, arm, ITT, mITT, PP, everything()) 
-
+participants <-
+  participants |>
+  select(pid, site, location, randomized, arm, ITT, mITT, PP, everything())
 ```
 
 
@@ -1016,38 +1058,42 @@ participants <-
 
 ```{r}
 
-
-participants_variable_dictionary <- 
+participants_variable_dictionary <-
   tibble(
     variable = colnames(participants)
-  ) |> 
+  ) |>
   mutate(
-    description = 
-      case_when(
-        variable == "pid" ~ "Participant ID",
-        variable == "site" ~ "Study site (MGH or CAP)",
-        variable == "location" ~ "Location of the participant (US or SA)",
-        variable == "randomized" ~ "Randomized participant (TRUE or FALSE)",
-        variable == "arm" ~ "Randomization arm",
-        variable == "ITT" ~ "Intention-to-treat population flag (TRUE or FALSE)",
-        variable == "mITT" ~ "Modified intention-to-treat population flag (TRUE or FALSE)",
-        variable == "PP" ~ "Per-protocol population flag (TRUE or FALSE)",
-        variable == "meet_eligibility" ~ "Eligibility flag (TRUE or FALSE): whether participant met eligibility criteria at their last screening visit",
-        variable == "n_swabs_post_product" ~ "Number of swabs collected from visit 1200 (incl.)",
-        variable == "n_swabs_post_product_prior_week7" ~ "Number of swabs collected from visit 1200 to 1500 (incl.)",
-        variable == "replaced" ~ "Replacement flag (TRUE or FALSE): whether participant was replaced",
-        variable == "replacement_criteria_bleeding" ~ "Whether participant met replacement criteria related to bleeding.",
-        variable == "any_antibiotics" ~ "Whether participant used any antibiotics before visit 1500.",
-        variable == "any_antibiotics_crf31" ~ "Whether participant used any antibiotics before visit 1500 according to CRF31 (concomitant medications).",
-        variable == "any_HSIL" ~ "Whether participant had HSIL pap at screening visit.",
-        variable == "meets_replacement_criteria" ~ "Whether participant meets any of the replacement criteria (bleeding, antibiotics, HSIL pap)",
-        variable == "n_study_product_doses_crf23" ~ "Number of doses taken (as reported in CRF23; missing values imputed to 0)",
-        variable == "n_study_product_doses_exposures" ~ "Number of doses taken (as reported in exposures table)",
-        
-        TRUE ~ "???"
-      )
-  )
+    description = case_when(
+      variable == "pid" ~ "Participant ID",
+      variable == "site" ~ "Study site (MGH or CAP)",
+      variable == "location" ~ "Location of the participant (US or SA)",
+      variable == "randomized" ~ "Randomized participant (TRUE or FALSE)",
+      variable == "arm" ~ "Randomization arm",
+      variable == "ITT" ~ "Intention-to-treat population flag (TRUE or FALSE)",
+      variable == "mITT" ~ "Modified intention-to-treat population flag (TRUE or FALSE)",
+      variable == "PP" ~ "Per-protocol population flag (TRUE or FALSE)",
+      variable ==
+        "meet_eligibility" ~ "Eligibility flag (TRUE or FALSE): whether participant met eligibility criteria at their last screening visit",
+      variable == "n_swabs_post_product" ~ "Number of swabs collected from visit 1200 (incl.)",
+      variable ==
+        "n_swabs_post_product_prior_week7" ~ "Number of swabs collected from visit 1200 to 1500 (incl.)",
+      variable == "replaced" ~ "Replacement flag (TRUE or FALSE): whether participant was replaced",
+      variable ==
+        "replacement_criteria_bleeding" ~ "Whether participant met replacement criteria related to bleeding.",
+      variable == "any_antibiotics" ~ "Whether participant used any antibiotics before visit 1500.",
+      variable ==
+        "any_antibiotics_crf31" ~ "Whether participant used any antibiotics before visit 1500 according to CRF31 (concomitant medications).",
+      variable == "any_HSIL" ~ "Whether participant had HSIL pap at screening visit.",
+      variable ==
+        "meets_replacement_criteria" ~ "Whether participant meets any of the replacement criteria (bleeding, antibiotics, HSIL pap)",
+      variable ==
+        "n_study_product_doses_crf23" ~ "Number of doses taken (as reported in CRF23; missing values imputed to 0)",
+      variable ==
+        "n_study_product_doses_exposures" ~ "Number of doses taken (as reported in exposures table)",
 
+      TRUE ~ "???"
+    )
+  )
 ```
 
 ```{r}
@@ -1062,12 +1108,28 @@ participants_variable_dictionary |> gt()
 
 dir <- get_01_output_dir()
 
-save(participants, file = str_c(dir, "01_participants_", today() |> str_replace_all("-",""), ".Rdata"))
-save(participants_variable_dictionary, file = str_c(dir, "01_participants_variable_dictionary_", today() |> str_replace_all("-",""), ".Rdata")) 
-save(visits_long, file = str_c(dir, "01_visits_long_", today() |> str_replace_all("-",""), ".Rdata"))
-save(visits, file = str_c(dir, "01_visits_", today() |> str_replace_all("-",""),".Rdata"))
-save(visits_variable_dictionary, file = str_c(dir, "01_visits_variable_dictionary_", today() |> str_replace_all("-",""), ".RData"))
-
+save(
+  participants,
+  file = str_c(dir, "01_participants_", today() |> str_replace_all("-", ""), ".Rdata")
+)
+save(
+  participants_variable_dictionary,
+  file = str_c(
+    dir,
+    "01_participants_variable_dictionary_",
+    today() |> str_replace_all("-", ""),
+    ".Rdata"
+  )
+)
+save(
+  visits_long,
+  file = str_c(dir, "01_visits_long_", today() |> str_replace_all("-", ""), ".Rdata")
+)
+save(visits, file = str_c(dir, "01_visits_", today() |> str_replace_all("-", ""), ".Rdata"))
+save(
+  visits_variable_dictionary,
+  file = str_c(dir, "01_visits_variable_dictionary_", today() |> str_replace_all("-", ""), ".RData")
+)
 ```
 
 

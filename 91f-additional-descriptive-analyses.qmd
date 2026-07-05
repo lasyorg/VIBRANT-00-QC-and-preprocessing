@@ -45,18 +45,17 @@ theme_set(theme_light())
 
 ```{r}
 
-mae_files <- 
+mae_files <-
   fs::dir_ls(
     get_03_output_dir(),
     regexp = "mae_full_05_.*\\.rds$"
-  ) |> 
+  ) |>
   sort(decreasing = TRUE) |>
   magrittr::extract(1)
 
 mae <- readRDS(mae_files)
 
 rm(mae_files)
-
 ```
 
 ## Lab values 
@@ -71,23 +70,35 @@ The urinalysis results are available in `visits_crf_merged` table. Analyses were
 
 ```{r}
 
-urinalysis <- 
-  mae@metadata$visits_crfs_merged |> 
+urinalysis <-
+  mae@metadata$visits_crfs_merged |>
   select(
-    uid, urinalysis_not_applicable, bilirubin, ketone, blood, protein,
-    specific_gravity_signs, specific_gravity_value, ph, urobilinogen, nitrite, leucocytes, glucose
+    uid,
+    urinalysis_not_applicable,
+    bilirubin,
+    ketone,
+    blood,
+    protein,
+    specific_gravity_signs,
+    specific_gravity_value,
+    ph,
+    urobilinogen,
+    nitrite,
+    leucocytes,
+    glucose
   ) |>
   left_join(
-    mae@colData |> as_tibble() |> select(uid, pid, study_day, visit_code, visit_type, randomized, site),
+    mae@colData |>
+      as_tibble() |>
+      select(uid, pid, study_day, visit_code, visit_type, randomized, site),
     by = join_by(uid)
   )
-
 ```
 
 In the table below, we present the distribution of **glucose** values in the urinalysis data. We see that most of the samples have "Negative" values of glucose concentration in the urine, and the rest of the values are distributed across the different levels of glucose concentration in the urine.
 
 ```{r}
-# summary table 
+# summary table
 
 urinalysis |>
   filter(!is.na(glucose)) |>
@@ -99,7 +110,6 @@ urinalysis |>
   arrange(desc(n)) |>
   gt(caption = "Distribution of glucose values in the urinalysis data") |>
   fmt_number(columns = prop, decimals = 4)
-  
 ```
 
 We document below the participants for which the glucose values are not negative, nor "blank", by visit code. 
@@ -111,8 +121,9 @@ urinalysis |>
   filter(glucose != "Negative" & glucose != "Blank") |>
   select(pid, study_day, visit_code, randomized, visit_type, site, glucose) |>
   arrange(pid, visit_code) |>
-  gt(caption = "Participants with non-negative glucose values in the urinalysis data")
-
+  gt(
+    caption = "Participants with non-negative glucose values in the urinalysis data"
+  )
 ```
 
 
@@ -123,7 +134,15 @@ Only participant `068100026` has consistently high values of glucose concentrati
 #| fig-width: 12
 # glucose
 
-glucose_colors <- c("Negative" = "#8ed0b4", "Trace" = "#8dc588", "1+" = "#79af59", "2+" = "#8f9243", "3+" = "#84753a","4+" = "#74563e", Blank = "grey80")
+glucose_colors <- c(
+  "Negative" = "#8ed0b4",
+  "Trace" = "#8dc588",
+  "1+" = "#79af59",
+  "2+" = "#8f9243",
+  "3+" = "#84753a",
+  "4+" = "#74563e",
+  Blank = "grey80"
+)
 
 urinalysis |>
   filter(!is.na(glucose)) |>
@@ -133,9 +152,16 @@ urinalysis |>
   geom_point() +
   scale_color_manual(values = glucose_colors) +
   facet_wrap(~site, scales = "free_x", space = "free_x") +
-  theme(legend.position = "bottom", axis.text.x = element_text(angle = 90, hjust = 1)) +
-  labs(subtitle = "Glucose values by visit code and randomized participant", y = "Visit code", x = "Participant", color = "Glucose scale")
-
+  theme(
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 90, hjust = 1)
+  ) +
+  labs(
+    subtitle = "Glucose values by visit code and randomized participant",
+    y = "Visit code",
+    x = "Participant",
+    color = "Glucose scale"
+  )
 ```
 
 We present below the distribution of **bilirubin** values in the urinalysis data.
@@ -154,7 +180,6 @@ urinalysis |>
   arrange(desc(n)) |>
   gt(caption = "Distribution of bilirubin values in the urinalysis data") |>
   fmt_number(columns = prop, decimals = 4)
-
 ```
 
 Most samples seem to have "Negative" values of bilirubin, and the rest of the values are distributed across the different levels of bilirubin concentration in the urine. 
@@ -172,8 +197,13 @@ urinalysis |>
   geom_point() +
   scale_shape_manual(values = c(1, 16)) +
   theme(legend.position = "bottom", axis.text.x = element_text(angle = 90)) +
-  labs(title = "Biliburin results", subtitle = "Participants with bilirubin values of 1+ in the urinal data, by visit code and participant", y = "Visit code", x = "Participant", color = "Bilirubin scale")
-
+  labs(
+    title = "Biliburin results",
+    subtitle = "Participants with bilirubin values of 1+ in the urinal data, by visit code and participant",
+    y = "Visit code",
+    x = "Participant",
+    color = "Bilirubin scale"
+  )
 ```
 
 It looks like the "1+" values of bilirubin concentration in the urine are mostly measured at baseline, with mostly non-randomized participants, and only a few randomized participants with "1+" values of bilirubin concentration in the urine at baseline. We also see that there are some "1+" values of bilirubin concentration in the urine measured at later visit codes, and these are mostly from randomized participants.
@@ -189,8 +219,9 @@ urinalysis |>
   filter(randomized) |>
   select(pid, study_day, visit_code, randomized, visit_type, site, bilirubin) |>
   arrange(pid) |>
-  gt(caption = "Randomized participants with bilirubin values of 1+ at baseline in the urinalysis data")
-
+  gt(
+    caption = "Randomized participants with bilirubin values of 1+ at baseline in the urinalysis data"
+  )
 ```
 
 We now document below samples for which bilirubin values are either "Trace" or "+2".
@@ -202,8 +233,9 @@ urinalysis |>
   filter(bilirubin == "Trace" | bilirubin == "2+") |>
   select(pid, study_day, visit_code, randomized, visit_type, site, bilirubin) |>
   arrange(pid, visit_code) |>
-  gt(caption = "Participants with bilirubin values of Trace or 2+ in the urinalysis data")
-
+  gt(
+    caption = "Participants with bilirubin values of Trace or 2+ in the urinalysis data"
+  )
 ```
 
 Among participants with a high value of bilirubin concentration in the urine, only participant `068200370` is randomized, and has value of "+2" at visit 1500.
@@ -215,7 +247,15 @@ We present below the distribution of bilirubin by visit code and participant, fo
 #| fig-width: 12
 # bilirubin
 
-bilirubin_colors <- c("Negative" = "#f8eaa3", "1+" = "#eed8a6", "2+" = "#c9c296", "3+" = "#c2ac94", "Blank" = "grey80", "Not applicable" = "grey80", "Not done" = "grey60")
+bilirubin_colors <- c(
+  "Negative" = "#f8eaa3",
+  "1+" = "#eed8a6",
+  "2+" = "#c9c296",
+  "3+" = "#c2ac94",
+  "Blank" = "grey80",
+  "Not applicable" = "grey80",
+  "Not done" = "grey60"
+)
 
 urinalysis |>
   filter(!is.na(bilirubin)) |>
@@ -225,9 +265,16 @@ urinalysis |>
   geom_point() +
   scale_color_manual(values = bilirubin_colors) +
   facet_wrap(~site, scales = "free_x", space = "free_x") +
-  theme(legend.position = "bottom", axis.text.x = element_text(angle = 90, hjust = 1)) +
-  labs(subtitle = "Bilirubin values by visit code and randomized participant", y = "Visit code", x = "Participant", color = "Bilirubin scale")
-
+  theme(
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 90, hjust = 1)
+  ) +
+  labs(
+    subtitle = "Bilirubin values by visit code and randomized participant",
+    y = "Visit code",
+    x = "Participant",
+    color = "Bilirubin scale"
+  )
 ```
 
 We document below the distribution of **ketone** values in the urinalysis data.
@@ -245,7 +292,6 @@ urinalysis |>
   arrange(desc(n)) |>
   gt(caption = "Distribution of ketone values in the urinalysis data") |>
   fmt_number(columns = prop, decimals = 4)
-
 ```
 
 Most samples seem to have "Negative" values of ketone, and the rest of the values are distributed across the different levels of ketone concentration in the urine. Several of them are "Trace" values of ketone concentration in the urine. We document below samples for which ketone concentration is higher or equal than "+1", by visit code and participant.
@@ -261,8 +307,13 @@ urinalysis |>
   geom_point() +
   scale_shape_manual(values = c(1, 16)) +
   theme(legend.position = "bottom", axis.text.x = element_text(angle = 90)) +
-  labs(title = "Ketone results", subtitle = "Participants with ketone values of 1+ or higher in the urinal data, by visit code and participant", y = "Visit code", x = "Participant", color = "Ketone scale")
-
+  labs(
+    title = "Ketone results",
+    subtitle = "Participants with ketone values of 1+ or higher in the urinal data, by visit code and participant",
+    y = "Visit code",
+    x = "Participant",
+    color = "Ketone scale"
+  )
 ```
 
 We document in the table below the randomized participants with ketone values of "1+" or higher.
@@ -275,8 +326,9 @@ urinalysis |>
   filter(randomized) |>
   select(pid, study_day, visit_code, randomized, visit_type, site, ketone) |>
   arrange(pid) |>
-  gt(caption = "Randomized participants with ketone values of 1+ or higher in the urinalysis data")
-
+  gt(
+    caption = "Randomized participants with ketone values of 1+ or higher in the urinalysis data"
+  )
 ```
 
 Participant `068100026` has several values of ketone concentration in the urine higher or equal than "1+", across multiple visit codes, and mostly at later visit codes, which is consistent with its high values of glucose concentration in the urine. This participant is randomized, and has type II diabetes as pre-existing conditions. We also notice high concentration of ketone in the urine for participant `068200278`. Participant `068200370` has a single value of "2+" for ketone concentration in the urine at visit code 1500, which happens to be the same visit code at which this participant has a value of "+2" for bilirubin concentration in the urine.
@@ -286,7 +338,15 @@ Participant `068100026` has several values of ketone concentration in the urine 
 #| fig-width: 12
 # ketone
 
-ketone_colors <- c("Negative" = "#d8b798", "Trace" = "#e6ab99", "1+" = "#d68282", "2+" = "#b6636b", "3+" = "#844452", "4+" = "#63333f", "Blank" = "grey80")
+ketone_colors <- c(
+  "Negative" = "#d8b798",
+  "Trace" = "#e6ab99",
+  "1+" = "#d68282",
+  "2+" = "#b6636b",
+  "3+" = "#844452",
+  "4+" = "#63333f",
+  "Blank" = "grey80"
+)
 
 urinalysis |>
   filter(!is.na(ketone)) |>
@@ -296,9 +356,17 @@ urinalysis |>
   geom_point() +
   scale_color_manual(values = ketone_colors) +
   facet_wrap(~site, scales = "free_x", space = "free_x") +
-  theme(legend.position = "bottom", axis.text.x = element_text(angle = 90, hjust = 1)) +
-  labs(title = "Ketone results", subtitle = "Ketone values by visit code and randomized participant", y = "Visit code", x = "Participant", color = "Ketone scale")
-
+  theme(
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 90, hjust = 1)
+  ) +
+  labs(
+    title = "Ketone results",
+    subtitle = "Ketone values by visit code and randomized participant",
+    y = "Visit code",
+    x = "Participant",
+    color = "Ketone scale"
+  )
 ```
 
 We document below the distribution of **blood** values in the urinalysis data.
@@ -316,7 +384,6 @@ urinalysis |>
   arrange(desc(n)) |>
   gt(caption = "Distribution of blood values in the urinalysis data") |>
   fmt_number(columns = prop, decimals = 4)
-
 ```
 
 We will document below each class of blood concentration in the urine, by visit code and participant, starting with the "Trace" values of blood concentration in the urine.
@@ -332,8 +399,12 @@ urinalysis |>
   geom_point(color = "grey20") +
   scale_shape_manual(values = c(1, 16)) +
   theme(legend.position = "bottom", axis.text.x = element_text(angle = 90)) +
-  labs(title = "Blood results", subtitle = "Participants with Trace values of blood concentration in the urine in the urinal data, \nby visit code and participant", y = "Visit code", x = "Participant")
-
+  labs(
+    title = "Blood results",
+    subtitle = "Participants with Trace values of blood concentration in the urine in the urinal data, \nby visit code and participant",
+    y = "Visit code",
+    x = "Participant"
+  )
 ```
 
 Most of the samples with "Trace" values of blood concentration in the urine are from randomized participants, but upon checking, these values may not be due to contamination with menstrual blood, at least according to the reported menstruation status of the participants at the corresponding visit codes.
@@ -349,8 +420,13 @@ urinalysis |>
   geom_point(color = "dodgerblue") +
   scale_shape_manual(values = c(1, 16)) +
   theme(legend.position = "bottom", axis.text.x = element_text(angle = 90)) +
-  labs(title = "Blood results", subtitle = "Participants with values of blood concentration in the urine of 1+ or higher in the urinal data, \nby visit code and participant", y = "Visit code", x = "Participant", color = "Blood scale")
-
+  labs(
+    title = "Blood results",
+    subtitle = "Participants with values of blood concentration in the urine of 1+ or higher in the urinal data, \nby visit code and participant",
+    y = "Visit code",
+    x = "Participant",
+    color = "Blood scale"
+  )
 ```
 
 ```{r}
@@ -364,8 +440,12 @@ urinalysis |>
   geom_point(color = "darkgoldenrod1") +
   scale_shape_manual(values = c(1, 16)) +
   theme(legend.position = "bottom", axis.text.x = element_text(angle = 90)) +
-  labs(title = "Blood results", subtitle = "Participants with values of blood concentration in the urine of 2+ in the urinal data, \nby visit code and participant", y = "Visit code", x = "Participant")
-
+  labs(
+    title = "Blood results",
+    subtitle = "Participants with values of blood concentration in the urine of 2+ in the urinal data, \nby visit code and participant",
+    y = "Visit code",
+    x = "Participant"
+  )
 ```
 
 At each clinical visit, participant `068200379` has systematically a value of +2 for blood concentration in the urine. 
@@ -373,7 +453,7 @@ At each clinical visit, participant `068200379` has systematically a value of +2
 
 urinalysis |>
   filter(!is.na(blood)) |>
-  filter(blood == "3+"|blood == "4+") |>
+  filter(blood == "3+" | blood == "4+") |>
   select(pid, study_day, visit_code, randomized, visit_type, site, blood) |>
   ggplot() +
   aes(y = visit_code, x = pid, color = blood, shape = randomized) +
@@ -381,8 +461,12 @@ urinalysis |>
   scale_color_manual(values = c("3+" = "orangered", "4+" = "orangered4")) +
   scale_shape_manual(values = c(1, 16)) +
   theme(legend.position = "bottom", axis.text.x = element_text(angle = 90)) +
-  labs(title = "Blood results", subtitle = "Participants with values of blood concentration in the urine of 3+ or higher in the urinal data, \nby visit code and participant", y = "Visit code", x = "Participant")
-
+  labs(
+    title = "Blood results",
+    subtitle = "Participants with values of blood concentration in the urine of 3+ or higher in the urinal data, \nby visit code and participant",
+    y = "Visit code",
+    x = "Participant"
+  )
 ```
 
 Several participants, such as `068100029`, `068100036` and `068100049` have overall high values of blood concentration, overlapping with the menstruation status of the participants at the corresponding visit codes (at least for samples comprised between visit code 0000 and visit code 1500).
@@ -392,7 +476,15 @@ Several participants, such as `068100029`, `068100036` and `068100049` have over
 #| fig-width: 12
 # blood
 
-blood_colors <- c("Negative" = "#e3ba3c", "Trace" = "#c0be43", "1+" = "#91ac45", "2+" = "#568745", "3+" = "#3d573e", "4+" = "#2e4230", "Blank" = "grey80")
+blood_colors <- c(
+  "Negative" = "#e3ba3c",
+  "Trace" = "#c0be43",
+  "1+" = "#91ac45",
+  "2+" = "#568745",
+  "3+" = "#3d573e",
+  "4+" = "#2e4230",
+  "Blank" = "grey80"
+)
 
 urinalysis |>
   filter(!is.na(blood)) |>
@@ -402,8 +494,17 @@ urinalysis |>
   geom_point() +
   scale_color_manual(values = blood_colors) +
   facet_wrap(~site, scales = "free_x", space = "free_x") +
-  theme(legend.position = "bottom", axis.text.x = element_text(angle = 90, hjust = 1)) +
-  labs(title = "Blood results", subtitle = "Blood values by visit code and randomized participant", y = "Visit code", x = "Participant", color = "Blood scale")
+  theme(
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 90, hjust = 1)
+  ) +
+  labs(
+    title = "Blood results",
+    subtitle = "Blood values by visit code and randomized participant",
+    y = "Visit code",
+    x = "Participant",
+    color = "Blood scale"
+  )
 
 tmp <- urinalysis |>
   group_by(pid) |>
@@ -417,11 +518,26 @@ tmp <- urinalysis |>
     )
   ) |>
   ungroup() |>
-  select(pid, study_day, visit_code, randomized, visit_type, site, blood, n_blood, n_samples, prop_blood, flag_blood) |>
+  select(
+    pid,
+    study_day,
+    visit_code,
+    randomized,
+    visit_type,
+    site,
+    blood,
+    n_blood,
+    n_samples,
+    prop_blood,
+    flag_blood
+  ) |>
   filter(randomized) |>
   filter(!is.na(blood))
 
-flag_blood <- tmp |> filter(flag_blood == "Consistent blood in urine") |> pull(pid) |> unique()
+flag_blood <- tmp |>
+  filter(flag_blood == "Consistent blood in urine") |>
+  pull(pid) |>
+  unique()
 
 tmp |>
   filter(!is.na(blood)) |>
@@ -429,16 +545,26 @@ tmp |>
   ggplot() +
   aes(y = visit_code, x = pid, color = blood) +
   geom_point() +
-  geom_vline(xintercept = flag_blood,
-             linetype = "dashed", color = "black", alpha = 0.6) +
+  geom_vline(
+    xintercept = flag_blood,
+    linetype = "dashed",
+    color = "black",
+    alpha = 0.6
+  ) +
   scale_color_manual(values = blood_colors) +
   facet_wrap(~site, scales = "free_x", space = "free_x") +
-  theme(legend.position = "bottom", axis.text.x = element_text(angle = 90, hjust = 1)) +
+  theme(
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 90, hjust = 1)
+  ) +
   labs(
-    title = "Blood results", subtitle = "Blood values by visit code and randomized participant", 
-    y = "Visit code", x = "Participant", color = "Blood scale", caption = "Vertical dashed lines indicate participants with consistent blood in urine across all attended clinical visits"
-    )
-
+    title = "Blood results",
+    subtitle = "Blood values by visit code and randomized participant",
+    y = "Visit code",
+    x = "Participant",
+    color = "Blood scale",
+    caption = "Vertical dashed lines indicate participants with consistent blood in urine across all attended clinical visits"
+  )
 ```
 
 ```{r}
@@ -448,8 +574,9 @@ tmp |>
   select(pid, randomized, site) |>
   arrange(pid) |>
   distinct() |>
-  gt(caption = "Randomized participants with consistent blood in urine across all attended clinical visits")
-
+  gt(
+    caption = "Randomized participants with consistent blood in urine across all attended clinical visits"
+  )
 ```
 
 Among randomized participants, 11 participants have consistent blood in urine across all attended clinical visits. Of note, participant `068200229` has reported abnormal uterine bleeding as pre-existing condition, and participant `068100016` has reported uterine infection as pre-existing condition.
@@ -470,7 +597,6 @@ urinalysis |>
   arrange(desc(n)) |>
   gt(caption = "Distribution of nitrite values in the urinalysis data") |>
   fmt_number(columns = prop, decimals = 4)
-
 ```
 
 Most samples seem to have "Negative" values of nitrite, and some values are "Positive". We document below samples for which nitrite concentration in the urine is "Positive", by visit code and participant.
@@ -487,8 +613,13 @@ urinalysis |>
   # scale_color_manual(values = c("Negative" = "#c9c296", "Positive" = "#844452", "Blank" = "grey80")) +
   scale_shape_manual(values = c(1, 16)) +
   theme(legend.position = "bottom", axis.text.x = element_text(angle = 90)) +
-  labs(title = "Nitrite results", subtitle = "Participants with Positive values of nitrite concentration in the urine in the urinal data, \nby visit code and participant", y = "Visit code", x = "Participant", color = "Nitrite scale")
-
+  labs(
+    title = "Nitrite results",
+    subtitle = "Participants with Positive values of nitrite concentration in the urine in the urinal data, \nby visit code and participant",
+    y = "Visit code",
+    x = "Participant",
+    color = "Nitrite scale"
+  )
 ```
 
 Participants `068200225`, `068200347`, `068200407`, `068200439` and `068200441` have been measured with "Positive" values of nitrite concentration in the urine at multiple occurrences, and all of them are randomized. None of them has reported pre-existing condition.
@@ -498,7 +629,11 @@ Participants `068200225`, `068200347`, `068200407`, `068200439` and `068200441` 
 #| fig-width: 12
 # nitrite
 
-nitrite_colors <- c("Negative" = "#c9c296", "Positive" = "#844452", "Blank" = "grey80")
+nitrite_colors <- c(
+  "Negative" = "#c9c296",
+  "Positive" = "#844452",
+  "Blank" = "grey80"
+)
 
 urinalysis |>
   filter(!is.na(nitrite)) |>
@@ -508,9 +643,17 @@ urinalysis |>
   geom_point() +
   scale_color_manual(values = nitrite_colors) +
   facet_wrap(~site, scales = "free_x", space = "free_x") +
-  theme(legend.position = "bottom", axis.text.x = element_text(angle = 90, hjust = 1)) +
-  labs(title = "Nitrite results", subtitle = "Nitrite values by visit code and randomized participant", y = "Visit code", x = "Participant", color = "Nitrite scale")
-
+  theme(
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 90, hjust = 1)
+  ) +
+  labs(
+    title = "Nitrite results",
+    subtitle = "Nitrite values by visit code and randomized participant",
+    y = "Visit code",
+    x = "Participant",
+    color = "Nitrite scale"
+  )
 ```
 
 We document below the distribution of **leukocyte** values in the urinalysis data.
@@ -528,7 +671,6 @@ urinalysis |>
   arrange(desc(n)) |>
   gt(caption = "Distribution of leukocyte values in the urinalysis data") |>
   fmt_number(columns = prop, decimals = 4)
-
 ```
 
 Most samples seem to have "Negative" values of leukocyte concentration in the urine, and the rest of the values are distributed across the different levels of leukocyte concentration in the urine. With a high proportion of "Trace" and "1+" values of leukocyte concentration in the urine. We document below samples for which leukocyte concentration in the urine is higher or equal than "Trace", by visit code and participant.
@@ -540,27 +682,52 @@ Most samples seem to have "Negative" values of leukocyte concentration in the ur
 urinalysis |>
   filter(!is.na(leucocytes)) |>
   filter(leucocytes == "Trace") |>
-  select(pid, study_day, visit_code, randomized, visit_type, site, leucocytes) |>
+  select(
+    pid,
+    study_day,
+    visit_code,
+    randomized,
+    visit_type,
+    site,
+    leucocytes
+  ) |>
   ggplot() +
   aes(y = visit_code, x = pid, shape = randomized) +
   geom_point(color = "dodgerblue") +
   scale_shape_manual(values = c(1, 16)) +
   theme(legend.position = "bottom", axis.text.x = element_text(angle = 90)) +
-  labs(title = "Leukocyte results", subtitle = "Participants with Trace values of leukocyte concentration in the urine in the urinal data, \nby visit code and participant", y = "Visit code", x = "Participant") +
-  
+  labs(
+    title = "Leukocyte results",
+    subtitle = "Participants with Trace values of leukocyte concentration in the urine in the urinal data, \nby visit code and participant",
+    y = "Visit code",
+    x = "Participant"
+  ) +
+
   urinalysis |>
-  filter(!is.na(leucocytes)) |>
-  filter(leucocytes == "1+") |>
-  select(pid, study_day, visit_code, randomized, visit_type, site, leucocytes) |>
-  ggplot() +
+    filter(!is.na(leucocytes)) |>
+    filter(leucocytes == "1+") |>
+    select(
+      pid,
+      study_day,
+      visit_code,
+      randomized,
+      visit_type,
+      site,
+      leucocytes
+    ) |>
+    ggplot() +
   aes(y = visit_code, x = pid, shape = randomized) +
   geom_point(color = "orange") +
   scale_shape_manual(values = c(1, 16)) +
   theme(legend.position = "bottom", axis.text.x = element_text(angle = 90)) +
-  labs(subtitle = "Participants with 1+ values of leukocyte concentration in the urine in the urinal data, \nby visit code and participant", y = "Visit code", x = "Participant") +
-  
-  patchwork::plot_layout(ncol = 1, guides = "collect") & theme(legend.position = "bottom")
-  
+  labs(
+    subtitle = "Participants with 1+ values of leukocyte concentration in the urine in the urinal data, \nby visit code and participant",
+    y = "Visit code",
+    x = "Participant"
+  ) +
+
+  patchwork::plot_layout(ncol = 1, guides = "collect") &
+  theme(legend.position = "bottom")
 ```
 
 
@@ -571,27 +738,52 @@ urinalysis |>
 urinalysis |>
   filter(!is.na(leucocytes)) |>
   filter(leucocytes == "2+") |>
-  select(pid, study_day, visit_code, randomized, visit_type, site, leucocytes) |>
+  select(
+    pid,
+    study_day,
+    visit_code,
+    randomized,
+    visit_type,
+    site,
+    leucocytes
+  ) |>
   ggplot() +
   aes(y = visit_code, x = pid, shape = randomized) +
   geom_point(color = "pink2") +
   scale_shape_manual(values = c(1, 16)) +
   theme(legend.position = "bottom", axis.text.x = element_text(angle = 90)) +
-  labs(title = "Leukocyte results", subtitle = "Participants with 2+ of leukocyte concentration in the urine in the urinal data, \nby visit code and participant", y = "Visit code", x = "Participant") +
-  
+  labs(
+    title = "Leukocyte results",
+    subtitle = "Participants with 2+ of leukocyte concentration in the urine in the urinal data, \nby visit code and participant",
+    y = "Visit code",
+    x = "Participant"
+  ) +
+
   urinalysis |>
-  filter(!is.na(leucocytes)) |>
-  filter(leucocytes == "3+") |>
-  select(pid, study_day, visit_code, randomized, visit_type, site, leucocytes) |>
-  ggplot() +
+    filter(!is.na(leucocytes)) |>
+    filter(leucocytes == "3+") |>
+    select(
+      pid,
+      study_day,
+      visit_code,
+      randomized,
+      visit_type,
+      site,
+      leucocytes
+    ) |>
+    ggplot() +
   aes(y = visit_code, x = pid, shape = randomized) +
   geom_point(color = "red3") +
   scale_shape_manual(values = c(1, 16)) +
   theme(legend.position = "bottom", axis.text.x = element_text(angle = 90)) +
-  labs(subtitle = "Participants with 3+ values of leukocyte concentration in the urine, \nby visit code and participant", y = "Visit code", x = "Participant") +
-  
-  patchwork::plot_layout(ncol = 1, guides = "collect") & theme(legend.position = "right")
-  
+  labs(
+    subtitle = "Participants with 3+ values of leukocyte concentration in the urine, \nby visit code and participant",
+    y = "Visit code",
+    x = "Participant"
+  ) +
+
+  patchwork::plot_layout(ncol = 1, guides = "collect") &
+  theme(legend.position = "right")
 ```
 
 
@@ -600,7 +792,13 @@ urinalysis |>
 #| fig-width: 12
 # leukocytes
 
-leukocyte_colors <- c("Negative" = "#C8D4A8", "Trace" = "#B8C4A0", "1+" = "#A89898", "2+" = "#9878A8", "3+" = "#7848A0")
+leukocyte_colors <- c(
+  "Negative" = "#C8D4A8",
+  "Trace" = "#B8C4A0",
+  "1+" = "#A89898",
+  "2+" = "#9878A8",
+  "3+" = "#7848A0"
+)
 
 urinalysis |>
   filter(!is.na(leucocytes)) |>
@@ -610,9 +808,17 @@ urinalysis |>
   geom_point() +
   scale_color_manual(values = leukocyte_colors) +
   facet_wrap(~site, scales = "free_x", space = "free_x") +
-  theme(legend.position = "bottom", axis.text.x = element_text(angle = 90, hjust = 1)) +
-  labs(title = "Leukocytes results", subtitle = "Leukocytes values by visit code and randomized participant", y = "Visit code", x = "Participant", color = "Leukocytes scale")
-
+  theme(
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 90, hjust = 1)
+  ) +
+  labs(
+    title = "Leukocytes results",
+    subtitle = "Leukocytes values by visit code and randomized participant",
+    y = "Visit code",
+    x = "Participant",
+    color = "Leukocytes scale"
+  )
 ```
 
 
@@ -642,16 +848,25 @@ urinalysis |>
   ggplot() +
   aes(x = ph, y = prop) +
   geom_col() +
-  geom_label(aes(label = scales::percent(prop, accuracy = 0.01)), vjust = -0.5, size = 2) +
+  geom_label(
+    aes(label = scales::percent(prop, accuracy = 0.01)),
+    vjust = -0.5,
+    size = 2
+  ) +
   geom_vline(xintercept = 8, linetype = "dashed", color = "red", alpha = 0.5) +
-  geom_vline(xintercept = 4.5, linetype = "dashed", color = "red", alpha = 0.5) +
+  geom_vline(
+    xintercept = 4.5,
+    linetype = "dashed",
+    color = "red",
+    alpha = 0.5
+  ) +
   theme(legend.position = "bottom") +
-  labs(subtitle = "Distribution of pH values in the urinalysis data", 
-       x = "pH value", 
-       y = "Proportion of samples (in %)",
-       caption = "Vertical dashed lines indicate the normal range of pH values in urine (between 4.5 and 8.0)"
-       )
-
+  labs(
+    subtitle = "Distribution of pH values in the urinalysis data",
+    x = "pH value",
+    y = "Proportion of samples (in %)",
+    caption = "Vertical dashed lines indicate the normal range of pH values in urine (between 4.5 and 8.0)"
+  )
 ```
 
 According to several references from the American Association for Clinical Chemistry (AACC) or Mayo Clinic Laboratories, the normal range of pH values in urine is between 4.5 and 8.0, with an average value of around 6.0. We document values of pH in the urine that are outside of the normal range, by visit code and participant.
@@ -667,8 +882,13 @@ urinalysis |>
   geom_point() +
   scale_shape_manual(values = c(1, 16)) +
   theme(legend.position = "bottom", axis.text.x = element_text(angle = 90)) +
-  labs(title = "pH results", subtitle = "Participants with pH values outside of the normal range in the urinal data, \nby visit code and participant", y = "Visit code", x = "Participant", color = "pH scale")
-
+  labs(
+    title = "pH results",
+    subtitle = "Participants with pH values outside of the normal range in the urinal data, \nby visit code and participant",
+    y = "Visit code",
+    x = "Participant",
+    color = "pH scale"
+  )
 ```
 
 ```{r}
@@ -678,8 +898,10 @@ urinalysis |>
   filter(ph < 4.5 | ph > 8.0) |>
   select(pid, study_day, visit_code, randomized, visit_type, site, ph) |>
   arrange(pid, visit_code) |>
-  gt(caption = "Participants with pH values outside of the normal range in the urinalysis data") |>
-   tab_style(
+  gt(
+    caption = "Participants with pH values outside of the normal range in the urinalysis data"
+  ) |>
+  tab_style(
     style = cell_fill(color = "#FFCCCC"),
     locations = cells_body(rows = ph < 4.5)
   ) |>
@@ -687,7 +909,6 @@ urinalysis |>
     style = cell_fill(color = "#ADD8E6"),
     locations = cells_body(rows = ph > 8.0)
   )
-
 ```
 
 Most samples with pH values outside of the normal range are from participants from CAP site, and only one sample comes from a non-randomized participant.
@@ -697,7 +918,15 @@ Most samples with pH values outside of the normal range are from participants fr
 #| fig-width: 12
 # pH
 
-ph_colors <- c("#E8613A", "#E8A83A", "#D4C44A", "#A8B84A", "#7A9E4A", "#4A8A6A", "#2A7A7A")
+ph_colors <- c(
+  "#E8613A",
+  "#E8A83A",
+  "#D4C44A",
+  "#A8B84A",
+  "#7A9E4A",
+  "#4A8A6A",
+  "#2A7A7A"
+)
 
 urinalysis |>
   filter(!is.na(ph)) |>
@@ -710,9 +939,17 @@ urinalysis |>
     values = scales::rescale(c(5.0, 6.0, 6.5, 7.0, 7.5, 8.0, 8.5))
   ) +
   facet_wrap(~site, scales = "free_x", space = "free_x") +
-  theme(legend.position = "bottom", axis.text.x = element_text(angle = 90, hjust = 1)) +
-  labs(title = "pH results", subtitle = "pH values by visit code and randomized participant", y = "Visit code", x = "Participant", color = "pH scale")
-
+  theme(
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 90, hjust = 1)
+  ) +
+  labs(
+    title = "pH results",
+    subtitle = "pH values by visit code and randomized participant",
+    y = "Visit code",
+    x = "Participant",
+    color = "pH scale"
+  )
 ```
 
 We document below the distribution of the continuous variable **urobilinogen** in the urinalysis data.
@@ -725,16 +962,20 @@ urinalysis |>
   ggplot() +
   aes(x = urobilinogen) +
   geom_histogram(bins = 70) +
-  geom_label(stat = "count", aes(label = after_stat(count)), vjust = -0.5, size = 2) +
+  geom_label(
+    stat = "count",
+    aes(label = after_stat(count)),
+    vjust = -0.5,
+    size = 2
+  ) +
   geom_vline(xintercept = 2, linetype = "dashed", color = "red", alpha = 0.5) +
   theme(legend.position = "bottom") +
   labs(
-    subtitle = "Distribution of urobilinogen values in the urinalysis data", 
-    x = "Urobilinogen value", 
+    subtitle = "Distribution of urobilinogen values in the urinalysis data",
+    x = "Urobilinogen value",
     y = "Count of samples",
     caption = "Vertical dashed line indicates the normal range of urobilinogen values in urine (below 2 mg/dL)"
-    )
-
+  )
 ```
 ::: {.callout-warning}
 Most samples had urobilinogen values above the normal range (above 2 mg/dL). I am not sure whether the units are mg/dL, mg/L or µmol/L. In the first scenario, 33 mg/dL or 66 mg/dL seems unrealistic; it may also be an encoding issue, as we expect values between 0.2 and 8 mg/dL.
@@ -747,7 +988,14 @@ Most samples had urobilinogen values above the normal range (above 2 mg/dL). I a
 
 # urobilinogen
 
-urobilinogen_colors <- c("#E8A882", "#E89882", "#E88080", "#D86070", "#C84068", "#8B1a3a")
+urobilinogen_colors <- c(
+  "#E8A882",
+  "#E89882",
+  "#E88080",
+  "#D86070",
+  "#C84068",
+  "#8B1a3a"
+)
 
 urinalysis |>
   filter(!is.na(urobilinogen)) |>
@@ -760,9 +1008,17 @@ urinalysis |>
     values = scales::rescale(log(c(0.2, 1, 2, 4, 8, 66)))
   ) +
   facet_wrap(~site, scales = "free_x", space = "free_x") +
-  theme(legend.position = "bottom", axis.text.x = element_text(angle = 90, hjust = 1)) +
-  labs(title = "Urobilinogen results", subtitle = "Urobilinogen values by visit code and randomized participant", y = "Visit code", x = "Participant", color = "Urobilinogen scale")
-
+  theme(
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 90, hjust = 1)
+  ) +
+  labs(
+    title = "Urobilinogen results",
+    subtitle = "Urobilinogen values by visit code and randomized participant",
+    y = "Visit code",
+    x = "Participant",
+    color = "Urobilinogen scale"
+  )
 ```
 
 We document below the distribution of **protein** values in the urinalysis data.
@@ -781,7 +1037,6 @@ urinalysis |>
   arrange(desc(n)) |>
   gt(caption = "Distribution of protein values in the urinalysis data") |>
   fmt_number(columns = prop, decimals = 4)
-
 ```
 
 Most samples seem to have "Negative" values of protein concentration in the urine, and the rest of the values are distributed across the different levels of protein concentration in the urine. With a high proportion of "Trace" values of protein concentration in the urine. We document below samples for which protein concentration in the urine is higher or equal than "2+", by visit code and participant.
@@ -798,13 +1053,12 @@ urinalysis |>
   scale_shape_manual(values = c(1, 16)) +
   theme(legend.position = "bottom", axis.text.x = element_text(angle = 90)) +
   labs(
-    title = "Protein results", 
-    subtitle = "Participants with values of protein concentration in the urine of 2+ or higher in the urinal data, \nby visit code and participant", 
-    y = "Visit code", 
-    x = "Participant", 
+    title = "Protein results",
+    subtitle = "Participants with values of protein concentration in the urine of 2+ or higher in the urinal data, \nby visit code and participant",
+    y = "Visit code",
+    x = "Participant",
     color = "Protein scale"
-    )
-
+  )
 ```
 
 ```{r}
@@ -813,7 +1067,15 @@ urinalysis |>
 
 # protein
 
-protein_colors <- c("Negative" = "#c9c296", "Trace" = "#c2ac94", "1+" = "#844452", "2+" = "#63333f", "3+" = "#4d2e2b", "4+" = "#3a1f1e", "Blank" = "grey80")
+protein_colors <- c(
+  "Negative" = "#c9c296",
+  "Trace" = "#c2ac94",
+  "1+" = "#844452",
+  "2+" = "#63333f",
+  "3+" = "#4d2e2b",
+  "4+" = "#3a1f1e",
+  "Blank" = "grey80"
+)
 
 urinalysis |>
   filter(!is.na(protein)) |>
@@ -823,9 +1085,17 @@ urinalysis |>
   geom_point() +
   scale_color_manual(values = protein_colors) +
   facet_wrap(~site, scales = "free_x", space = "free_x") +
-  theme(legend.position = "bottom", axis.text.x = element_text(angle = 90, hjust = 1)) +
-  labs(title = "Protein results", subtitle = "Protein values by visit code and randomized participant", y = "Visit code", x = "Participant", color = "Protein scale")
-
+  theme(
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 90, hjust = 1)
+  ) +
+  labs(
+    title = "Protein results",
+    subtitle = "Protein values by visit code and randomized participant",
+    y = "Visit code",
+    x = "Participant",
+    color = "Protein scale"
+  )
 ```
 
 We document below the distribution of **specific gravity** values in the urinalysis data.
@@ -846,11 +1116,10 @@ urinalysis |>
   # geom_vline(xintercept = c(1.005, 1.025), linetype = "dashed", color = "red", alpha = 0.5) +
   theme(legend.position = "bottom") +
   labs(
-    subtitle = "Distribution of specific gravity values in the urinalysis data", 
-    x = "Specific gravity value", 
+    subtitle = "Distribution of specific gravity values in the urinalysis data",
+    x = "Specific gravity value",
     y = "Count of samples"
-    )
-
+  )
 ```
 
 We see an very low specific gravity value, which may be an encoding issue. We document this value below.
@@ -860,10 +1129,19 @@ We see an very low specific gravity value, which may be an encoding issue. We do
 urinalysis |>
   filter(!is.na(specific_gravity_value)) |>
   filter(specific_gravity_value < 0.5) |>
-  select(pid, study_day, visit_code, randomized, visit_type, site, specific_gravity_value) |>
+  select(
+    pid,
+    study_day,
+    visit_code,
+    randomized,
+    visit_type,
+    site,
+    specific_gravity_value
+  ) |>
   arrange(pid, visit_code) |>
-  gt(caption = "Participants with specific gravity values below the normal range in the urinalysis data")
-
+  gt(
+    caption = "Participants with specific gravity values below the normal range in the urinalysis data"
+  )
 ```
 
 
@@ -880,20 +1158,37 @@ We document the distribution of specific gravity values in the urine excluding t
 urinalysis |>
   filter(!is.na(specific_gravity_value)) |>
   filter(specific_gravity_value >= 0.5) |>
-  select(pid, study_day, visit_code, randomized, visit_type, site, specific_gravity_value) |>
+  select(
+    pid,
+    study_day,
+    visit_code,
+    randomized,
+    visit_type,
+    site,
+    specific_gravity_value
+  ) |>
   ggplot() +
   aes(x = specific_gravity_value) +
   geom_histogram(bins = 70) +
-  geom_label(stat = "count", aes(label = after_stat(count)), vjust = -0.5, size = 2) +
-  geom_vline(xintercept = c(1.005, 1.025), linetype = "dashed", color = "red", alpha = 0.5) +
+  geom_label(
+    stat = "count",
+    aes(label = after_stat(count)),
+    vjust = -0.5,
+    size = 2
+  ) +
+  geom_vline(
+    xintercept = c(1.005, 1.025),
+    linetype = "dashed",
+    color = "red",
+    alpha = 0.5
+  ) +
   theme(legend.position = "bottom") +
   labs(
-    subtitle = "Distribution of specific gravity values in the urinalysis data (excluding potential outlier)", 
-    x = "Specific gravity value", 
+    subtitle = "Distribution of specific gravity values in the urinalysis data (excluding potential outlier)",
+    x = "Specific gravity value",
     y = "Count of samples",
     caption = "Vertical dashed lines indicate the normal range of specific gravity values in urine (between 1.005 and 1.025)"
-    )
-
+  )
 ```
 
 We now document the specific gravity with the `specific_gravity_signs` variable, by visit code and participant.
@@ -909,9 +1204,10 @@ urinalysis |>
     prop = n / nrow(urinalysis |> filter(!is.na(specific_gravity_signs)))
   ) |>
   arrange(desc(n)) |>
-  gt(caption = "Distribution of specific gravity signs in the urinalysis data") |>
+  gt(
+    caption = "Distribution of specific gravity signs in the urinalysis data"
+  ) |>
   fmt_number(columns = prop, decimals = 4)
-
 ```
 
 
@@ -921,7 +1217,15 @@ urinalysis |>
 #| fig-width: 14
 # specific gravity
 
-specific_gravity_colors <- c("#1a3d2b", "#2d6b4a", "#5a8a4a", "#7a9440", "#8b9130", "#a0962a", "#b5a020")
+specific_gravity_colors <- c(
+  "#1a3d2b",
+  "#2d6b4a",
+  "#5a8a4a",
+  "#7a9440",
+  "#8b9130",
+  "#a0962a",
+  "#b5a020"
+)
 
 urinalysis |>
   filter(!is.na(specific_gravity_value)) |>
@@ -934,9 +1238,17 @@ urinalysis |>
     values = scales::rescale(c(1.000, 1.005, 1.010, 1.015, 1.020, 1.025, 1.030))
   ) +
   facet_wrap(~site, scales = "free_x", space = "free_x") +
-  theme(legend.position = "right", axis.text.x = element_text(angle = 90, hjust = 1)) +
-  labs(title = "Specific gravity results", subtitle = "Specific gravity values by visit code and randomized participant", y = "Visit code", x = "Participant", color = "Specific gravity \nscale")
-
+  theme(
+    legend.position = "right",
+    axis.text.x = element_text(angle = 90, hjust = 1)
+  ) +
+  labs(
+    title = "Specific gravity results",
+    subtitle = "Specific gravity values by visit code and randomized participant",
+    y = "Visit code",
+    x = "Participant",
+    color = "Specific gravity \nscale"
+  )
 ```
 
 ### Pregnancy test results
@@ -946,15 +1258,19 @@ In this study, two types of pregnancy tests were performed: urine pregnancy test
 ```{r}
 
 pregnancy <-
-  mae@metadata$visits_crfs_merged |> 
+  mae@metadata$visits_crfs_merged |>
   select(
-    uid, pregnancy_not_applicable, pregnancy_test_urine, pregnancy_test_bhcg
+    uid,
+    pregnancy_not_applicable,
+    pregnancy_test_urine,
+    pregnancy_test_bhcg
   ) |>
   left_join(
-    mae@colData |> as_tibble() |> select(uid, pid, study_day, visit_code, visit_type, randomized, site),
+    mae@colData |>
+      as_tibble() |>
+      select(uid, pid, study_day, visit_code, visit_type, randomized, site),
     by = join_by(uid)
   )
-  
 ```
 
 We first document the variable for **urine pregnancy test**, which is a categorical variable with values "Negative", "Positive", "Indeterminate" or "Blank", as documented in CRF3. We document the distribution of these values in the urine pregnancy test data, and then we document the samples with "Positive" or "Indeterminate" values of urine pregnancy test results, by visit code and participant.
@@ -970,10 +1286,10 @@ pregnancy |>
     prop = n / nrow(pregnancy |> filter(!is.na(pregnancy_test_urine)))
   ) |>
   arrange(desc(n)) |>
-  gt(caption = "Distribution of urine pregnancy test results in the pregnancy data") |>
+  gt(
+    caption = "Distribution of urine pregnancy test results in the pregnancy data"
+  ) |>
   fmt_number(columns = prop, decimals = 4)
-
-
 ```
 
 Only 3 samples have "Positive" values of urine pregnancy test results. We document these samples below.
@@ -983,10 +1299,18 @@ Only 3 samples have "Positive" values of urine pregnancy test results. We docume
 pregnancy |>
   filter(!is.na(pregnancy_test_urine)) |>
   filter(pregnancy_test_urine == "Positive") |>
-  select(pid, study_day, visit_code, randomized, visit_type, site, pregnancy_test_urine) |>
-  gt(caption = "Participants with Positive values of urine pregnancy test results in the pregnancy data")
-  
-
+  select(
+    pid,
+    study_day,
+    visit_code,
+    randomized,
+    visit_type,
+    site,
+    pregnancy_test_urine
+  ) |>
+  gt(
+    caption = "Participants with Positive values of urine pregnancy test results in the pregnancy data"
+  )
 ```
 
 Those three values of positive urine pregnancy test results are from non-randomized participants, measured at baseline visit 0000.
@@ -997,16 +1321,27 @@ Those three values of positive urine pregnancy test results are from non-randomi
 
 pregnancy |>
   filter(!is.na(pregnancy_test_urine)) |>
- filter(randomized) |>
+  filter(randomized) |>
   ggplot() +
   aes(y = visit_code, x = pid, color = pregnancy_test_urine) +
   geom_point() +
-  scale_color_manual(values = c("Negative" = "#c9c296", "Positive" = "#844452", "Indeterminate" = "#E8A882", "Blank" = "grey80")) +
+  scale_color_manual(
+    values = c(
+      "Negative" = "#c9c296",
+      "Positive" = "#844452",
+      "Indeterminate" = "#E8A882",
+      "Blank" = "grey80"
+    )
+  ) +
   facet_wrap(~site, scales = "free_x", space = "free_x") +
   theme(legend.position = "bottom", axis.text.x = element_text(angle = 90)) +
-  labs(title = "Urine pregnancy test results", subtitle = "Urine pregnancy test values by visit code and randomized participant", y = "Visit code", x = "Participant", color = "Urine pregnancy test results")
-
-
+  labs(
+    title = "Urine pregnancy test results",
+    subtitle = "Urine pregnancy test values by visit code and randomized participant",
+    y = "Visit code",
+    x = "Participant",
+    color = "Urine pregnancy test results"
+  )
 ```
 
 
@@ -1023,10 +1358,10 @@ pregnancy |>
     prop = n / nrow(pregnancy |> filter(!is.na(pregnancy_test_bhcg)))
   ) |>
   arrange(desc(n)) |>
-  gt(caption = "Distribution of blood BHCG pregnancy test results in the pregnancy data") |>
+  gt(
+    caption = "Distribution of blood BHCG pregnancy test results in the pregnancy data"
+  ) |>
   fmt_number(columns = prop, decimals = 4)
-  
-  
 ```
 
 Only "Non applicable" and "Blank" levels are available in this variable, which makes sense since BCGH blood tests were only performed if urine pregnancy results were indeterminate.
@@ -1040,14 +1375,17 @@ Among vagina-related variables, we document the measured vaginal pH and results 
 vagina_tests <-
   mae@metadata$visits_crfs_merged |>
   select(
-    uid, clue_cells, whiff_test, vaginal_ph
+    uid,
+    clue_cells,
+    whiff_test,
+    vaginal_ph
   ) |>
   left_join(
-    mae@colData |> as_tibble() |> select(uid, pid, study_day, visit_code, visit_type, randomized, site),
+    mae@colData |>
+      as_tibble() |>
+      select(uid, pid, study_day, visit_code, visit_type, randomized, site),
     by = join_by(uid)
   )
-  
-
 ```
 
 We first document the **vaginal pH** variable distribution, by visit code and participant.
@@ -1063,13 +1401,11 @@ vagina_tests |>
   geom_vline(xintercept = 3.8, color = "red", linetype = "dashed") +
   geom_vline(xintercept = 5, color = "red", linetype = "dashed") +
   labs(
-    subtitle = "Distribution of vaginal pH", 
-    x = "Vaginal pH", 
+    subtitle = "Distribution of vaginal pH",
+    x = "Vaginal pH",
     y = "Count of samples",
     caption = "Typical vaginal pH ranges from 3.8 to 5.0"
-    )
-  
-  
+  )
 ```
 
 We document samples for which vaginal pH is outside of the typical range, by visit code and participant.
@@ -1081,14 +1417,27 @@ We document samples for which vaginal pH is outside of the typical range, by vis
 vagina_tests |>
   filter(!is.na(vaginal_ph)) |>
   filter(vaginal_ph < 3.8 | vaginal_ph > 5) |>
-  select(pid, study_day, visit_code, randomized, visit_type, site, vaginal_ph) |>
+  select(
+    pid,
+    study_day,
+    visit_code,
+    randomized,
+    visit_type,
+    site,
+    vaginal_ph
+  ) |>
   ggplot() +
   aes(y = visit_code, x = pid, color = vaginal_ph, shape = randomized) +
   geom_point() +
   scale_shape_manual(values = c(1, 16)) +
   theme(legend.position = "bottom", axis.text.x = element_text(angle = 90)) +
-  labs(title = "Vaginal pH results", subtitle = "Participants with vaginal pH values outside of the typical range, by visit code and participant", y = "Visit code", x = "Participant", color = "Vaginal pH scale")
-
+  labs(
+    title = "Vaginal pH results",
+    subtitle = "Participants with vaginal pH values outside of the typical range, by visit code and participant",
+    y = "Visit code",
+    x = "Participant",
+    color = "Vaginal pH scale"
+  )
 ```
 
 ```{r}
@@ -1103,13 +1452,28 @@ vagina_tests |>
   aes(y = visit_code, x = pid, color = vaginal_ph) +
   geom_point() +
   scale_color_gradientn(
-    colors = c("#E8A882", "#E89882", "#E88080", "#D86070", "#C84068", "#8B1a3a"),
+    colors = c(
+      "#E8A882",
+      "#E89882",
+      "#E88080",
+      "#D86070",
+      "#C84068",
+      "#8B1a3a"
+    ),
     values = scales::rescale(c(3.5, 4.0, 4.5, 5.0, 5.5))
   ) +
   facet_wrap(~site, scales = "free_x", space = "free_x") +
-  theme(legend.position = "bottom", axis.text.x = element_text(angle = 90, hjust = 1)) +
-  labs(title = "Vaginal pH results", subtitle = "Vaginal pH values by visit code and randomized participant", y = "Visit code", x = "Participant", color = "Vaginal pH scale")
-
+  theme(
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 90, hjust = 1)
+  ) +
+  labs(
+    title = "Vaginal pH results",
+    subtitle = "Vaginal pH values by visit code and randomized participant",
+    y = "Visit code",
+    x = "Participant",
+    color = "Vaginal pH scale"
+  )
 ```
 
 
@@ -1128,7 +1492,6 @@ vagina_tests |>
   arrange(desc(n)) |>
   gt(caption = "Distribution of clue cells levels in vaginal test") |>
   fmt_number(columns = prop, decimals = 4)
-  
 ```
 
 We summarize the results for randomized samples below.
@@ -1144,9 +1507,17 @@ vagina_tests |>
   aes(y = visit_code, x = pid, color = clue_cells) +
   geom_point() +
   facet_wrap(~site, scales = "free_x", space = "free_x") +
-  theme(legend.position = "bottom", axis.text.x = element_text(angle = 90, hjust = 1)) +
-  labs(title = "Vaginal clue cells results", subtitle = "Vaginal clue cells test values by visit code and randomized participant", y = "Visit code", x = "Participant", color = "Clue cells test")
-
+  theme(
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 90, hjust = 1)
+  ) +
+  labs(
+    title = "Vaginal clue cells results",
+    subtitle = "Vaginal clue cells test values by visit code and randomized participant",
+    y = "Visit code",
+    x = "Participant",
+    color = "Clue cells test"
+  )
 ```
 
 We now document the distribution of **whiff test** results, which is a categorical variable with values "Negative", "Positive" or "Blank", by visit code and participant.
@@ -1164,7 +1535,6 @@ vagina_tests |>
   arrange(desc(n)) |>
   gt(caption = "Distribution of whiff test results levels in vaginal test") |>
   fmt_number(columns = prop, decimals = 4)
-  
 ```
 
 We summarize the results for randomized samples below.
@@ -1180,9 +1550,17 @@ vagina_tests |>
   aes(y = visit_code, x = pid, color = whiff_test) +
   geom_point() +
   facet_wrap(~site, scales = "free_x", space = "free_x") +
-  theme(legend.position = "bottom", axis.text.x = element_text(angle = 90, hjust = 1)) +
-  labs(title = "Vaginal whiff test results", subtitle = "Vaginal whiff test values by visit code and randomized participant", y = "Visit code", x = "Participant", color = "Whiff test")
-
+  theme(
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 90, hjust = 1)
+  ) +
+  labs(
+    title = "Vaginal whiff test results",
+    subtitle = "Vaginal whiff test values by visit code and randomized participant",
+    y = "Visit code",
+    x = "Participant",
+    color = "Whiff test"
+  )
 ```
 
 ### STI results
@@ -1195,13 +1573,14 @@ We save the MAE for downstream analyses.
 #| eval: true
 
 saveRDS(
-  mae, 
+  mae,
   str_c(
-    get_03_output_dir(),  
-    "mae_full_06_", today() |> str_remove_all("-"), ".rds"
+    get_03_output_dir(),
+    "mae_full_06_",
+    today() |> str_remove_all("-"),
+    ".rds"
   )
 )
-
 ```
 
 

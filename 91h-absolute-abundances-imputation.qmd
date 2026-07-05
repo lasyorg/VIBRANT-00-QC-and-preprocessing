@@ -1,0 +1,304 @@
+---
+title: "MAE augmentation : absolute abundances"
+author: Laura Symul, Michael France
+date: today
+format: 
+   html:
+     page-layout: full
+     code-fold: true
+     toc: true
+     toc-location: left
+     toc-depth: 5
+     embed-resources: true
+execute:
+  cache: refresh # true refresh false
+  warning: false
+knitr:
+  opts_chunk:
+    out.width: "100%"
+editor: source
+---
+
+```{r}
+#| warning: false
+#| cache: false
+library(tidyverse)
+library(magrittr)
+library(gt)
+library(patchwork)
+library(SummarizedExperiment)
+library(tidySummarizedExperiment)
+library(MultiAssayExperiment)
+
+tmp <- fs::dir_map("R scripts/", source)
+tmp <- fs::dir_map("../VIBRANT-99-utils/R/", source)
+rm(tmp)
+theme_set(theme_light())
+```
+
+
+```{r}
+mae_file <-
+  fs::dir_ls(
+    get_03_output_dir(),
+    regexp = "mae_full_07_.*\\.rds$"
+  ) |>
+  sort(decreasing = TRUE) |>
+  magrittr::extract(1)
+
+cat(str_c(
+  "Loading MultiAssayExperiment from ",
+  dirname(mae_file) |> basename(),
+  "/",
+  mae_file |> basename(),
+  "\n"
+))
+
+mae <- readRDS(mae_file)
+
+rm(mae_file)
+```
+
+
+
+## Introduction & principles
+
+In this document, we identify samples or time-points that may be imputed (due to missing data or outliers) and perform the imputation of the amplicon sequencing and qPCR data (independently for each modality), then recompute the absolute abundances and related quantities (as documented in the previous document) based on the imputed data.
+
+The output of this document is an updated `MultiAssayExperiment` object that contains a new `SummarizedExperiment` object (`calc_abs_ab_imputed`) with the original AND the imputed data and the recalculated absolute abundances and related quantities.
+
+
+We initialize this new `SummarizedExperiment` object as a copy of the `calc_abs_ab` experiment we added to the `MultiAssayExperiment` object at the previous step.
+
+```{r}
+se_imputed <- mae[["calc_abs_ab"]]
+```
+
+
+The new `SummarizedExperiment` object will contain the same assays, same samples, and same data as the original `SummarizedExperiment` object, but will also contain additional entries with the imputed data.
+
+The `colData` of the new `SummarizedExperiment` object will contain additional columns to indicate which samples were imputed and the reason for imputation:
+
+- `imputed`: a logical (`TRUE/FALSE`) variable indicating whether the sample was imputed,
+- `imputed_data`: a factor indicating which data type was imputed with the following levels "amplicon", "qPCR", "amplicon and qPCR", or "no imputation",
+- `imputed_reason`: a character variable indicating the reason for imputation.
+
+```{r}
+se_imputed$imputed <- FALSE
+se_imputed$imputed_data <-
+  factor(
+    "no imputation",
+    levels = c("no imputation", "amplicon", "qPCR", "amplicon and qPCR")
+  )
+se_imputed$imputed_reason <- ""
+```
+
+
+## Selection of the samples to impute
+
+For each modality, we only impute samples that were missing or were flagged as outliers for that modality or for the absolute abundances but that had data available the previous or following day (and no alternative swab on the same day).
+
+```{r}
+samples_to_impute_rel_ab <-
+  identify_samples_to_impute(
+    se = se_imputed,
+    modality = "amplicon"
+  )
+
+samples_to_impute_qpcr <-
+  identify_samples_to_impute(
+    se = se_imputed,
+    modality = "qpcr"
+  )
+```
+
+
+```{r}
+imputation_reason_table(samples_to_impute = samples_to_impute_rel_ab) |>
+  gt::tab_header(
+    title = "Samples flagged for imputation in amplicon sequencing data"
+  )
+
+imputation_reason_table(samples_to_impute = samples_to_impute_qpcr) |>
+  gt::tab_header(title = "Samples flagged for imputation in qPCR data")
+```
+
+
+
+
+
+```{r}
+samples_to_impute <-
+  bind_rows(
+    samples_to_impute_rel_ab |> filter(impute) |> mutate(modality = "amplicon"),
+    samples_to_impute_qpcr |> filter(impute) |> mutate(modality = "qPCR")
+  ) |>
+  mutate(original_uid = uid) |>
+  group_by(uid, original_uid, pid, study_day, visit_type, visit_code_imputed) |>
+  summarize(
+    modality = str_c(modality, collapse = " and "),
+    impute_reason = str_c(impute_reason |> unique(), collapse = " and "),
+    .groups = "drop"
+  ) |>
+  mutate(
+    uid = case_when(
+      str_detect(visit_type, "imputed") ~ uid,
+      TRUE ~ str_c(original_uid, "_imputed")
+    )
+  )
+```
+
+
+
+
+```{r}
+
+samples_to_impute |>
+  dplyr::count(modality, impute_reason) |>
+  arrange(impute_reason) |>
+  gt() |>
+  gt::cols_label(
+    impute_reason = "Reason for imputation",
+    modality = "Imputed modality",
+    n = "Number of samples"
+  ) |>
+  gt::tab_header(
+    title = "Number of samples flagged for imputation by reason and modality"
+  ) |>
+  gt::grand_summary_rows(columns = n, fns = list(Total = ~ sum(.)))
+```
+
+
+```{r}
+#| fig-height: 8
+#| fig-width: 10
+show_imputation_selection(
+  samples_to_impute = samples_to_impute_rel_ab,
+  exclude_reason_pattern = "amplicon|relative|^absolute"
+) +
+  ggtitle("Amplicon sequencing data") +
+  show_imputation_selection(
+    samples_to_impute = samples_to_impute_qpcr,
+    exclude_reason_pattern = "qPCR"
+  ) +
+  ggtitle("qPCR data") +
+  plot_layout(guides = "collect")
+```
+
+
+```{r}
+#| fig-height: 8
+#| fig-width: 10
+show_imputation_selection(
+  samples_to_impute = samples_to_impute_rel_ab,
+  exclude_reason_pattern = "amplicon|relative|^absolute",
+  xlim = c(-2, 40)
+) +
+  ggtitle("Amplicon sequencing data") +
+  show_imputation_selection(
+    samples_to_impute = samples_to_impute_qpcr,
+    exclude_reason_pattern = "qPCR",
+    xlim = c(-2, 40)
+  ) +
+  ggtitle("qPCR data") +
+  plot_layout(guides = "collect")
+```
+
+
+**Adding the imputed samples to the `SummarizedExperiment` object and the `SummarizedExperiment` to the `MultiAssayExperiment` object**
+
+```{r}
+se_imputed_init <- se_imputed
+```
+
+```{r}
+
+# we add the imputed samples to the `SummarizedExperiment` object
+# we initialize the assays for the imputed samples with their original values or NA if the original sample was missing
+se_imputed <-
+  se_imputed_init |>
+  add_imputed_samples(samples_to_impute = samples_to_impute)
+```
+
+```{r}
+ncol(se_imputed)
+ncol(se_imputed_init)
+```
+
+
+
+```{r}
+
+imp_exp_name <- "calc_abs_ab_imputed"
+
+mae <-
+  mae |>
+  add_imputed_se(
+    experiment_name = imp_exp_name,
+    se_imputed = se_imputed,
+    samples_to_impute = samples_to_impute
+  )
+```
+
+
+```{r}
+rm(se_imputed, samples_to_impute, samples_to_impute_rel_ab, samples_to_impute_qpcr)
+```
+
+## Imputation
+
+For each modality, we use a deterministic linear interpolation between surrounding samples (should only impute over 1-day gaps).
+
+### Relative abundances
+
+```{r}
+#| eval: false
+mae[[imp_exp_name]] <-
+  mae[[imp_exp_name]] |>
+  impute_samples(
+    modality = "amplicon",
+    mae = mae
+  )
+```
+
+### qPCR data
+
+```{r}
+#| eval: false
+mae[[imp_exp_name]] <-
+  mae[[imp_exp_name]] |>
+  impute_samples(
+    assay_name = "qpcr_16S",
+    samples_to_impute = samples_to_impute_qpcr
+  )
+```
+
+
+
+## Recalculation of absolute abundances and related quantities
+
+> TODO
+
+
+### Summary of imputation
+
+> TODO
+
+
+## Saving the new `MultiAssayExperiment` object
+
+We save the MAE for downstream analyses.
+
+```{r}
+#| eval: true
+
+saveRDS(
+  mae,
+  str_c(
+    get_03_output_dir(),
+    "mae_full_08_",
+    today() |> str_remove_all("-"),
+    ".rds"
+  )
+)
+```

@@ -34,7 +34,6 @@ library(MultiAssayExperiment)
 tmp <- fs::dir_map("R scripts/", source)
 
 theme_set(theme_light())
-
 ```
 
 
@@ -59,21 +58,29 @@ At the end, we document which assays are available (= have data) for which parti
 
 ```{r}
 
-crf_files <- 
-  get_01_output_dir() |> 
-  fs::dir_ls() |> 
+crf_files <-
+  get_01_output_dir() |>
+  fs::dir_ls() |>
   str_subset("/01_")
 
-crf_clean_file <- crf_files |> str_subset("01_crf_clean") |> sort(decreasing = TRUE) |> magrittr::extract(1)
-crf_raw_file <- crf_files |> str_subset("01_crf_raw") |> sort(decreasing = TRUE) |> magrittr::extract(1)
-crf_dict_file <- crf_files |> str_subset("01_crf_plates_dictionary") |> sort(decreasing = TRUE) |> magrittr::extract(1)
+crf_clean_file <- crf_files |>
+  str_subset("01_crf_clean") |>
+  sort(decreasing = TRUE) |>
+  magrittr::extract(1)
+crf_raw_file <- crf_files |>
+  str_subset("01_crf_raw") |>
+  sort(decreasing = TRUE) |>
+  magrittr::extract(1)
+crf_dict_file <- crf_files |>
+  str_subset("01_crf_plates_dictionary") |>
+  sort(decreasing = TRUE) |>
+  magrittr::extract(1)
 
 load(crf_clean_file, verbose = TRUE)
 load(crf_raw_file, verbose = TRUE)
 load(crf_dict_file, verbose = TRUE)
 
 rm(crf_clean_file, crf_raw_file, crf_dict_file)
-
 ```
 
 
@@ -82,18 +89,26 @@ rm(crf_clean_file, crf_raw_file, crf_dict_file)
 ```{r}
 
 load(
-  crf_files |> str_subset("01_participants_2025") |> sort(decreasing = TRUE) |> magrittr::extract(1),
+  crf_files |>
+    str_subset(str_c("01_participants_", today() |> year())) |>
+    sort(decreasing = TRUE) |>
+    magrittr::extract(1),
   verbose = TRUE
-  )
+)
 load(
-  crf_files |> str_subset("01_participants_variable_dictionary") |> sort(decreasing = TRUE) |> magrittr::extract(1),
+  crf_files |>
+    str_subset("01_participants_variable_dictionary") |>
+    sort(decreasing = TRUE) |>
+    magrittr::extract(1),
   verbose = TRUE
-  )
+)
 load(
-  crf_files |> str_subset("01_participant_crfs_merged") |> sort(decreasing = TRUE) |> magrittr::extract(1),
+  crf_files |>
+    str_subset("01_participant_crfs_merged") |>
+    sort(decreasing = TRUE) |>
+    magrittr::extract(1),
   verbose = TRUE
-  )
-
+)
 ```
 
 ## `Visits` table
@@ -101,20 +116,28 @@ load(
 ```{r}
 
 load(
-  crf_files |> str_subset("01_visits_2025") |> sort(decreasing = TRUE) |> magrittr::extract(1),
+  crf_files |>
+    str_subset(str_c("01_visits_", today() |> year())) |>
+    sort(decreasing = TRUE) |>
+    magrittr::extract(1),
   verbose = TRUE
-  )
+)
 
 load(
-  crf_files |> str_subset("01_visits_long_2025") |> sort(decreasing = TRUE) |> magrittr::extract(1),
+  crf_files |>
+    str_subset(str_c("01_visits_long_", today() |> year())) |>
+    sort(decreasing = TRUE) |>
+    magrittr::extract(1),
   verbose = TRUE
-  )
+)
 
 load(
-  crf_files |> str_subset("01_visits_crfs_merged") |> sort(decreasing = TRUE) |> magrittr::extract(1),
+  crf_files |>
+    str_subset("01_visits_crfs_merged") |>
+    sort(decreasing = TRUE) |>
+    magrittr::extract(1),
   verbose = TRUE
-  )
-
+)
 ```
 
 
@@ -122,11 +145,10 @@ load(
 #| eval: false
 #| fig-width: 25
 
-visits |> 
+visits |>
   ggplot() +
   aes(x = study_day, y = pid |> factor(), color = visit_code |> factor()) +
-  geom_point() 
-
+  geom_point()
 ```
 
 We define the `uid` (unique identifier):
@@ -134,14 +156,12 @@ We define the `uid` (unique identifier):
 
 ```{r}
 
-visits <- 
-  visits |> 
+visits <-
+  visits |>
   mutate(
     uid = str_c(pid, visit_code, sep = "_")
-  ) |> 
+  ) |>
   select(uid, everything())
-
-
 ```
 
 
@@ -150,10 +170,12 @@ visits <-
 ```{r}
 
 load(
-  crf_files |> str_subset("01_exposures_") |> sort(decreasing = TRUE) |> magrittr::extract(1),
+  crf_files |>
+    str_subset("01_exposures_") |>
+    sort(decreasing = TRUE) |>
+    magrittr::extract(1),
   verbose = TRUE
-  )
-
+)
 ```
 
 
@@ -164,8 +186,8 @@ load(
 ```{r}
 
 data_dir <- get_01_output_dir()
-se_files <- fs::dir_ls(data_dir, regexp = "se_.*\\.rds$") |> sort(decreasing = TRUE)
-
+se_files <- fs::dir_ls(data_dir, regexp = "se_.*\\.rds$") |>
+  sort(decreasing = TRUE)
 ```
 
 ## Metagenomics data
@@ -177,7 +199,6 @@ cat("Loading metagenomics data from file: ", mg_file |> basename(), "\n")
 se_mg <- readRDS(mg_file)
 se_mg <- check_se(se_mg)
 se_mg
-
 ```
 
 ## qPCR data
@@ -189,7 +210,6 @@ cat("Loading qPCR data from file: ", qPCR_file |> basename(), "\n")
 se_qPRC <- readRDS(qPCR_file)
 se_qPRC <- check_se(se_qPRC)
 se_qPRC
-
 ```
 
 ## qPCR data for daily swabs (generated post-unblinding)
@@ -197,11 +217,14 @@ se_qPRC
 ```{r}
 
 daily_qPCR_file <- se_files[grepl("30_se_pcr_agg", se_files)][1]
-cat("Loading qPCR data for daily swabs from file: ", daily_qPCR_file |> basename(), "\n")
+cat(
+  "Loading qPCR data for daily swabs from file: ",
+  daily_qPCR_file |> basename(),
+  "\n"
+)
 se_daily_qPRC <- readRDS(daily_qPCR_file)
 se_daily_qPRC <- check_se(se_daily_qPRC)
 se_daily_qPRC
-
 ```
 
 
@@ -212,22 +235,28 @@ We add both the ASV-level data and the data aggregated by taxonomic assignment.
 ```{r}
 
 amplicon_ASV_file <- se_files[grepl("16S_ASV_2", se_files)][1]
-cat("Loading 16S rRNA amplicon sequencing ASV-level data from file: ", amplicon_ASV_file |> basename(), "\n")
+cat(
+  "Loading 16S rRNA amplicon sequencing ASV-level data from file: ",
+  amplicon_ASV_file |> basename(),
+  "\n"
+)
 se_16S_ASV <- readRDS(amplicon_ASV_file)
 se_16S_ASV <- check_se(se_16S_ASV)
 se_16S_ASV
-
 ```
 
 
 ```{r}
 
 amplicon_file <- se_files[grepl("16S_agg_2", se_files)][1]
-cat("Loading 16S rRNA amplicon sequencing data aggregated by taxonomic assignment from file: ", amplicon_file |> basename(), "\n")
+cat(
+  "Loading 16S rRNA amplicon sequencing data aggregated by taxonomic assignment from file: ",
+  amplicon_file |> basename(),
+  "\n"
+)
 se_16S <- readRDS(amplicon_file)
 se_16S <- check_se(se_16S)
 se_16S
-
 ```
 
 
@@ -242,7 +271,6 @@ cat("Loading Luminex data from file: ", luminex_file |> basename(), "\n")
 se_luminex <- readRDS(luminex_file)
 se_luminex <- check_se(se_luminex)
 se_luminex
-
 ```
 
 
@@ -256,7 +284,6 @@ cat("Loading flow cytometry data from file: ", flow_file |> basename(), "\n")
 se_flow <- readRDS(flow_file)
 se_flow <- check_se(se_flow)
 se_flow
-
 ```
 
 # Creating the `MultiAssayExperiment` object
@@ -265,48 +292,47 @@ se_flow
 
 ```{r}
 
-assay_list <- 
+assay_list <-
   bind_rows(
     tibble(
-      mae_assay_name = "mg", 
-      se_object_name = "se_mg", 
+      mae_assay_name = "mg",
+      se_object_name = "se_mg",
       assay_label = "Metagenomic"
-      ),
+    ),
     tibble(
-      mae_assay_name = "qPCR", 
-      se_object_name = "se_qPRC", 
+      mae_assay_name = "qPCR",
+      se_object_name = "se_qPRC",
       assay_label = "qPCR weekly swabs"
-      ),
+    ),
     tibble(
-      mae_assay_name = "qPCR_daily", 
-      se_object_name = "se_daily_qPRC", 
+      mae_assay_name = "qPCR_daily",
+      se_object_name = "se_daily_qPRC",
       assay_label = "qPCR home swabs"
-      ),
+    ),
     tibble(
-      mae_assay_name = "amplicon_ASV", 
-      se_object_name = "se_16S_ASV", 
+      mae_assay_name = "amplicon_ASV",
+      se_object_name = "se_16S_ASV",
       assay_label = "16S rRNA amplicon seq. (ASV-level)"
     ),
     tibble(
-      mae_assay_name = "amplicon", 
-      se_object_name = "se_16S", 
+      mae_assay_name = "amplicon",
+      se_object_name = "se_16S",
       assay_label = "16S rRNA amplicon seq."
     ),
     tibble(
-      mae_assay_name = "luminex", 
-      se_object_name = "se_luminex", 
+      mae_assay_name = "luminex",
+      se_object_name = "se_luminex",
       assay_label = "Luminex"
-      ),
+    ),
     tibble(
-      mae_assay_name = "flow", 
-      se_object_name = "se_flow", 
+      mae_assay_name = "flow",
+      se_object_name = "se_flow",
       assay_label = "Flow cytometry"
-      )
-  ) |> 
+    )
+  ) |>
   mutate(
     assay_label = assay_label |> fct_inorder()
   )
-
 ```
 
 We will assemble the following tables (`SE` objects):
@@ -321,21 +347,21 @@ assay_list |> gt()
 
 ```{r}
 
-available_samples <- 
+available_samples <-
   map(
     1:nrow(assay_list),
-    function(i, assay_list){
+    function(i, assay_list) {
       se <- get(assay_list$se_object_name[i])
       tibble(
         assay = assay_list$mae_assay_name[i],
-        se_colname = se |> colnames(), 
-        uid = se$uid, 
+        se_colname = se |> colnames(),
+        uid = se$uid,
         sample_type = se$sample_type,
         control_type = se$control_type,
-        )
+      )
     },
     assay_list = assay_list
-  ) |> 
+  ) |>
   bind_rows()
 
 if (!all(available_samples$se_colname == available_samples$uid, na.rm = TRUE)) {
@@ -361,10 +387,9 @@ if (any(mae_coldata_assays$n_control_type > 1)) {
   warning("Some samples have multiple control types")
 }
 
-mae_coldata_assays <- 
-  mae_coldata_assays |> 
-  select(uid, sample_type, control_type, assays) 
-
+mae_coldata_assays <-
+  mae_coldata_assays |>
+  select(uid, sample_type, control_type, assays)
 ```
 
 The `mae_coldata_assays` table contains the following columns:
@@ -373,16 +398,14 @@ The `mae_coldata_assays` table contains the following columns:
 
 mae_coldata_assays |> colnames()
 mae_coldata_assays |> str()
-
 ```
 
 
 ```{r}
 
-mae_coldata_assays |> 
-  dplyr::count(sample_type, control_type) |> 
-  gt(caption = "Number of samples per sample type and control type") 
-  
+mae_coldata_assays |>
+  dplyr::count(sample_type, control_type) |>
+  gt(caption = "Number of samples per sample type and control type")
 ```
 
 We also remove the columns `sample_type` and `control_type` from the `colData` of the individual assays to avoid conflicts when joining with the `mae@colData` table in downstream analyses.
@@ -391,12 +414,16 @@ We also remove the columns `sample_type` and `control_type` from the `colData` o
 
 for (i in 1:nrow(assay_list)) {
   se <- get(assay_list$se_object_name[i])
-  if (("sample_type" %in% colnames(colData(se))) | ("control_type" %in% colnames(colData(se)))) {
-    colData(se) <- colData(se)[, !colnames(colData(se)) %in% c("sample_type", "control_type")]
+  if (
+    ("sample_type" %in% colnames(colData(se))) |
+      ("control_type" %in% colnames(colData(se)))
+  ) {
+    colData(se) <- colData(se)[,
+      !colnames(colData(se)) %in% c("sample_type", "control_type")
+    ]
   }
   assign(assay_list$se_object_name[i], se)
 }
-
 ```
 
 
@@ -409,18 +436,21 @@ We first do a full join of the `visits` and `mae_coldata_assays` tables by `uid`
 
 ```{r}
 
-mae_coldata <- 
+mae_coldata <-
   # we first do a full join of the CRF visits and mae_coldata_assays by uids;
   dplyr::full_join(
-    visits |> select(-starts_with("specimen_collection")) |> mutate(in_CRF = TRUE),
-    mae_coldata_assays |> mutate(in_assays = TRUE) |> select(in_assays, everything()),
+    visits |>
+      select(-starts_with("specimen_collection")) |>
+      mutate(in_CRF = TRUE),
+    mae_coldata_assays |>
+      mutate(in_assays = TRUE) |>
+      select(in_assays, everything()),
     by = join_by(uid)
-  ) |> 
+  ) |>
   mutate(
     in_CRF = in_CRF |> replace_na(FALSE),
     in_assays = in_assays |> replace_na(FALSE)
   )
-
 ```
 
 
@@ -429,53 +459,47 @@ mae_coldata <-
 
 # We notice that there are 5 "Clinical sample" entries for which we do have assay data but that did not appear in the CRF data:
 
-mae_coldata |> 
-  filter(is.na(visit_code), sample_type == "Clinical sample") 
-  
-# we fix these below
+mae_coldata |>
+  filter(is.na(visit_code), sample_type == "Clinical sample")
 
+# we fix these below
 ```
 
 
 ```{r}
 
-mae_coldata <- 
-  mae_coldata |> 
+mae_coldata <-
+  mae_coldata |>
   mutate(
-    needs_fixing = is.na(pid) & (sample_type == "Clinical sample") & str_detect(uid, "[0-9]{9}_[0-9]{4}"),
-    pid = 
-      case_when(
-        needs_fixing ~ str_remove(uid, "_[0-9]{4}"),
-        TRUE ~ pid
-      ),
-    visit_code =
-      case_when(
-        needs_fixing ~ str_remove(uid, "[0-9]{9}_"),
-        TRUE ~ visit_code
-      ),
-    study_day = 
-      case_when(
-        needs_fixing & (visit_code %in% c("0001", "0011")) ~ -7,
-        needs_fixing & in_assays & (visit_code == "1000") ~ 0,
-        TRUE ~ study_day
-      ),
-    visit_attended = 
-      case_when(
-        is.na(visit_attended) & needs_fixing ~ TRUE,
-        TRUE ~ visit_attended
-      ),
-    visit_planned = 
-      case_when(
-        is.na(visit_planned) & needs_fixing ~ "Unplanned visit",
-        TRUE ~ visit_planned
-      ),
-    visit_type = 
-      case_when(
-        is.na(visit_type) & needs_fixing ~ "Clinic",
-        TRUE ~ visit_type
-      )
-  ) 
-
+    needs_fixing = is.na(pid) &
+      (sample_type == "Clinical sample") &
+      str_detect(uid, "[0-9]{9}_[0-9]{4}"),
+    pid = case_when(
+      needs_fixing ~ str_remove(uid, "_[0-9]{4}"),
+      TRUE ~ pid
+    ),
+    visit_code = case_when(
+      needs_fixing ~ str_remove(uid, "[0-9]{9}_"),
+      TRUE ~ visit_code
+    ),
+    study_day = case_when(
+      needs_fixing & (visit_code %in% c("0001", "0011")) ~ -7,
+      needs_fixing & in_assays & (visit_code == "1000") ~ 0,
+      TRUE ~ study_day
+    ),
+    visit_attended = case_when(
+      is.na(visit_attended) & needs_fixing ~ TRUE,
+      TRUE ~ visit_attended
+    ),
+    visit_planned = case_when(
+      is.na(visit_planned) & needs_fixing ~ "Unplanned visit",
+      TRUE ~ visit_planned
+    ),
+    visit_type = case_when(
+      is.na(visit_type) & needs_fixing ~ "Clinic",
+      TRUE ~ visit_type
+    )
+  )
 ```
 
 We then merge that table with the `participants` table to add the participant-invariant information (e.g., `randomized`, `mITT`, etc.) to the `mae_coldata` table.
@@ -483,15 +507,13 @@ We then merge that table with the `participants` table to add the participant-in
 
 ```{r}
 
-
 # we add the participant-invariant information from the `participants` table
-mae_coldata <- 
-  mae_coldata |> 
+mae_coldata <-
+  mae_coldata |>
   dplyr::left_join(
     participants,
     by = join_by(pid)
   )
-
 ```
 
 ```{r}
@@ -504,10 +526,9 @@ mae_coldata <- mae_coldata |> select(-needs_fixing)
 ```{r}
 #| eval: true
 
-mae_coldata |> 
-  dplyr::count(in_CRF, randomized, in_assays, sample_type, assays) |> 
+mae_coldata |>
+  dplyr::count(in_CRF, randomized, in_assays, sample_type, assays) |>
   gt()
-
 ```
 
 
@@ -518,13 +539,12 @@ There were a few entries with daily `visit_code` that did not have a date in the
 
 ```{r}
 
-mae_coldata |> 
+mae_coldata |>
   filter(
-    is.na(study_day), 
+    is.na(study_day),
     is.na(sample_type) | (sample_type == "Clinical sample")
-    ) |> 
+  ) |>
   dplyr::count(visit_type, assays, in_CRF, visit_attended, sample_type)
-
 ```
 
 
@@ -534,17 +554,16 @@ We impute the missing values using the `study_days` from "surrounding" visits.
 ```{r}
 
 # first, we create a "dictionary" with the most common study_days for each daily swab visit code
-study_days_for_daily_codes <- 
-  mae_coldata |> 
-  dplyr::filter(visit_type == "Home") |> 
-  dplyr::count(visit_code, study_day) |> 
-  arrange(visit_code, -n) |> 
-  group_by(visit_code) |> 
-  slice_head(n = 1) |> 
-  ungroup() |> 
-  dplyr::rename(exp_study_day = study_day) |> 
+study_days_for_daily_codes <-
+  mae_coldata |>
+  dplyr::filter(visit_type == "Home") |>
+  dplyr::count(visit_code, study_day) |>
+  arrange(visit_code, -n) |>
+  group_by(visit_code) |>
+  slice_head(n = 1) |>
+  ungroup() |>
+  dplyr::rename(exp_study_day = study_day) |>
   select(-n)
-
 ```
 
 ```{r}
@@ -552,26 +571,23 @@ study_days_for_daily_codes <-
 #| fig-height: 4.5
 #| eval: false
 
-study_days_for_daily_codes |> 
+study_days_for_daily_codes |>
   ggplot(aes(x = exp_study_day, y = visit_code)) +
   geom_point()
-
 ```
 
 ```{r}
 
 # In the plot above, we notice that visits 1501:1503 did not have "expected" study day, so we create it by expanding the time series
 study_days_for_daily_codes <-
-  study_days_for_daily_codes |> 
+  study_days_for_daily_codes |>
   mutate(
-    exp_study_day = 
-      case_when(
-        is.na(exp_study_day) & (visit_code %in% c(1501:1503)) ~ 
-          as.numeric(visit_code) - 1501 + 36,
-        TRUE ~ exp_study_day
-      )
+    exp_study_day = case_when(
+      is.na(exp_study_day) & (visit_code %in% c(1501:1503)) ~
+        as.numeric(visit_code) - 1501 + 36,
+      TRUE ~ exp_study_day
+    )
   )
-
 ```
 
 
@@ -580,63 +596,72 @@ study_days_for_daily_codes <-
 ```{r}
 
 # visits from the participants with missing study_days
-pid_with_missing_daily_study_days <- 
+pid_with_missing_daily_study_days <-
   # we first filter to retrieve the pids
-  mae_coldata |> 
-  filter(is.na(study_day)) |>  # , in_assays
-  select(pid) |> distinct() |> 
+  mae_coldata |>
+  filter(is.na(study_day)) |> # , in_assays
+  select(pid) |>
+  distinct() |>
   # we join with the coldata
-  left_join(mae_coldata, by = join_by(pid)) |> 
-  arrange(pid, visit_code) |> 
+  left_join(mae_coldata, by = join_by(pid)) |>
+  arrange(pid, visit_code) |>
   # we join the study_day dictionary
-  left_join(study_days_for_daily_codes) |> 
+  left_join(study_days_for_daily_codes) |>
   mutate(diff = study_day - exp_study_day) |> # the typical difference for a participant between their study_day and the "expected" study_day (some participant started sampling at home one day early or late)
-  group_by(pid) |> 
-  fill(diff, .direction = "downup") |>  # impute when missing
-  mutate(diff = ifelse(all(is.na(diff)), 0, diff)) |> # if still missing,we set to 0
-  ungroup() |> 
+  group_by(pid) |>
+  fill(diff, .direction = "downup") |> # impute when missing
+  mutate(condition = all(is.na(diff))) |>
+  ungroup() |>
+  mutate(diff = ifelse(condition, 0, diff)) |> # if still missing,we set to 0
   # we fix the study_day
   mutate(
-    fixed_study_day = 
-      case_when(
-        is.na(study_day) & !is.na(exp_study_day) ~ exp_study_day + diff,
-        TRUE ~ study_day
-      )
-  ) |> 
-  select(uid, pid, visit_code, study_day, fixed_study_day, exp_study_day, diff, in_CRF, in_assays, crf_plates, assays)
+    fixed_study_day = case_when(
+      is.na(study_day) & !is.na(exp_study_day) ~ exp_study_day + diff,
+      TRUE ~ study_day
+    )
+  ) |>
+  select(
+    uid,
+    pid,
+    visit_code,
+    study_day,
+    fixed_study_day,
+    exp_study_day,
+    diff,
+    in_CRF,
+    in_assays,
+    crf_plates,
+    assays
+  )
 
 # pid_with_missing_daily_study_days |> View()
-
 ```
 
 ```{r}
 
-mae_coldata <- 
-  mae_coldata |> 
+mae_coldata <-
+  mae_coldata |>
   left_join(
-    pid_with_missing_daily_study_days |> select(uid, fixed_study_day), 
+    pid_with_missing_daily_study_days |> select(uid, fixed_study_day),
     by = join_by(uid)
-    ) |> 
+  ) |>
   mutate(
-    study_day =
-      case_when(
-        is.na(study_day) ~ fixed_study_day,
-        TRUE ~ study_day
-      )
-  ) |> 
+    study_day = case_when(
+      is.na(study_day) ~ fixed_study_day,
+      TRUE ~ study_day
+    )
+  ) |>
   select(-fixed_study_day)
-
 ```
 
 ```{r}
 #| eval: false
 
-mae_coldata |> 
-  filter(is.na(study_day), in_assays) |> 
+mae_coldata |>
+  filter(is.na(study_day), in_assays) |>
   View()
 
 # all is fixed
-
 ```
 
 
@@ -648,208 +673,236 @@ mae_coldata |>
 
 ```{r}
 
-visit_dict <- 
+visit_dict <-
   bind_rows(
     tibble(
-      visit = "Screening", 
-      definition = "Screening visit for which we have the most assay data. If two screening visits have the same number of assays, we take the last one.", 
+      visit = "Screening",
+      definition = "Screening visit for which we have the most assay data. If two screening visits have the same number of assays, we take the last one.",
       possible_visit_codes = "0000, 0001, 0010, 0011",
       visit_number = "V0",
       study_week = -1
     ),
     tibble(
-      visit = "Add. screening", 
-      definition = 'If a participant has data for two screening visits, one is the "main" screening visit, and the other is labelled as an additional screening visit.', 
+      visit = "Add. screening",
+      definition = 'If a participant has data for two screening visits, one is the "main" screening visit, and the other is labelled as an additional screening visit.',
       possible_visit_codes = "0000, 0001, 0010, 0011",
       visit_number = "V0b",
       study_week = -2
-      ),
+    ),
     tibble(
-      visit = "Day 0 (pre-MTZ)", 
-      definition = "Visit before the metronidazole treatment (MTZ) starts.", 
+      visit = "Day 0 (pre-MTZ)",
+      definition = "Visit before the metronidazole treatment (MTZ) starts.",
       possible_visit_codes = "1000, 1011",
       visit_number = "V1",
       study_week = 0
-      ),
+    ),
     tibble(
-      visit = "Week 1 (post-MTZ)", 
-      definition = "Visit after the metronidazole treatment (MTZ) ends.", 
+      visit = "Week 1 (post-MTZ)",
+      definition = "Visit after the metronidazole treatment (MTZ) ends.",
       possible_visit_codes = "1100",
       visit_number = "V2",
       study_week = 1
-      ),
+    ),
     tibble(
-      visit = "Week 2 (post-SP)", 
-      definition = "Visit after the study product (SP) ends.", 
+      visit = "Week 2 (post-SP)",
+      definition = "Visit after the study product (SP) ends.",
       possible_visit_codes = "1200, 1211",
       visit_number = "V3",
       study_week = 2
-      ),
+    ),
     tibble(
-      visit = "Week 3", 
-      definition = "Visit one week after the study product (SP) ends.", 
+      visit = "Week 3",
+      definition = "Visit one week after the study product (SP) ends.",
       possible_visit_codes = "1300",
       visit_number = "V4",
       study_week = 3
-      ),
+    ),
     tibble(
-      visit = "Week 4", 
-      definition = "Visit two weeks after the study product (SP) ends.", 
+      visit = "Week 4",
+      definition = "Visit two weeks after the study product (SP) ends.",
       possible_visit_codes = "1400",
       visit_number = "V5",
       study_week = 4
-      ),
+    ),
     tibble(
-      visit = "Week 5", 
-      definition = "Visit three weeks after the study product (SP) ends.", 
+      visit = "Week 5",
+      definition = "Visit three weeks after the study product (SP) ends.",
       possible_visit_codes = "1500, 1511, 1512",
       visit_number = "V6",
       study_week = 5
-      ),
+    ),
     tibble(
-      visit = "Week 7", 
-      definition = "Visit five weeks after the study product (SP) ends.", 
+      visit = "Week 7",
+      definition = "Visit five weeks after the study product (SP) ends.",
       possible_visit_codes = "1700, 1711",
       visit_number = "V7",
       study_week = 7
-      ),
+    ),
     tibble(
-      visit = "Week 9", 
-      definition = "Visit seven weeks after the study product (SP) ends.", 
+      visit = "Week 9",
+      definition = "Visit seven weeks after the study product (SP) ends.",
       possible_visit_codes = "1900, 1911",
       visit_number = "V8",
       study_week = 9
-      ),
+    ),
     tibble(
-      visit = "Week 12", 
-      definition = "Visit ten weeks after the study product (SP) ends.", 
+      visit = "Week 12",
+      definition = "Visit ten weeks after the study product (SP) ends.",
       possible_visit_codes = "2120, 2121, 2122",
       visit_number = "V9",
       study_week = 12
     )
-  ) |> 
+  ) |>
   mutate(
     visit = visit |> fct_reorder(study_week)
   )
-
 ```
 
 ```{r}
 
-visit_dict |> 
-  gt() |> 
+visit_dict |>
+  gt() |>
   tab_header(
     title = "Visit codes and definitions"
-  ) |> 
+  ) |>
   cols_label(
     visit = "Visit",
     definition = "Definition",
     possible_visit_codes = "Possible visit codes",
     visit_number = "Visit number",
     study_week = "Study week"
-  ) |> 
+  ) |>
   cols_align(
-    align = "left", columns = c(visit, definition, possible_visit_codes)
+    align = "left",
+    columns = c(visit, definition, possible_visit_codes)
   )
-
 ```
 
 We first determine, for each participant, which is their main *vs.* their additional screening visit.
 
 ```{r}
 
-mae_coldata <- 
-  mae_coldata |> 
-  group_by(pid) |> 
+mae_coldata <-
+  mae_coldata |>
+  group_by(pid) |>
   mutate(
-    is_screening_visit = 
-      case_when(
-        visit_code %in% c("0000", "0001", "0010", "0011") ~ TRUE,
-        TRUE ~ FALSE
-      ),
+    is_screening_visit = case_when(
+      visit_code %in% c("0000", "0001", "0010", "0011") ~ TRUE,
+      TRUE ~ FALSE
+    ),
     n_assays = ifelse(in_assays, str_split(assays, ", ") |> lengths(), 0),
-    screening_visit_score = is_screening_visit * (n_assays + study_day/10)
-  ) |> 
-  arrange(-screening_visit_score) |> 
+    screening_visit_score = is_screening_visit * (n_assays + study_day / 10)
+  ) |>
+  arrange(-screening_visit_score) |>
   mutate(
-    screening_visit = 
-      case_when(
-        is_screening_visit & (row_number() == 1) ~ "main screening",
-        is_screening_visit & (row_number() > 1) ~ "additional screening",
-        TRUE ~ NA_character_
-      )
-  ) |> 
-  ungroup() |> 
+    screening_visit = case_when(
+      is_screening_visit & (row_number() == 1) ~ "main screening",
+      is_screening_visit & (row_number() > 1) ~ "additional screening",
+      TRUE ~ NA_character_
+    )
+  ) |>
+  ungroup() |>
   select(-is_screening_visit, -n_assays, -screening_visit_score)
-
 ```
 
 ```{r}
 #| eval: false
 
-mae_coldata |> 
-  dplyr::filter(screening_visit == "additional screening") |> 
-  select(pid) |> distinct() |> 
-  left_join(mae_coldata) |> 
-  arrange(randomized |> desc(), pid, visit_code) |> 
-  select(randomized, pid, visit_code, study_day, crf_plates, assays, screening_visit) |> 
+mae_coldata |>
+  dplyr::filter(screening_visit == "additional screening") |>
+  select(pid) |>
+  distinct() |>
+  left_join(mae_coldata) |>
+  arrange(randomized |> desc(), pid, visit_code) |>
+  select(
+    randomized,
+    pid,
+    visit_code,
+    study_day,
+    crf_plates,
+    assays,
+    screening_visit
+  ) |>
   View()
 
-mae_coldata |> 
-  dplyr::filter(screening_visit == "additional screening") |> 
-  select(pid) |> distinct() |> 
-  left_join(mae_coldata) |> 
-  arrange(randomized |> desc(), pid, visit_code) |> 
-  select(randomized, pid, visit_code, study_day, crf_plates, assays, screening_visit) |> 
-  dplyr::filter(randomized, (screening_visit == "main screening"), study_day == 0) |> 
-  select(pid) |> distinct() |> 
-  left_join(mae_coldata) |> 
-  arrange(randomized |> desc(), pid, visit_code) |> 
-  select(randomized, mITT, pid, visit_code, study_day, crf_plates, assays, screening_visit) |> 
+mae_coldata |>
+  dplyr::filter(screening_visit == "additional screening") |>
+  select(pid) |>
+  distinct() |>
+  left_join(mae_coldata) |>
+  arrange(randomized |> desc(), pid, visit_code) |>
+  select(
+    randomized,
+    pid,
+    visit_code,
+    study_day,
+    crf_plates,
+    assays,
+    screening_visit
+  ) |>
+  dplyr::filter(
+    randomized,
+    (screening_visit == "main screening"),
+    study_day == 0
+  ) |>
+  select(pid) |>
+  distinct() |>
+  left_join(mae_coldata) |>
+  arrange(randomized |> desc(), pid, visit_code) |>
+  select(
+    randomized,
+    mITT,
+    pid,
+    visit_code,
+    study_day,
+    crf_plates,
+    assays,
+    screening_visit
+  ) |>
   View()
 
 
 # > check 068200020
 # unclear - her main screening visit could be at day -3, but it might be at day 0, which would mean that her screening visit and pre-MTZ visit samples were collected on the same day
 crf_raw$crf35 |> dplyr::filter(pid == "068200020") |> View()
-
 ```
 
 ```{r}
 
-mae_coldata |> 
-  filter(!is.na(screening_visit)) |> 
-  dplyr::count(screening_visit) 
-
+mae_coldata |>
+  filter(!is.na(screening_visit)) |>
+  dplyr::count(screening_visit)
 ```
 
 We next join the `mae_coldata` table with the `visit_dict` table to add the `visit`, `visit_number`, and `study_week` columns.
 
 ```{r}
 
-mae_coldata <- 
-  mae_coldata |> 
+mae_coldata <-
+  mae_coldata |>
   select(-any_of(c("PIPV", "visit", "visit_number", "study_week"))) |>
   left_join(
-    visit_dict |> 
+    visit_dict |>
       mutate(visit_code = possible_visit_codes |> str_split(", ")) |>
       unnest(visit_code) |>
       mutate(
-        screening_visit = 
-          case_when(
-            visit_number == "V0b" ~ "additional screening",
-            visit_number == "V0" ~ "main screening",
-            TRUE ~ NA_character_
-            ),
+        screening_visit = case_when(
+          visit_number == "V0b" ~ "additional screening",
+          visit_number == "V0" ~ "main screening",
+          TRUE ~ NA_character_
+        ),
         PIPV = visit_number != "V0b"
-        ) |> 
+      ) |>
       select(visit_code, screening_visit, PIPV, visit, visit_number, study_week)
-  ) |> 
-  mutate(PIPV = PIPV |> replace_na(FALSE)) |> 
+  ) |>
+  mutate(PIPV = PIPV |> replace_na(FALSE)) |>
   relocate(
-    PIPV, visit, visit_number, study_week, .after = "visit_code"
-  ) 
-
+    PIPV,
+    visit,
+    visit_number,
+    study_week,
+    .after = "visit_code"
+  )
 ```
 
 
@@ -857,15 +910,14 @@ We check that `study_day`s are unique for each `visit_number` at which assay sam
 
 ```{r}
 
-mae_coldata |> 
-  group_by(pid, visit_number) |> 
+mae_coldata |>
+  group_by(pid, visit_number) |>
   mutate(n_study_day = n_distinct(study_day[!is.na(assays)])) |>
-  ungroup() |> 
-  filter(PIPV, n_study_day > 1) |> 
-  select(uid, pid, visit_code, study_day, assays) |> 
-  group_by(pid) |> 
+  ungroup() |>
+  filter(PIPV, n_study_day > 1) |>
+  select(uid, pid, visit_code, study_day, assays) |>
+  group_by(pid) |>
   gt(row_group_as_column = TRUE)
-
 ```
 
 There are just two participants for which the dates don't match and the different assays were collected at different dates.
@@ -879,49 +931,60 @@ We already have a dictionnary for the `participants` table (`participants_variab
 
 ```{r}
 
-coldata_dictionary <- 
+coldata_dictionary <-
   bind_rows(
     participants_variable_dictionary |> select(variable, description),
     tibble(
       variable = setdiff(colnames(mae_coldata), colnames(participants)),
       description = case_when(
-        variable == "uid" ~ "Unique identifier for each participant x visit combination, in the format `pid`_`visit_code`",
+        variable ==
+          "uid" ~ "Unique identifier for each participant x visit combination, in the format `pid`_`visit_code`",
         variable == "PIPV" ~ "Planned in-person visit (PIPV) flag",
         variable == "visit_code" ~ "Visit code as in the CRF data",
         variable == "visit" ~ "Visit name (e.g., Screening, Week 1 (post-MTZ), etc.)",
         variable == "visit_number" ~ "Visit number (e.g., V0, V1, etc.)",
-        variable == "study_week" ~ "Study week number (from -2 to 12, with 0 being the day of the pre-MTZ visit)",
-        variable == "study_day" ~ "Relative study day number with 0 being the day of the pre-MTZ visit",
-        variable == "n_distinct_study_days" ~ "Number of distinct study days for a given participant and visit number",
-        variable == "crf_plates" ~ "CRF plates for which we have data for this participant x visit combination",
-        variable == "visit_attended" ~ "Whether the participant attended the visit according to the CRF data",
+        variable ==
+          "study_week" ~ "Study week number (from -2 to 12, with 0 being the day of the pre-MTZ visit)",
+        variable ==
+          "study_day" ~ "Relative study day number with 0 being the day of the pre-MTZ visit",
+        variable ==
+          "n_distinct_study_days" ~ "Number of distinct study days for a given participant and visit number",
+        variable ==
+          "crf_plates" ~ "CRF plates for which we have data for this participant x visit combination",
+        variable ==
+          "visit_attended" ~ "Whether the participant attended the visit according to the CRF data",
         variable == "visit_planned" ~ "Whether the visit was planned according to the CRF data",
         variable == "visit_type" ~ "Visit type (e.g., Clinic, Home, Unclear or NA)",
-        variable == "in_CRF" ~ "Whether this participant x visit combination is in the CRF data", 
-        variable == "in_assays" ~ "Whether this participant x visit combination is in an assay data",
-        variable == "sample_type" ~ "Sample type for this participant x visit combination in the assay data (Clinical sample, Clinical sample (other study), Negative/Positive control), Test sample or NA)",
-        variable == "control_type" ~ "Control type for the Negative and Positive control samples in the assay data (Nuclease-free water, Unused swab + C2, Mock 1 and Mock 2)",
-        variable == "assays" ~ "Names of the assays for which we have data for this participant x visit combination (mg, qPCR, amplicon, luminex, flow, etc.)",
-        variable == "screening_visit" ~ "Whether the visit is the main screening visit, an additional screening visit, or not a screening visit"
+        variable == "in_CRF" ~ "Whether this participant x visit combination is in the CRF data",
+        variable ==
+          "in_assays" ~ "Whether this participant x visit combination is in an assay data",
+        variable ==
+          "sample_type" ~ "Sample type for this participant x visit combination in the assay data (Clinical sample, Clinical sample (other study), Negative/Positive control), Test sample or NA)",
+        variable ==
+          "control_type" ~ "Control type for the Negative and Positive control samples in the assay data (Nuclease-free water, Unused swab + C2, Mock 1 and Mock 2)",
+        variable ==
+          "assays" ~ "Names of the assays for which we have data for this participant x visit combination (mg, qPCR, amplicon, luminex, flow, etc.)",
+        variable ==
+          "screening_visit" ~ "Whether the visit is the main screening visit, an additional screening visit, or not a screening visit"
       )
+    )
   )
-  )
-
 ```
 
 ```{r}
-coldata_dictionary |> 
+coldata_dictionary |>
   arrange(variable) |>
-  gt() |> 
+  gt() |>
   tab_header(
     title = "Dictionary for the mae_coldata table"
-  ) |> 
+  ) |>
   cols_label(
     variable = "Variable",
     description = "Description"
-  ) |> 
+  ) |>
   cols_align(
-    align = "left", columns = variable
+    align = "left",
+    columns = variable
   )
 ```
 
@@ -940,16 +1003,16 @@ coldata_dictionary |>
 
 ```{r}
 
-sample_and_visit_info_assay <- 
-  mae_coldata |> 
-  select(uid, sample_type, in_CRF, in_assays, randomized) 
+sample_and_visit_info_assay <-
+  mae_coldata |>
+  select(uid, sample_type, in_CRF, in_assays, randomized)
 
-sample_and_visit_info_assay <- 
-  sample_and_visit_info_assay |> 
+sample_and_visit_info_assay <-
+  sample_and_visit_info_assay |>
   dplyr::left_join(
     visits |> select(uid, starts_with("specimen_collection")),
     by = join_by(uid)
-  ) 
+  )
 
 sample_and_visit_info_assay <-
   sample_and_visit_info_assay |>
@@ -963,10 +1026,10 @@ sample_and_visit_info_assay <-
   mutate(value = value |> replace_na(FALSE)) |>
   pivot_wider(names_from = assay, values_from = value)
 
-# sample_and_visit_info_assay <- 
-#   sample_and_visit_info_assay |> 
+# sample_and_visit_info_assay <-
+#   sample_and_visit_info_assay |>
 #   mutate(
-#     mg_category = 
+#     mg_category =
 #       case_when(
 #         !str_detect(sample_type, "Clinical sample") & mg ~ "Not a clinical sample",
 #         is.na(randomized) & mg ~ "???",
@@ -977,7 +1040,7 @@ sample_and_visit_info_assay <-
 #         (is.na(specimen_collection_swab) | (specimen_collection_swab == 0)) & !mg ~ "Sample not collected",
 #         TRUE ~ "ERROR"
 #       ),
-#     qPCR_category = 
+#     qPCR_category =
 #       case_when(
 #         !str_detect(sample_type, "Clinical sample") & qPCR ~ "Not a clinical sample",
 #         is.na(randomized) & qPCR ~ "???",
@@ -988,7 +1051,7 @@ sample_and_visit_info_assay <-
 #         (is.na(specimen_collection_swab) | (specimen_collection_swab == 0)) & !qPCR ~ "Sample not collected",
 #         TRUE ~ "ERROR"
 #       ),
-#     amplicon_category = 
+#     amplicon_category =
 #       case_when(
 #         !str_detect(sample_type, "Clinical sample") & amplicon ~ "Not a clinical sample",
 #         is.na(randomized) & amplicon ~ "???",
@@ -999,7 +1062,7 @@ sample_and_visit_info_assay <-
 #         (is.na(specimen_collection_swab) | (specimen_collection_swab == 0)) & !amplicon ~ "Sample not collected",
 #         TRUE ~ "ERROR"
 #       ),
-#     luminex_category = 
+#     luminex_category =
 #       case_when(
 #         !str_detect(sample_type, "Clinical sample") & luminex ~ "Not a clinical sample",
 #         is.na(randomized) & luminex ~ "???",
@@ -1012,36 +1075,34 @@ sample_and_visit_info_assay <-
 #       )
 #   )
 
-# 
+#
 # The last 5 columns can take the following values:
-# 
-# - `expected` (swab collected and available data), 
-# - `unexpected` (swab not collected but available data), 
+#
+# - `expected` (swab collected and available data),
+# - `unexpected` (swab not collected but available data),
 # - `missing` (swab collected but no available data),
 # - `maybe missing` (unclear if swab was collected and no available data),
-# - `not collected` (swab not collected), 
-# - `additional` (swab collected from a non-randomized participant), 
+# - `not collected` (swab not collected),
+# - `additional` (swab collected from a non-randomized participant),
 # - `NA` (not collected, no available data)
-# 
-
-
+#
 ```
 
 ```{r}
 
-se_sample_and_visit_info_assay <- 
+se_sample_and_visit_info_assay <-
   SummarizedExperiment(
     assays = list(
-      sample_and_visit_info = 
-        sample_and_visit_info_assay |> 
-        select(-c(sample_type, in_CRF, in_assays, randomized)) |> 
-        as.data.frame() |> 
-        column_to_rownames("uid") |> 
+      sample_and_visit_info = sample_and_visit_info_assay |>
+        select(-c(sample_type, in_CRF, in_assays, randomized)) |>
+        as.data.frame() |>
+        column_to_rownames("uid") |>
         t()
     ),
-    colData = 
-      sample_and_visit_info_assay |> select(uid) |> 
-      mutate(rownames = uid) |> as.data.frame() |> 
+    colData = sample_and_visit_info_assay |>
+      select(uid) |>
+      mutate(rownames = uid) |>
+      as.data.frame() |>
       column_to_rownames("rownames")
   )
 ```
@@ -1057,40 +1118,60 @@ We will also add to this manifest the DNA extraction related data (*e.g.*, extra
 
 ```{r}
 
-sample_manifest <- 
+sample_manifest <-
   bind_rows(
-    se_mg |> colData() |> as.data.frame() |> as_tibble() |> 
-      mutate(ext_lib_plate_nb = ext_lib_plate_nb |> as.character()) |> 
+    se_mg |>
+      colData() |>
+      as.data.frame() |>
+      as_tibble() |>
+      mutate(ext_lib_plate_nb = ext_lib_plate_nb |> as.character()) |>
       select(
-        uid, barcode = swab_barcode, 
-             ext_lib_plate_nb, ext_lib_plate_id, ext_lib_position
-        ) |> 
+        uid,
+        barcode = swab_barcode,
+        ext_lib_plate_nb,
+        ext_lib_plate_id,
+        ext_lib_position
+      ) |>
       mutate(source = "mg", sample_type = "swab"),
-    se_qPRC |> colData() |> as.data.frame() |> as_tibble() |> 
-      select(uid, barcode = vibr_sample_id, ext_lib_plate_nb) |> 
+    se_qPRC |>
+      colData() |>
+      as.data.frame() |>
+      as_tibble() |>
+      select(uid, barcode = vibr_sample_id, ext_lib_plate_nb) |>
       mutate(source = "qPCR", sample_type = "swab"),
-    se_daily_qPRC |> colData() |> as.data.frame() |> as_tibble() |> 
+    se_daily_qPRC |>
+      colData() |>
+      as.data.frame() |>
+      as_tibble() |>
       select(
-        uid, barcode = vibr_sample_id, 
-             ext_lib_plate_nb, pcr_plate_id, pcr_plate_nb, ext_lib_plate_nb
-        ) |>
+        uid,
+        barcode = vibr_sample_id,
+        ext_lib_plate_nb,
+        pcr_plate_id,
+        pcr_plate_nb,
+        ext_lib_plate_nb
+      ) |>
       mutate(source = "qPCR_daily", sample_type = "swab"),
-    se_16S_ASV |> colData() |> as.data.frame() |> as_tibble() |> 
-      mutate(ext_lib_plate_nb = ext_lib_plate_nb |> as.character())  |> 
+    se_16S_ASV |>
+      colData() |>
+      as.data.frame() |>
+      as_tibble() |>
+      mutate(ext_lib_plate_nb = ext_lib_plate_nb |> as.character()) |>
       select(
-        uid, barcode = sample_id_barcode, 
-        ext_lib_plate_type, ext_lib_plate_nb
-        ) |>
+        uid,
+        barcode = sample_id_barcode,
+        ext_lib_plate_type,
+        ext_lib_plate_nb
+      ) |>
       mutate(source = "16S_ASV", sample_type = "swab")
     # TODO: in the Luminex data processing, add the barcode information to the SE,
     # Same with the flow data (less critical)
   )
-
 ```
 
 
 ```{r}
-sample_manifest 
+sample_manifest
 ```
 
 
@@ -1100,10 +1181,9 @@ Some entries have no barcode:
 
 ```{r}
 
-sample_manifest |> 
-  dplyr::count(is.na(barcode), name = "n entries") |> 
+sample_manifest |>
+  dplyr::count(is.na(barcode), name = "n entries") |>
   gt()
-
 ```
 
 This is not unexpected as our data also contain data from positive/negative controls.
@@ -1113,44 +1193,39 @@ We check that all clinical samples have a barcode:
 
 ```{r}
 
-sample_manifest <- 
-  sample_manifest |> 
-  select(-any_of("sample_type")) |> 
+sample_manifest <-
+  sample_manifest |>
+  select(-any_of("sample_type")) |>
   left_join(
     mae_coldata |> select(uid, sample_type),
     by = join_by(uid)
   )
-
 ```
 
 ```{r}
 
-sample_manifest |> 
-  dplyr::count(is.na(barcode), sample_type, name = "n entries") |> 
+sample_manifest |>
+  dplyr::count(is.na(barcode), sample_type, name = "n entries") |>
   gt()
-
 ```
 
 There is one clinical sample without barcode, which is problematic:
 
 ```{r}
 
-sample_manifest |> 
-  filter(sample_type == "Clinical sample", is.na(barcode)) |> 
+sample_manifest |>
+  filter(sample_type == "Clinical sample", is.na(barcode)) |>
   select(uid, barcode, source)
-
-
 ```
 
 We check the barcodes for the "surrounding" `uid`s, which are from the same participant and previous/next visits:
 
 ```{r}
 
-sample_manifest |> 
-  filter(str_detect(uid, "068200278_140[1-5]")) |> 
-  arrange(uid, source) |> 
+sample_manifest |>
+  filter(str_detect(uid, "068200278_140[1-5]")) |>
+  arrange(uid, source) |>
   select(uid, barcode, source)
-
 ```
 
 
@@ -1162,33 +1237,27 @@ There are however no entries with that barcode.
 
 ```{r}
 
-
-sample_manifest |> 
-  filter(barcode == "2293841") |> 
+sample_manifest |>
+  filter(barcode == "2293841") |>
   select(uid, barcode, source)
-
-
 ```
 
 But that `uid` has data in the 16S assay, with compositions that appear to be consistent with that of surrounding visits:
 
 ```{r}
 
-
 se_16S[, "068200278_1404"] |> assay("rel_ab") |> head()
-
-
 ```
 
 
 ```{r}
 
-uids_to_check <- 
-  sample_manifest |> 
-  filter(str_detect(uid, "068200278_140[1-7]")) |> 
-  pull(uid) |> sort() |> unique()
-
-
+uids_to_check <-
+  sample_manifest |>
+  filter(str_detect(uid, "068200278_140[1-7]")) |>
+  pull(uid) |>
+  sort() |>
+  unique()
 ```
 
 ```{r}
@@ -1196,8 +1265,8 @@ uids_to_check <-
 #| fig-height: 2.5
 
 se_16S[, uids_to_check] |>
-  as_tibble() |> 
-  filter(counts > 0, rel_ab > 1/100) |> 
+  as_tibble() |>
+  filter(counts > 0, rel_ab > 1 / 100) |>
   ggplot() +
   aes(y = uid |> fct_rev(), x = rel_ab, fill = .feature) +
   geom_col() +
@@ -1206,7 +1275,6 @@ se_16S[, uids_to_check] |>
     strip.text.y = element_text(angle = 0),
     legend.key.size = unit(0.2, "cm")
   )
-
 ```
 
 :::callout-important
@@ -1217,23 +1285,22 @@ Check with the 16S amplicon data generator what the barcode for that sample is.
 
 ```{r}
 
-sample_manifest_summary_by_barcode <- 
-  sample_manifest |> 
+sample_manifest_summary_by_barcode <-
+  sample_manifest |>
   filter(!is.na(barcode)) |>
-  group_by(barcode) |> 
+  group_by(barcode) |>
   summarize(
-    n = n(), 
+    n = n(),
     n_uids = n_distinct(uid),
     uids = str_c(unique(uid), collapse = ", "),
     sources = str_c(unique(source), collapse = ", "),
     sample_types = str_c(unique(sample_type), collapse = ", "),
     .groups = "drop"
-    ) 
+  )
 
-sample_manifest_summary_by_barcode |> 
-  arrange(-n_uids) |> 
+sample_manifest_summary_by_barcode |>
+  arrange(-n_uids) |>
   slice_head(n = 10)
-
 ```
 There are 2 barcodes that have been assigned to different `uid`s, which is unexpected and may indicate a mislabeling of samples.
 
@@ -1242,18 +1309,23 @@ There are 2 barcodes that have been assigned to different `uid`s, which is unexp
 
 ```{r}
 
-sample_manifest |> 
-  filter(str_detect(uid, "068200385_120[2-7]")) |> 
-  arrange(barcode, source) |> 
+sample_manifest |>
+  filter(str_detect(uid, "068200385_120[2-7]")) |>
+  arrange(barcode, source) |>
   select(barcode, uid, source)
-
 ```
 
 ```{r}
 
-se_16S[, c("068200385_1204","068200385_1205", "068200385_1206", "068200385_1207")] |>
-  assay("rel_ab") |> head() |> round(4)
-
+se_16S[, c(
+  "068200385_1204",
+  "068200385_1205",
+  "068200385_1206",
+  "068200385_1207"
+)] |>
+  assay("rel_ab") |>
+  head() |>
+  round(4)
 ```
 The 16S data looks legit and distinct for these two samples... 
 
@@ -1264,8 +1336,8 @@ Check with the 16S amplicon data generator what the barcode for that sample is.
 Until we have figured this out, we set the barcode of sample `068200385_1206` to NA as it is the one that looks more likely to be mislabelled.
 
 ```{r}
-sample_manifest <- 
-  sample_manifest |> 
+sample_manifest <-
+  sample_manifest |>
   mutate(
     barcode = case_when(
       uid == "068200385_1206" ~ NA_character_,
@@ -1281,22 +1353,20 @@ sample_manifest <-
 
 ```{r}
 
-sample_manifest |> 
-  filter(barcode == "2292179") |>  
-  arrange(barcode, source) |> 
+sample_manifest |>
+  filter(barcode == "2292179") |>
+  arrange(barcode, source) |>
   select(barcode, uid, source)
-
 ```
 Again it appears to be something unexpected in the 16S amplicon data...
 
 
 ```{r}
 
-sample_manifest |> 
-  filter(str_detect(uid, "068200356_130[4-6]|068200439_110[5-7]")) |>  
-  arrange(barcode, source) |> 
+sample_manifest |>
+  filter(str_detect(uid, "068200356_130[4-6]|068200439_110[5-7]")) |>
+  arrange(barcode, source) |>
   select(barcode, uid, source)
-
 ```
 
 From this data, it looks like the barcode "2292179" should be assigned to "068200439_1107" and not to "068200356_1305".
@@ -1305,25 +1375,27 @@ The barcode of "068200356_1305" should likely be "2292083" or "2292085" to follo
 
 ```{r}
 
-sample_manifest |> 
-  filter(barcode %in% c("2292083", "2292085")) |>  
-  arrange(barcode, source) |> 
+sample_manifest |>
+  filter(barcode %in% c("2292083", "2292085")) |>
+  arrange(barcode, source) |>
   select(barcode, uid, source)
-
 ```
 
 We check the 16S data just to be sure that, besides a barcode mislabeling, there is no other issue with the data for these two samples:
 
 ```{r}
 
-uids_to_check <- 
-  sample_manifest |> 
-  filter(str_detect(uid, "068200356_130[4-6]|068200439_110[5-7]")) |> 
-  pull(uid) |> sort() |> unique()
+uids_to_check <-
+  sample_manifest |>
+  filter(str_detect(uid, "068200356_130[4-6]|068200439_110[5-7]")) |>
+  pull(uid) |>
+  sort() |>
+  unique()
 
 se_16S[, uids_to_check] |>
-  assay("rel_ab") |> head() |> round(4)
-
+  assay("rel_ab") |>
+  head() |>
+  round(4)
 ```
 
 ```{r}
@@ -1331,8 +1403,8 @@ se_16S[, uids_to_check] |>
 #| fig-height: 2.5
 
 se_16S[, uids_to_check] |>
-  as_tibble() |> 
-  filter(counts > 0, rel_ab > 1/100) |> 
+  as_tibble() |>
+  filter(counts > 0, rel_ab > 1 / 100) |>
   ggplot() +
   facet_grid(sample_id_barcode ~ ., scales = "free", space = "free") +
   aes(y = uid, x = rel_ab, fill = .feature) +
@@ -1342,7 +1414,6 @@ se_16S[, uids_to_check] |>
     strip.text.y = element_text(angle = 0),
     legend.key.size = unit(0.2, "cm")
   )
-
 ```
 
 Fortunately, the `uid` assignments look correct and we can likely consider that the barcode is missing for the `068200356_1305` sample.
@@ -1355,8 +1426,8 @@ Until we have figured this out, we set the barcode of sample `068200356_1305` to
 
 ```{r}
 
-sample_manifest <- 
-  sample_manifest |> 
+sample_manifest <-
+  sample_manifest |>
   mutate(
     barcode = case_when(
       uid == "068200356_1305" ~ NA_character_,
@@ -1376,14 +1447,13 @@ We add the `visit_type` from the `mae_coldata` table to the `sample_manifest` ta
 
 ```{r}
 
-sample_manifest <- 
-  sample_manifest |> 
+sample_manifest <-
+  sample_manifest |>
   select(-any_of("visit_type")) |>
   left_join(
     mae_coldata |> select(uid, visit_type),
     by = join_by(uid)
   )
-
 ```
 
 
@@ -1392,35 +1462,36 @@ sample_manifest <-
 #| fig-width: 6
 #| fig-height: 10
 
-sample_manifest |> 
-  # filter(sample_type == "Clinical sample") |> 
+sample_manifest |>
+  # filter(sample_type == "Clinical sample") |>
   dplyr::count(source, sample_type, visit_type, ext_lib_plate_nb) |>
-  distinct() |> 
+  distinct() |>
   ggplot() +
   facet_grid(visit_type ~ source, scales = "free", space = "free") +
   aes(y = ext_lib_plate_nb |> fct_rev(), x = sample_type, fill = n |> log10()) +
   geom_tile() +
   ylab("Extraction library plate number\n(ext_lib_plate_nb)") +
-  scale_fill_gradient("Number of samples\n(log10 scale)", low = "lightblue1", high = "steelblue4") +
+  scale_fill_gradient(
+    "Number of samples\n(log10 scale)",
+    low = "lightblue1",
+    high = "steelblue4"
+  ) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-
 ```
 
 First, it looks like numbers are not unique across sample types, so we have to specify the extraction batch (weekly or daily swabs) to differentiate between numbers. 
 
 ```{r}
 
-sample_manifest <- 
+sample_manifest <-
   sample_manifest |>
   mutate(
-    ext_lib_plate_batch = 
-      case_when(
-        source == "mg" ~ "Weekly swab",
-        source == "qPCR" ~ "Weekly swab",
-        source == "qPCR_daily" ~ "Daily swab",
-        source == "16S_ASV" ~ "???"
-      )
+    ext_lib_plate_batch = case_when(
+      source == "mg" ~ "Weekly swab",
+      source == "qPCR" ~ "Weekly swab",
+      source == "qPCR_daily" ~ "Daily swab",
+      source == "16S_ASV" ~ "???"
+    )
   )
 ```
 
@@ -1433,34 +1504,46 @@ For the home samples (daily swabs), the extraction plate numbers are only provid
 
 ```{r}
 
-sample_manifest_summary_by_uid <- 
-  sample_manifest |> 
-  filter(!is.na(ext_lib_plate_nb), sample_type == "Clinical sample") |> 
-  group_by(uid) |> 
+sample_manifest_summary_by_uid <-
+  sample_manifest |>
+  filter(!is.na(ext_lib_plate_nb), sample_type == "Clinical sample") |>
+  group_by(uid) |>
   summarize(
-    n = n(), 
+    n = n(),
     n_ext_batch = n_distinct(ext_lib_plate_batch),
-    ext_batches = str_c(unique(ext_lib_plate_batch) |> str_replace_na("NA"), collapse = " | "),
+    ext_batches = str_c(
+      unique(ext_lib_plate_batch) |> str_replace_na("NA"),
+      collapse = " | "
+    ),
     n_plate_nb = n_distinct(ext_lib_plate_nb),
-    plate_nbs = str_c(unique(ext_lib_plate_nb) |> str_replace_na("NA"), collapse = " | "),
+    plate_nbs = str_c(
+      unique(ext_lib_plate_nb) |> str_replace_na("NA"),
+      collapse = " | "
+    ),
     n_sources = n_distinct(source),
     sources = str_c(unique(source), collapse = " | "),
     .groups = "drop"
-    ) 
-
+  )
 ```
 We first check if any samples were extracted in the two different batches:
 
 ```{r}
 
-sample_manifest_summary_by_uid |> 
+sample_manifest_summary_by_uid |>
   filter(n_ext_batch > 1)
 
-sample_manifest |> 
-  filter(uid %in% c("068200127_1100", "068200414_1500")) |> 
-  select(uid, barcode, ext_lib_plate_nb, source, pcr_plate_nb, visit_type, ext_lib_plate_batch) |> 
+sample_manifest |>
+  filter(uid %in% c("068200127_1100", "068200414_1500")) |>
+  select(
+    uid,
+    barcode,
+    ext_lib_plate_nb,
+    source,
+    pcr_plate_nb,
+    visit_type,
+    ext_lib_plate_batch
+  ) |>
   arrange(uid, barcode, source)
-
 ```
 
 There are two "weekly" samples that were extracted in both batches. For both of these samples, the extraction plate number in the `qPCR` assay is 12, which I think it the plate with the re-extracted samples.
@@ -1481,15 +1564,14 @@ Next, we check if there are any samples with more than one extraction plate numb
 
 ```{r}
 
-sample_manifest_summary_by_uid |> 
-  filter(n_ext_batch <= 1) |> 
+sample_manifest_summary_by_uid |>
+  filter(n_ext_batch <= 1) |>
   dplyr::count(n_plate_nb, sources)
 
-sample_manifest_summary_by_uid |> 
-  filter(n_ext_batch <= 1) |> 
-  arrange(-n_plate_nb) |> 
+sample_manifest_summary_by_uid |>
+  filter(n_ext_batch <= 1) |>
+  arrange(-n_plate_nb) |>
   head()
-
 ```
 
 There are a few samples with two different extraction plate numbers, but all of them are mismatch between the `"mg"` and `"qPCR"` assays, which is not unexpected because in the metagenomics data, Michael only provided the data for the retained extraction, while in the qPCR rate, the data from both extraction were provided. 
@@ -1497,11 +1579,18 @@ There are a few samples with two different extraction plate numbers, but all of 
 
 ```{r}
 
-sample_manifest |> 
-  filter(uid %in% c("068100006_1400", "068100013_1100")) |> 
-  select(uid, barcode, ext_lib_plate_nb, source, pcr_plate_nb, visit_type, ext_lib_plate_batch) |> 
+sample_manifest |>
+  filter(uid %in% c("068100006_1400", "068100013_1100")) |>
+  select(
+    uid,
+    barcode,
+    ext_lib_plate_nb,
+    source,
+    pcr_plate_nb,
+    visit_type,
+    ext_lib_plate_batch
+  ) |>
   arrange(uid, barcode, source)
-
 ```
 
 
@@ -1511,26 +1600,33 @@ Since we didn't have the extraction library plate number for the 16S data, we wi
 
 ```{r}
 
-ext_plate_amplicon <- 
-  sample_manifest |> 
-  filter(sample_type == "Clinical sample") |> 
+ext_plate_amplicon <-
+  sample_manifest |>
+  filter(sample_type == "Clinical sample") |>
   mutate(
     min_plate_nb = ext_lib_plate_nb |> str_remove(",.*") |> parse_number(),
-  ) |> 
-  filter(!is.na(min_plate_nb)) |> 
+  ) |>
+  filter(!is.na(min_plate_nb)) |>
   group_by(uid) |>
-  arrange(uid, ext_lib_plate_batch) |> 
+  arrange(uid, ext_lib_plate_batch) |>
   mutate(
     n_ext_batches = n_distinct(ext_lib_plate_batch),
     n_plate_nb = n_distinct(min_plate_nb)
-    ) |> 
-  select(uid, barcode, source, ext_lib_plate_batch, min_plate_nb, n_ext_batches, n_plate_nb) |> 
-  arrange(-n_ext_batches, -n_plate_nb, uid, min_plate_nb) |> 
-  slice_head(n = 1) |> 
-  ungroup() |> 
-  mutate(ext_lib_plate_nb = min_plate_nb) |> 
+  ) |>
+  select(
+    uid,
+    barcode,
+    source,
+    ext_lib_plate_batch,
+    min_plate_nb,
+    n_ext_batches,
+    n_plate_nb
+  ) |>
+  arrange(-n_ext_batches, -n_plate_nb, uid, min_plate_nb) |>
+  slice_head(n = 1) |>
+  ungroup() |>
+  mutate(ext_lib_plate_nb = min_plate_nb) |>
   select(uid, ext_lib_plate_batch, ext_lib_plate_nb)
-  
 ```
 
 
@@ -1538,79 +1634,90 @@ ext_plate_amplicon <-
 
 ```{r}
 
-sample_manifest <- 
-  sample_manifest |> 
+sample_manifest <-
+  sample_manifest |>
   select(
-    uid, barcode, source, sample_type, visit_type, 
-    ext_lib_plate_batch, ext_lib_plate_nb
-    ) |> 
-  select(-any_of(ends_with("_new"))) |> 
+    uid,
+    barcode,
+    source,
+    sample_type,
+    visit_type,
+    ext_lib_plate_batch,
+    ext_lib_plate_nb
+  ) |>
+  select(-any_of(ends_with("_new"))) |>
   left_join(
-    ext_plate_amplicon |> 
+    ext_plate_amplicon |>
       select(
         uid,
-        ext_lib_plate_batch_new = ext_lib_plate_batch, 
+        ext_lib_plate_batch_new = ext_lib_plate_batch,
         ext_lib_plate_nb_new = ext_lib_plate_nb
-        ),
+      ),
     by = join_by(uid)
-  ) 
-
-```
-
-
-```{r}
-
-sample_manifest <- 
-  sample_manifest |> 
-  mutate(
-    ext_lib_plate_batch =
-      ifelse(
-        (source == "16S_ASV") & !is.na(ext_lib_plate_batch_new), 
-        ext_lib_plate_batch_new, ext_lib_plate_batch
-      ),
-    ext_lib_plate_nb_origin = ext_lib_plate_nb,
-    ext_lib_plate_nb = 
-      ifelse(
-        ((source == "16S_ASV") & !is.na(ext_lib_plate_nb_new)) | 
-          ((source == "mg") & is.na(ext_lib_plate_nb)), 
-        ext_lib_plate_nb_new, ext_lib_plate_nb
-      ),
-    ext_lib_plate_id = 
-      ifelse(
-        ext_lib_plate_batch != "???",
-        str_c(
-          ext_lib_plate_batch, "s plate ", 
-          str_pad(ext_lib_plate_nb, width = 2, pad = "0")
-        ),
-        NA_character_
-      ),
-    ext_lib_plate_nb_num = ext_lib_plate_nb |> str_remove(",.*") |> parse_number(),
-    ext_lib_info_source = 
-      case_when(
-        !is.na(ext_lib_plate_nb) & (ext_lib_plate_nb == ext_lib_plate_nb_origin) ~ "colData of source assay",
-        !is.na(ext_lib_plate_nb) ~ "imputed from qPCR or mg",
-        TRUE ~ NA_character_
-      )
-  ) |> 
-  arrange(ext_lib_plate_batch, ext_lib_plate_nb_num) |> 
-  mutate(ext_lib_plate_id = ext_lib_plate_id |> fct_inorder()) 
-  
-```
-
-
-```{r}
-
-sample_manifest <- 
-  sample_manifest |> 
-  select(
-    uid, barcode, source, sample_type, visit_type, 
-    ext_lib_plate_batch, ext_lib_plate_nb, ext_lib_plate_id, ext_lib_info_source
   )
+```
 
+
+```{r}
+
+sample_manifest <-
+  sample_manifest |>
+  mutate(
+    ext_lib_plate_batch = ifelse(
+      (source == "16S_ASV") & !is.na(ext_lib_plate_batch_new),
+      ext_lib_plate_batch_new,
+      ext_lib_plate_batch
+    ),
+    ext_lib_plate_nb_origin = ext_lib_plate_nb,
+    ext_lib_plate_nb = ifelse(
+      ((source == "16S_ASV") & !is.na(ext_lib_plate_nb_new)) |
+        ((source == "mg") & is.na(ext_lib_plate_nb)),
+      ext_lib_plate_nb_new,
+      ext_lib_plate_nb
+    ),
+    ext_lib_plate_id = ifelse(
+      ext_lib_plate_batch != "???",
+      str_c(
+        ext_lib_plate_batch,
+        "s plate ",
+        str_pad(ext_lib_plate_nb, width = 2, pad = "0")
+      ),
+      NA_character_
+    ),
+    ext_lib_plate_nb_num = ext_lib_plate_nb |>
+      str_remove(",.*") |>
+      parse_number(),
+    ext_lib_info_source = case_when(
+      !is.na(ext_lib_plate_nb) &
+        (ext_lib_plate_nb == ext_lib_plate_nb_origin) ~ "colData of source assay",
+      !is.na(ext_lib_plate_nb) ~ "imputed from qPCR or mg",
+      TRUE ~ NA_character_
+    )
+  ) |>
+  arrange(ext_lib_plate_batch, ext_lib_plate_nb_num) |>
+  mutate(ext_lib_plate_id = ext_lib_plate_id |> fct_inorder())
+```
+
+
+```{r}
+
+sample_manifest <-
+  sample_manifest |>
+  select(
+    uid,
+    barcode,
+    source,
+    sample_type,
+    visit_type,
+    ext_lib_plate_batch,
+    ext_lib_plate_nb,
+    ext_lib_plate_id,
+    ext_lib_info_source
+  )
 ```
 
 ```{r}
-sample_manifest |> 
+sample_manifest |>
   dplyr::count(ext_lib_info_source)
 ```
 
@@ -1624,37 +1731,34 @@ After imputation, there are still a few samples with missing extraction data:
 
 ```{r}
 
-sample_manifest |> filter(is.na(ext_lib_plate_id), sample_type == "Clinical sample") 
-
+sample_manifest |>
+  filter(is.na(ext_lib_plate_id), sample_type == "Clinical sample")
 ```
 We impute the plates from these samples from the surrounding samples of the same participant when possible:
 
 ```{r} 
 
-
-sample_manifest |> 
-  filter(uid |> str_detect("068200356_130[3-7]")) |> 
-  arrange(uid) |> 
-  select(uid, barcode, ext_lib_plate_nb, ext_lib_plate_id) |> 
+sample_manifest |>
+  filter(uid |> str_detect("068200356_130[3-7]")) |>
+  arrange(uid) |>
+  select(uid, barcode, ext_lib_plate_nb, ext_lib_plate_id) |>
   distinct()
 # 19
 
-sample_manifest |> 
-  filter(uid |> str_detect("068200385_120[3-7]")) |> 
-  arrange(uid) |> 
-  select(uid, barcode, ext_lib_plate_nb, ext_lib_plate_id) |> 
+sample_manifest |>
+  filter(uid |> str_detect("068200385_120[3-7]")) |>
+  arrange(uid) |>
+  select(uid, barcode, ext_lib_plate_nb, ext_lib_plate_id) |>
   distinct()
 # 17
 
-
-sample_manifest |> 
-  filter(uid |> str_detect("068200278_140[2-7]")) |> 
-  arrange(uid) |> 
-  select(uid, barcode, ext_lib_plate_nb, ext_lib_plate_id) |> 
+sample_manifest |>
+  filter(uid |> str_detect("068200278_140[2-7]")) |>
+  arrange(uid) |>
+  select(uid, barcode, ext_lib_plate_nb, ext_lib_plate_id) |>
   distinct()
 
 # 21 or 22
-
 ```
 
 ```{r}
@@ -1662,71 +1766,88 @@ sample_manifest |>
 #| fig-height: 3
 #| eval: false
 
-sample_manifest |> 
-  filter(ext_lib_plate_batch == "Daily swab", sample_type == "Clinical sample") |>
-  select(uid, barcode, ext_lib_plate_nb) |> 
-  distinct() |> 
-  dplyr::count(ext_lib_plate_nb) |> 
+sample_manifest |>
+  filter(
+    ext_lib_plate_batch == "Daily swab",
+    sample_type == "Clinical sample"
+  ) |>
+  select(uid, barcode, ext_lib_plate_nb) |>
+  distinct() |>
+  dplyr::count(ext_lib_plate_nb) |>
   ggplot() +
   aes(x = ext_lib_plate_nb, y = n) +
-  geom_label(aes(label = n), size = 3) 
-
+  geom_label(aes(label = n), size = 3)
 ```
 
 
 
 ```{r}
 
-sample_manifest <- 
-  sample_manifest |> 
+sample_manifest <-
+  sample_manifest |>
   mutate(
-    ext_lib_plate_batch =
-      case_when(
-        uid %in% c("068200278_1404", "068200356_1305", "068200385_1205", "068200385_1206")  ~ "Daily swab",
-        TRUE ~ ext_lib_plate_batch
-      ),
-    ext_lib_plate_nb =
-      case_when(
-        uid == "068200278_1404" ~ "21", # not sure...
-        uid == "068200356_1305" ~ "19", # not sure....
-        uid == "068200385_1205" ~ "17",
-        uid == "068200385_1206" ~ "17",
-        TRUE ~ ext_lib_plate_nb
-      ),
-    ext_lib_plate_id =
-      case_when(
-        uid == "068200278_1404" ~ "Daily swabs plate 21" |> factor(levels = levels(ext_lib_plate_id)),
-        uid == "068200356_1305" ~ "Daily swabs plate 19" |> factor(levels = levels(ext_lib_plate_id)),
-        uid == "068200385_1205" ~ "Daily swabs plate 17" |> factor(levels = levels(ext_lib_plate_id)),
-        uid == "068200385_1206" ~ "Daily swabs plate 17" |> factor(levels = levels(ext_lib_plate_id)),
-        TRUE ~ ext_lib_plate_id
-      ),
-    ext_lib_info_source = 
-      case_when(
-        uid %in% c("068200278_1404", "068200356_1305", "068200385_1205", "068200385_1206")  ~ "imputed from surrounding samples of the same participant",
-        TRUE ~ ext_lib_info_source
-      )
+    ext_lib_plate_batch = case_when(
+      uid %in%
+        c(
+          "068200278_1404",
+          "068200356_1305",
+          "068200385_1205",
+          "068200385_1206"
+        ) ~ "Daily swab",
+      TRUE ~ ext_lib_plate_batch
+    ),
+    ext_lib_plate_nb = case_when(
+      uid == "068200278_1404" ~ "21", # not sure...
+      uid == "068200356_1305" ~ "19", # not sure....
+      uid == "068200385_1205" ~ "17",
+      uid == "068200385_1206" ~ "17",
+      TRUE ~ ext_lib_plate_nb
+    ),
+    ext_lib_plate_id = case_when(
+      uid == "068200278_1404" ~ "Daily swabs plate 21" |>
+        factor(levels = levels(ext_lib_plate_id)),
+      uid == "068200356_1305" ~ "Daily swabs plate 19" |>
+        factor(levels = levels(ext_lib_plate_id)),
+      uid == "068200385_1205" ~ "Daily swabs plate 17" |>
+        factor(levels = levels(ext_lib_plate_id)),
+      uid == "068200385_1206" ~ "Daily swabs plate 17" |>
+        factor(levels = levels(ext_lib_plate_id)),
+      TRUE ~ ext_lib_plate_id
+    ),
+    ext_lib_info_source = case_when(
+      uid %in%
+        c(
+          "068200278_1404",
+          "068200356_1305",
+          "068200385_1205",
+          "068200385_1206"
+        ) ~ "imputed from surrounding samples of the same participant",
+      TRUE ~ ext_lib_info_source
+    )
   )
-
 ```
 
 
 ```{r}
 
-sample_manifest <- 
-  sample_manifest |> 
+sample_manifest <-
+  sample_manifest |>
   select(
-    uid, barcode, source, 
-    ext_lib_plate_batch, ext_lib_plate_nb, ext_lib_plate_id, ext_lib_info_source
-  ) |> 
+    uid,
+    barcode,
+    source,
+    ext_lib_plate_batch,
+    ext_lib_plate_nb,
+    ext_lib_plate_id,
+    ext_lib_info_source
+  ) |>
   arrange(source, ext_lib_plate_id, uid)
-
 ```
 
 
 
 ```{r}
-sample_manifest |> 
+sample_manifest |>
   dplyr::count(ext_lib_info_source)
 ```
 
@@ -1738,7 +1859,7 @@ sample_manifest |>
 
 ```{r}
 
-SE_list <- 
+SE_list <-
   list(
     visit_and_sample_info = se_sample_and_visit_info_assay,
     mg = se_mg,
@@ -1751,12 +1872,13 @@ SE_list <-
   )
 
 
-mae <- 
+mae <-
   MultiAssayExperiment::MultiAssayExperiment(
     experiments = MultiAssayExperiment::ExperimentList(SE_list),
-    colData = 
-      mae_coldata |> select(-in_CRF, -in_assays) |> 
-      as.data.frame() |> mutate(rownames = uid) |> 
+    colData = mae_coldata |>
+      select(-in_CRF, -in_assays) |>
+      as.data.frame() |>
+      mutate(rownames = uid) |>
       column_to_rownames("rownames"),
     metadata = list(
       study = "VIBRANT",
@@ -1766,14 +1888,14 @@ mae <-
       colData_dictionary = coldata_dictionary,
       crf_plates_description = crf_plates_dictionary,
       crf_data_raw = crf_raw,
-      crf_data_clean = crf_clean, 
+      crf_data_clean = crf_clean,
       participant_crfs_merged = participant_crfs_merged,
       visits_crfs_merged = visits_crfs_merged,
       exposures = exposures,
-      sample_manifest = sample_manifest |> select(uid, barcode, source_assay = source, starts_with("ext_lib_"))
+      sample_manifest = sample_manifest |>
+        select(uid, barcode, source_assay = source, starts_with("ext_lib_"))
     )
   )
-
 ```
 
 
@@ -1788,17 +1910,34 @@ mae
 
 ```{r}
 
-mae_sample_map <- 
-  mae@sampleMap |> as_tibble() |> dplyr::filter(assay %in% assay_list$mae_assay_name) |>
-  select(uid = primary, assay) |> 
-  arrange(uid) |> 
-  dplyr::left_join(assay_list |> dplyr::rename(assay = mae_assay_name), by = join_by(assay)) |> 
+mae_sample_map <-
+  mae@sampleMap |>
+  as_tibble() |>
+  dplyr::filter(assay %in% assay_list$mae_assay_name) |>
+  select(uid = primary, assay) |>
+  arrange(uid) |>
+  dplyr::left_join(
+    assay_list |> dplyr::rename(assay = mae_assay_name),
+    by = join_by(assay)
+  ) |>
   dplyr::right_join(
-    mae@colData |> as.data.frame() |> as_tibble() |> 
-      select(uid, pid, visit_code, PIPV, visit, visit_type, sample_type, location, randomized, arm), 
+    mae@colData |>
+      as.data.frame() |>
+      as_tibble() |>
+      select(
+        uid,
+        pid,
+        visit_code,
+        PIPV,
+        visit,
+        visit_type,
+        sample_type,
+        location,
+        randomized,
+        arm
+      ),
     by = join_by(uid)
-    )
-
+  )
 ```
 
 All samples
@@ -1807,9 +1946,11 @@ All samples
 #| fig-height: 4
 #| fig-width: 12
 
-mae_sample_map |> 
-  dplyr::filter(!is.na(assay), assay != "amplicon_ASV") |> 
-  group_by(uid) |> mutate(n = n()) |> ungroup() |> 
+mae_sample_map |>
+  dplyr::filter(!is.na(assay), assay != "amplicon_ASV") |>
+  group_by(uid) |>
+  mutate(n = n()) |>
+  ungroup() |>
   mutate(uid = uid |> fct_reorder(-n)) |>
   ggplot() +
   aes(x = uid, y = assay_label |> fct_rev(), fill = assay_label) +
@@ -1822,8 +1963,7 @@ mae_sample_map |>
     axis.text.x = element_text(angle = 45, hjust = 1),
     strip.text.x = element_text(angle = 90),
     legend.position = "bottom"
-    )
-
+  )
 ```
 
 
@@ -1834,16 +1974,17 @@ Longitudinal availability for all visits
 #| fig-height: 17
 #| fig-width: 15
 
-mae_sample_map |> 
-  dplyr::filter(!is.na(assay), assay != "amplicon_ASV") |> 
-  # filter(visit_code %in% c("0000", seq(1000, 1900, by = 100), "2120")) |> 
+mae_sample_map |>
+  dplyr::filter(!is.na(assay), assay != "amplicon_ASV") |>
+  # filter(visit_code %in% c("0000", seq(1000, 1900, by = 100), "2120")) |>
   ggplot() +
   aes(x = assay_label, y = pid, fill = assay_label) +
   geom_tile() +
   facet_grid(
-    ifelse(randomized, "Randomized", "Not randomized") + location ~ visit_code, 
-    scales = "free_y", space = "free_y"
-    ) + # sample_category
+    ifelse(randomized, "Randomized", "Not randomized") + location ~ visit_code,
+    scales = "free_y",
+    space = "free_y"
+  ) + # sample_category
   scale_y_discrete("Participants IDs") + #, breaks = "NULL")  +
   xlab("") +
   scale_fill_brewer("Assay", type = "qual", palette = 7) + # 3
@@ -1852,8 +1993,7 @@ mae_sample_map |>
     strip.text.y = element_text(angle = 0),
     strip.text.x = element_text(angle = 90),
     legend.position = "bottom"
-    )
-
+  )
 ```
 For the weekly visits of all participants
 
@@ -1861,16 +2001,19 @@ For the weekly visits of all participants
 #| fig-height: 12
 #| fig-width: 12
 
-mae_sample_map |> 
-  dplyr::filter(!is.na(assay), assay != "amplicon_ASV") |> 
-  dplyr::filter(visit_type == "Clinic") |> 
+mae_sample_map |>
+  dplyr::filter(!is.na(assay), assay != "amplicon_ASV") |>
+  dplyr::filter(visit_type == "Clinic") |>
   ggplot() +
   aes(x = assay_label, y = pid, fill = assay_label) +
   geom_tile() +
   facet_grid(
-    location + ifelse(randomized, "Randomized", "Not randomized")  + arm  ~ visit_code, 
-    scales = "free_y", space = "free_y"
-    ) + # sample_category
+    location +
+      ifelse(randomized, "Randomized", "Not randomized") +
+      arm ~ visit_code,
+    scales = "free_y",
+    space = "free_y"
+  ) + # sample_category
   scale_y_discrete("Participants IDs") + #, breaks = "NULL")  +
   xlab("") +
   scale_fill_brewer("Assay", type = "qual", palette = 7) + # 3
@@ -1879,8 +2022,7 @@ mae_sample_map |>
     strip.text.y = element_text(angle = 0),
     strip.text.x = element_text(angle = 90),
     legend.position = "bottom"
-    )
-
+  )
 ```
 
 For the weekly visits of randomized participants
@@ -1889,17 +2031,20 @@ For the weekly visits of randomized participants
 #| fig-height: 12
 #| fig-width: 12
 
-mae_sample_map |> 
-  dplyr::filter(randomized) |> 
-  dplyr::filter(!is.na(assay), assay != "amplicon_ASV") |> 
-  dplyr::filter(visit_type == "Clinic") |> 
+mae_sample_map |>
+  dplyr::filter(randomized) |>
+  dplyr::filter(!is.na(assay), assay != "amplicon_ASV") |>
+  dplyr::filter(visit_type == "Clinic") |>
   ggplot() +
   aes(x = assay_label, y = pid, fill = assay_label) +
   geom_tile() +
   facet_grid(
-    location + ifelse(randomized, "Randomized", "Not randomized")  + arm  ~ visit_code, 
-    scales = "free_y", space = "free_y"
-    ) + # sample_category
+    location +
+      ifelse(randomized, "Randomized", "Not randomized") +
+      arm ~ visit_code,
+    scales = "free_y",
+    space = "free_y"
+  ) + # sample_category
   scale_y_discrete("Participants IDs") + #, breaks = "NULL")  +
   xlab("") +
   scale_fill_brewer("Assay", type = "qual", palette = 7) + # 3
@@ -1908,8 +2053,7 @@ mae_sample_map |>
     strip.text.y = element_text(angle = 0),
     strip.text.x = element_text(angle = 90),
     legend.position = "bottom"
-    )
-
+  )
 ```
 
 
@@ -1917,17 +2061,18 @@ mae_sample_map |>
 #| fig-height: 8
 #| fig-width: 8
 
-mae_sample_map |> 
-  dplyr::filter(randomized) |> 
-  dplyr::filter(!is.na(assay), assay != "amplicon_ASV") |> 
-  dplyr::filter(PIPV) |> 
+mae_sample_map |>
+  dplyr::filter(randomized) |>
+  dplyr::filter(!is.na(assay), assay != "amplicon_ASV") |>
+  dplyr::filter(PIPV) |>
   ggplot() +
   aes(x = assay_label, y = pid, fill = assay_label) +
   geom_tile() +
   facet_grid(
-    location + arm  ~ visit, 
-    scales = "free_y", space = "free_y"
-    ) + # sample_category
+    location + arm ~ visit,
+    scales = "free_y",
+    space = "free_y"
+  ) + # sample_category
   scale_y_discrete("Participants IDs") + #, breaks = "NULL")  +
   xlab("") +
   scale_fill_brewer("Assay", type = "qual", palette = 7) + # 3
@@ -1936,8 +2081,7 @@ mae_sample_map |>
     strip.text.y = element_text(angle = 0),
     strip.text.x = element_text(angle = 90),
     legend.position = "bottom"
-    )
-
+  )
 ```
 
 
@@ -1949,13 +2093,14 @@ We export the full `MultiAssayExperiment` object as an `.rds` file for further a
 ```{r}
 
 saveRDS(
-  mae, 
+  mae,
   str_c(
     get_02_output_dir(),
-    "mae_full_", today() |> str_remove_all("-"), ".rds"
+    "mae_full_",
+    today() |> str_remove_all("-"),
+    ".rds"
   )
 )
-
 ```
 
 

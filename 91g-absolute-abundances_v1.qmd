@@ -1,0 +1,913 @@
+---
+title: "MAE augmentation : absolute abundances"
+author: Laura Symul, Michael France
+date: today
+format: 
+   html:
+     page-layout: full
+     code-fold: true
+     toc: true
+     toc-location: left
+     toc-depth: 5
+     embed-resources: true
+execute:
+  cache: refresh # true refresh false
+  warning: false
+knitr:
+  opts_chunk:
+    out.width: "100%"
+editor: source
+---
+
+```{r}
+#| warning: false
+#| cache: false
+library(tidyverse)
+library(magrittr)
+library(gt)
+library(patchwork)
+library(SummarizedExperiment)
+library(tidySummarizedExperiment)
+library(MultiAssayExperiment)
+
+tmp <- fs::dir_map("R scripts/", source)
+tmp <- fs::dir_map("../VIBRANT-99-utils/R/", source)
+rm(tmp)
+theme_set(theme_light())
+```
+
+
+```{r}
+mae_file <-
+  fs::dir_ls(
+    get_03_output_dir(),
+    regexp = "mae_full_06_.*\\.rds$"
+  ) |>
+  sort(decreasing = TRUE) |>
+  magrittr::extract(1)
+
+cat(str_c(
+  "Loading MultiAssayExperiment from ",
+  dirname(mae_file) |> basename(),
+  "/",
+  mae_file |> basename(),
+  "\n"
+))
+
+mae <- readRDS(mae_file)
+
+rm(mae_file)
+```
+
+
+```{r}
+pars <-
+  list(
+    ampl_total_reads_min = 5000
+  )
+```
+
+
+## Introduction & principles
+
+In this document, we attempt to estimate absolute abundances of the different vaginal taxa by combining the qPCR measurements of total 16S rRNA gene copies per swab with the relative abundances from 16S rRNA gene sequencing, while accounting for the different number of 16S copies per genome for the different taxa.
+
+Let 
+
+(indices)
+
+- $i \in \{1,...,N\}$ be the sample index,
+- $j \in \{1,...,J\}$ be the taxon index,
+
+(measurements/data)
+
+- $r_{ij}$ be the number of amplicon (16S rRNA) sequencing reads attributed to taxon $j$ in sample $i$,
+
+- $C_i$ be the concentration of total 16S rRNA gene copies per swab measured by qPCR for sample $i$,
+
+(estimated/imported quantities)
+
+- $c_j$ be the estimated number of 16S gene copies per bacterium for taxon $j$,
+
+(calculated quantities)
+
+- $R_i = \sum_{j=1}^J r_{ij}$ be the total number of reads for sample $i$,
+- $p_{ij} = r_{ij}/R_i$ be the "crude" relative abundance of taxon $j$ in sample $i$,
+- $q_{ij} =  \frac{p_{ij}/c_j}{\sum_{j = 1}^J p_{ij}/c_j}$  be the "adjusted" relative abundance of taxon $j$ in sample $i$ ("adjusted" for the number of 16S rRNA gene copies in taxon $j$)
+- $n_{ij} = \frac{p_{ij}}{c_j}C_i$ be the **estimated absolute abundance** of taxon $j$ in sample $i$ (expressed as *genome copies per swab*), and 
+- $N_i = \sum_j n_{ij}$ , the estimated total bacterial concentration in sample $i$. 
+
+
+We also approximate $\text{LLOQ}(n_{ij})$ as the lower limit of quantification for $n_{ij}$, which is the estimated absolute abundance corresponding to a single read in the sequencing data:
+
+$$\text{LLOQ}(n_{ij}) = \frac{1}{R_ic_j} C_i$$
+
+The absolute abundance of taxa with 0 reads are imputed to $\frac{1}{10}\max_j \text{LLOQ}(n_{ij})$.
+
+:::callout-warning
+Not sure whether imputed value should be the same for all taxa or not (*i.e.*, whether we should remove $\max_j$ from the last formula)
+
+Also, this approximation makes some assumptions of independence between taxa, which I'm not sure is valid. But it is a starting point and we can refine it later on.
+:::
+
+
+
+## Relative abundance data
+
+In this section, we define the following fields:
+
+- `reads`: the number of 16S amplicon sequencing reads attributed to taxon $j$ in sample $i$ ($r_{ij}$),
+- `rel_ab`: the "crude" relative abundance of taxon $j$ in sample $i$ ($p_{ij}$),
+- `ampl_total_reads`: the total number of 16S amplicon sequencing reads in sample $i$ ($R_i$),
+- `ampl_data_flag`: a flag categorizing the amplicon sequencing data of sample $i$ as
+    - `"low reads"` if $R_i <$ `r pars$ampl_total_reads_min`,
+    - `"outlying sample"` if the sample composition observed on study day $d$ for participant $p$ is unexpected given the participant's timeline around day $d$ (see section XXX below for details)
+    - `""` otherwise.
+
+These fields are defined from the data contained in the `"amplicon"` assay of the `MultiAssayExperiment` object, which contains the counts of each taxa in each sample. 
+
+
+The $J$ taxa have been defined from the taxonomic assignment of each ASV. The smallest taxonomic level was kept for each ASV such that counts attributed to ASVs sharing the same taxonomic assignment have been aggregated (sum).
+
+:::callout-warning
+First, we need to remove taxa that are known "PCR contaminants" from the data (TODO in `04-16S-rRNA-amplicon-sequencing.qmd`).
+:::
+
+
+```{r}
+Y <-
+  mae[["amplicon"]] |>
+  as_tibble() |>
+  select(
+    taxon = .feature,
+    uid = .sample,
+    ampl_total_reads = total_counts,
+    reads = counts,
+    rel_ab
+  ) |>
+  mutate(taxon = taxon |> fct_inorder())
+
+Y <-
+  Y |>
+  left_join(
+    mae@colData |>
+      as_tibble() |>
+      select(
+        uid,
+        sample_type,
+        control_type,
+        pid,
+        visit_code,
+        visit_type,
+        study_day,
+        mITT,
+        arm,
+        site,
+        randomized
+      ),
+    by = join_by(uid)
+  )
+
+Y <-
+  Y |>
+  select(
+    sample_type,
+    control_type,
+    pid,
+    randomized,
+    mITT,
+    arm,
+    site,
+    visit_type,
+    visit_code,
+    study_day,
+    uid,
+    ampl_total_reads,
+    taxon,
+    reads,
+    rel_ab
+  ) |>
+  mutate(
+    ampl_data_flag = ""
+  )
+```
+
+
+```{r}
+tibble(
+  dimension = c("Number of samples $(N)$", "Number of taxa $(J)$"),
+  value = c(
+    Y |> select(uid) |> distinct() |> nrow(),
+    Y |> select(taxon) |> distinct() |> nrow()
+  )
+) |>
+  gt() |>
+  gt::fmt_markdown()
+```
+
+
+### Total sequencing depth
+
+```{r}
+#| fig-width: 9
+#| fig-height: 4
+Y |>
+  select(uid, sample_type, control_type, ampl_total_reads) |>
+  distinct() |>
+  ggplot() +
+  facet_grid(. ~ sample_type, scales = "free") +
+  aes(x = control_type, y = ampl_total_reads, fill = control_type) +
+  geom_hline(yintercept = pars$ampl_total_reads_min, linetype = "dashed") +
+  geom_boxplot(alpha = 0.5) +
+  ggbeeswarm::geom_beeswarm(
+    aes(color = control_type),
+    size = 0.1,
+    alpha = 0.5,
+    dodge.width = 0.75
+  ) +
+  scale_y_log10() +
+  labs(
+    y = "Total 16S amplicon sequencing reads\nper sample (log10 scale)",
+    x = "Sample/control type"
+  ) +
+  guides(fill = "none", color = "none")
+```
+
+```{r}
+Y <-
+  Y |>
+  mutate(
+    ampl_data_flag = case_when(
+      ampl_total_reads < pars$ampl_total_reads_min ~ "low reads",
+      TRUE ~ ampl_data_flag
+    )
+  )
+```
+
+### Outlying samples
+
+> TODO
+
+
+
+## qPCR data
+
+
+In this section we define the following fields:
+
+- `copies_per_swab_obs`: the number of 16S rRNA gene copies per swab measured by qPCR for sample $i$ ($C_i$),
+- `copies_per_swab_imputed`: the number of 16S rRNA gene copies per swab for sample $i$ after imputation of missing values and zeros,
+- `qpcr_source_mae_exp`: the MAE experiment in which the qPCR data for sample $i$ is stored, either `"qPCR"` or `"qPCR_daily"` (see below),
+- `qpcr_data_flag`: a flag categorizing the qPCR data of sample $i$ as
+    - `"aggregated across qPCR runs"` if $C_i$ was measured twice and values were aggregated across the two runs,
+    - `"missing"` if $C_i$ is missing,
+    - `"imputed (missing/zero)"` if $C_i$ was imputed (either because it was missing or because it was 0),
+    - `"outlying sample"` if the qPCR measurement observed on study day $d$ for participant $p$ is unexpected given the participant's timeline around day $d$ (see section XXX below for details),
+    - `""` otherwise.
+
+
+These fields are defined from the data contained in the `"qPCR"` and `"qPCR_daily"` assays of the `MultiAssayExperiment` object, which contains the qPCR measurements of total 16S rRNA gene copies per swab for each sample.
+
+As documented below, the `"qPCR"` MAE experiment mostly contains data from clinic swabs while `"qPCR_daily"` contains data from home swabs.
+
+We use the `copies_per_swab_med_corrected` variable from the `"qPCR"` MAE experiment (*i.e.*, the values that were corrected for batch effects) and the `copies_per_swab_med` variable from the `"qPCR_daily"` MAE experiment.
+
+
+```{r}
+qpcr <-
+  bind_rows(
+    mae[["qPCR"]] |>
+      as_tibble() |>
+      filter(target == "16S") |>
+      select(uid, copies_per_swab_obs = copies_per_swab_med_corrected) |>
+      mutate(qpcr_source_mae_exp = "qPCR"),
+    mae[["qPCR_daily"]] |>
+      as_tibble() |>
+      filter(target == "16S") |>
+      select(uid, copies_per_swab_obs = copies_per_swab_med) |>
+      mutate(qpcr_source_mae_exp = "qPCR_daily")
+  ) |>
+  mutate(
+    qpcr_data_flag = ""
+  )
+```
+
+We have data for `r nrow(qpcr)` samples.
+
+```{r}
+qpcr |>
+  left_join(
+    mae@colData |> as_tibble() |> select(uid, visit_type),
+    by = join_by(uid)
+  ) |>
+  dplyr::count(visit_type, qpcr_source_mae_exp) |>
+  pivot_wider(names_from = qpcr_source_mae_exp, values_from = n) |>
+  gt(
+    caption = "Number of samples per visit type and MAE experiment in which they are stored (corresponding to the qPCR data generation batch)"
+  ) |>
+  cols_label(
+    visit_type = "Visit type"
+  ) |>
+  gt::tab_spanner(
+    label = "MAE Experiment",
+    columns = c("qPCR", "qPCR_daily")
+  )
+```
+
+```{r}
+qpcr |>
+  group_by(uid) |>
+  summarize(n_assays = n_distinct(qpcr_source_mae_exp), .groups = "drop") |>
+  arrange(-n_assays) |>
+  dplyr::count(n_assays) |>
+  gt(
+    caption = "Number of samples with duplicated qPCR measurements (i.e., with data available in `qPCR` and `qPCR_daily` experiments of the MAE object)."
+  ) |>
+  cols_label(
+    n_assays = "Number of qPCR assays",
+    n = "Number of samples"
+  )
+```
+
+
+### Resolving duplicated values 
+
+As noted just above, a few samples have data available in both `qPCR` and `qPCR_daily` experiments, which is likely due to a second DNA extraction. 
+
+```{r}
+#| eval: false
+qpcr |>
+  group_by(uid) |>
+  mutate(n = n(), n_sources = n_distinct(qpcr_source_mae_exp)) |>
+  ungroup() |>
+  filter(n > 1) |>
+  arrange(uid)
+```
+
+```{r}
+#| eval: true
+sample_1 <-
+  qpcr |>
+  filter(uid %in% str_c("068200127_1", str_pad(6:102, width = 3, pad = "0"))) |>
+  arrange(uid) |>
+  group_by(uid) |>
+  mutate(
+    copies_per_swab_obs_mean = mean(copies_per_swab_obs),
+    copies_per_swab_obs_geom_mean = 10^mean(log10(copies_per_swab_obs))
+  ) |>
+  left_join(
+    mae@colData |> as_tibble() |> select(uid, visit_type, study_day),
+    by = join_by(uid)
+  ) |>
+  arrange(study_day, visit_type)
+sample_1
+
+sample_2 <-
+  qpcr |>
+  filter(
+    uid %in% str_c("068200414_1", str_pad(400:900, width = 3, pad = "0"))
+  ) |>
+  arrange(uid) |>
+  group_by(uid) |>
+  mutate(
+    copies_per_swab_obs_mean = mean(copies_per_swab_obs),
+    copies_per_swab_obs_geom_mean = 10^mean(log10(copies_per_swab_obs))
+  ) |>
+  left_join(
+    mae@colData |> as_tibble() |> select(uid, visit_type, study_day),
+    by = join_by(uid)
+  ) |>
+  arrange(study_day, visit_type)
+
+sample_2
+```
+
+```{r}
+sample_1 |>
+  ggplot() +
+  aes(x = study_day, y = copies_per_swab_obs, col = uid) +
+  geom_point(size = 4, aes(shape = qpcr_source_mae_exp), alpha = 0.5) +
+  geom_point(
+    aes(y = copies_per_swab_obs_geom_mean),
+    shape = 4,
+    size = 3
+  ) +
+  geom_point(
+    aes(y = copies_per_swab_obs_mean),
+    shape = 2,
+    size = 3
+  ) +
+  scale_y_log10() +
+  labs(
+    caption = "Crosses indicate the geometric mean of the two values for each sample; triangles indicate the arithmetic mean."
+  )
+
+sample_2 |>
+  ggplot() +
+  aes(x = study_day, y = copies_per_swab_obs, col = uid) +
+  geom_point(size = 4, aes(shape = qpcr_source_mae_exp), alpha = 0.5) +
+  geom_point(
+    aes(y = copies_per_swab_obs_geom_mean),
+    shape = 4,
+    size = 3
+  ) +
+  geom_point(
+    aes(y = copies_per_swab_obs_mean),
+    shape = 2,
+    size = 3
+  ) +
+  scale_y_log10() +
+  labs(
+    caption = "Crosses indicate the geometric mean of the two values for each sample; triangles indicate the arithmetic mean."
+  )
+```
+
+
+For these samples, we take the geometric mean of the two values.
+
+
+:::callout-warning
+@Michael: do you agree with the geometric mean? (mean on the log-scale)
+:::
+
+
+
+```{r}
+qpcr <-
+  qpcr |>
+  group_by(uid) |>
+  summarize(
+    copies_per_swab_obs = 10^mean(log10(copies_per_swab_obs)),
+    qpcr_source_mae_exp = paste(unique(qpcr_source_mae_exp), collapse = "; "),
+    .groups = "drop"
+  ) |>
+  mutate(
+    qpcr_data_flag = ifelse(
+      str_detect(qpcr_source_mae_exp, ";"),
+      "aggregated across qPCR runs",
+      ""
+    )
+  )
+```
+
+
+
+### Imputation of missing qPCR values
+
+Since estimation of absolute values requires both relative abundance and qPCR data, we can either restrict the analysis to samples with both types of data available, or we can impute (some of the) missing qPCR values.
+
+Specifically, we are interested in imputing missing values for daily samples surrounded by available data (*i.e.*, samples for which we have data the previous and next study day).
+
+
+```{r}
+qpcr <-
+  qpcr |>
+  select(
+    -any_of(c(
+      "pid",
+      "visit_type",
+      "visit_code",
+      "study_day",
+      "total_ampl_reads",
+      "has_rel_ab_data"
+    ))
+  ) |>
+  full_join(
+    Y |>
+      filter(!is.na(rel_ab)) |>
+      select(uid, pid, visit_type, visit_code, study_day, ampl_total_reads) |>
+      distinct() |>
+      mutate(has_rel_ab_data = TRUE),
+    by = join_by(uid)
+  ) |>
+  mutate(
+    has_rel_ab_data = has_rel_ab_data |> replace_na(FALSE),
+    has_qpcr_data = !is.na(copies_per_swab_obs)
+  ) |>
+  # Determine qPCR availability per participant on the full data first, so a
+  # neighbouring day with qPCR but no amplicon data still counts as a flank.
+  group_by(pid) |>
+  mutate(
+    prev_qpcr = (study_day - 1) %in% study_day[which(has_qpcr_data)],
+    next_qpcr = (study_day + 1) %in% study_day[which(has_qpcr_data)],
+    imputable = !has_qpcr_data & prev_qpcr & next_qpcr & !is.na(study_day)
+  ) |>
+  ungroup()
+
+# check how many samples have missing qPCR data but have relative abundance data available, and how many of these are imputable (i.e., have data available the previous and next day)
+qpcr |>
+  # Restrict to samples of interest, then tabulate across all participants.
+  filter(has_rel_ab_data, !is.na(pid)) |>
+  dplyr::count(has_qpcr_data) |>
+  mutate(has_qpcr_data = ifelse(has_qpcr_data, "Yes", "No")) |>
+  gt(
+    caption = "Number of samples with relative abundance data available, stratified by whether qPCR data are available."
+  ) |>
+  cols_label(
+    has_qpcr_data = "qPCR data available",
+    n = "Number of samples with amplicon sequencing data"
+  )
+```
+
+These missing qPCR values are flanked by available qPCR data:
+
+
+```{r}
+#| fig-width: 9
+#| fig-height: 3
+qpcr |>
+  group_by(pid) |>
+  mutate(any_missing = any(!has_qpcr_data)) |>
+  ungroup() |>
+  filter(any_missing, !is.na(pid)) |>
+  mutate(
+    imputable = dplyr::case_when(
+      has_qpcr_data ~ "—", # not applicable when qPCR is present
+      imputable ~ "Yes",
+      TRUE ~ "No"
+    )
+  ) |>
+  ggplot() +
+  aes(x = study_day, y = pid, col = has_qpcr_data) +
+  geom_point() +
+  scale_color_manual(
+    "qPCR data available",
+    values = c("TRUE" = "black", "FALSE" = "red")
+  ) +
+  theme(legend.position = "bottom")
+```
+
+
+These values are imputed using linear interpolation on the log10 scale of the available qPCR data for each participant. Original values are stored in the `copies_per_swab_raw` column, and imputed values are stored in the `copies_per_swab_imputed` column. 
+
+
+```{r}
+qpcr <-
+  qpcr |>
+  filter(has_rel_ab_data) |>
+  arrange(pid, study_day, visit_code) |>
+  group_by(pid) |>
+  mutate(
+    any_missing = !is.na(pid) & any(!has_qpcr_data),
+    copies_per_swab_imputed = ifelse(
+      any_missing,
+      10^approx(
+        x = study_day[!is.na(copies_per_swab_obs)],
+        y = log10(copies_per_swab_obs[!is.na(copies_per_swab_obs)]),
+        xout = study_day,
+        method = "linear"
+      )$y,
+      copies_per_swab_obs
+    ),
+    copies_per_swab_imputed = ifelse(
+      is.na(copies_per_swab_obs),
+      copies_per_swab_imputed,
+      copies_per_swab_obs
+    ),
+    qpcr_data_flag = case_when(
+      is.na(copies_per_swab_obs) &
+        !is.na(copies_per_swab_imputed) ~ "imputed (missing)",
+      TRUE ~ qpcr_data_flag
+    )
+  ) |>
+  ungroup()
+```
+
+
+
+```{r}
+pid_with_missing_qPCR_data <-
+  qpcr |>
+  filter(is.na(copies_per_swab_obs)) |>
+  select(pid) |>
+  distinct() |>
+  pull(pid) |>
+  na.omit()
+
+qpcr |>
+  filter(pid %in% pid_with_missing_qPCR_data) |>
+  ggplot() +
+  facet_grid(pid ~ .) +
+  aes(x = study_day, y = copies_per_swab_imputed) +
+  geom_path() +
+  geom_point(aes(shape = visit_type, col = qpcr_data_flag)) +
+  scale_y_log10("16S rRNA gene copies per swab\nqPCR data, log10 scale") +
+  xlab("study day") +
+  theme(legend.position = "bottom") +
+  labs(
+    shape = "Visit type",
+    color = "qPCR data flag"
+  )
+```
+
+```{r}
+qpcr <-
+  qpcr |>
+  select(
+    uid,
+    pid,
+    study_day,
+    visit_type,
+    starts_with("copies_per_swab"),
+    starts_with("qpcr_")
+  )
+```
+
+
+### Imputation of 0s to 1s
+
+To enable log-transformations.
+
+```{r}
+# min_obs <-
+#   qpcr |>
+#   filter(copies_per_swab_imputed > 0) |> # !is.na(copies_per_swab_imputed),
+#   pull(copies_per_swab_imputed) |>
+#   min(na.rm = TRUE)
+
+qpcr <-
+  qpcr |>
+  mutate(
+    copies_per_swab_imputed = ifelse(
+      copies_per_swab_imputed == 0,
+      1,
+      copies_per_swab_imputed
+    ),
+    qpcr_data_flag = case_when(
+      copies_per_swab_obs == 0 ~ "imputed (zero)",
+      TRUE ~ qpcr_data_flag
+    )
+  )
+```
+
+```{r}
+pid_with_zeros <-
+  qpcr |>
+  filter(copies_per_swab_obs == 0) |>
+  select(pid) |>
+  distinct() |>
+  pull(pid)
+
+qpcr |>
+  filter(pid %in% pid_with_zeros) |>
+  ggplot() +
+  facet_grid(pid ~ .) +
+  aes(x = study_day, y = copies_per_swab_imputed) +
+  geom_path() +
+  geom_point(aes(shape = visit_type, col = qpcr_data_flag)) +
+  scale_y_log10()
+```
+
+### Outlying values
+
+> TODO
+
+
+
+## Estimated 16S rRNA gene copies per bacterium for each taxon
+
+In this section, we define the field `est_16S_gene_copies`, which contains the estimated number of 16S gene copies per bacterium for taxon $j$ ($c_j$).
+
+We use the values from the `VIRGO2_taxaKey_with_16S_copy_number.csv` file, which contains the estimated number of 16S gene copies per bacterium for most of the most prevalent/abundant vaginal taxa in our dataset.
+
+Most of the values in this file were retrieved by M. France from the rrnDB database [insert citation]. For the LBP strains, values were estimated by M. France from their assembled genome. Here, since 16S amplicon sequencing does not provide strain-level resolution for *L. crispatus*, the 16S copy number for *L. crispatus* was taken as the median value across *L. crispatus* strains for this taxon. Note that these values are relatively consistent across strains (between 4 and 5 copies per genome), so the median likely introduce minimal bias.  
+
+For taxa for which we do not have an estimate of the 16S copy number, their value was imputed to the average across all taxa. 
+
+
+```{r}
+copies_16S <- read_csv(
+  file = "../VIBRANT-99-utils/VIRGO2_taxaKey_with_16S_copy_number.csv"
+)
+dict <- read_csv(file = "../VIBRANT-99-utils/MG216STaxaKey.csv")
+
+copies_16S <-
+  copies_16S |>
+  left_join(
+    dict |> select(Taxa = MetagenomeTaxaID, taxon_16S = `16STaxaID`),
+    by = join_by(Taxa)
+  )
+```
+
+```{r}
+taxa <- Y |> select(taxon) |> distinct()
+
+taxa <-
+  taxa |>
+  mutate(taxon_16S = taxon |> str_replace_all(" ", "_"))
+
+taxa <- taxa |> left_join(copies_16S, by = join_by(taxon_16S))
+
+taxa <-
+  taxa |>
+  group_by(taxon, taxon_16S) |>
+  summarize(
+    copy_nb_mean = mean(CopyNumber, na.rm = TRUE),
+    copy_nb_med = median(CopyNumber, na.rm = TRUE),
+    .groups = "drop"
+  )
+```
+
+```{r}
+taxa <-
+  taxa |>
+  mutate(
+    copy_nb = case_when(
+      !is.na(copy_nb_med) ~ copy_nb_med,
+      taxon_16S |> str_detect("Nanoperiomorbus") ~ 1,
+      taxon_16S |> str_detect("Berryella|Mobiluncus") ~ 2,
+      taxon_16S |> str_detect("Megasphaera") ~ 6,
+      TRUE ~ 3.9
+    )
+  )
+```
+
+
+```{r}
+#| tab-cap: "Estimated 16S rRNA gene copies per bacterium (preview of table for top taxa and bottom taxon)"
+taxa |>
+  select(-copy_nb_mean, -copy_nb_med) |>
+  gt_preview(top_n = 15) |>
+  gt::cols_label(
+    taxon = "Taxon",
+    taxon_16S = "Taxon (as in the 16S data)",
+    copy_nb = "Estimated 16S rRNA gene copies per bacterium"
+  )
+```
+
+
+```{r}
+Y <-
+  Y |>
+  select(-any_of("est_16S_gene_copies")) |>
+  left_join(
+    taxa |> select(taxon, est_16S_gene_copies = copy_nb),
+    by = join_by(taxon)
+  ) |>
+  relocate(est_16S_gene_copies, .after = taxon)
+```
+
+
+## Absolute abundances
+
+
+In this section, we compute the following quantities for each sample $i$ and taxon $j$:
+
+- $N_i$: the estimated total bacterial concentration in sample $i$ (expressed as *genome copies per swab*),
+- $n_{ij}$: the estimated absolute abundance of taxon $j$ in sample $i$ (expressed as *genome copies per swab*),
+- $\text{LLOQ}(n_{ij})$: the lower limit of quantification for $n_{ij}$, which is the estimated absolute abundance corresponding to a single read in the sequencing data,
+
+
+
+
+
+- `est_n_bact_raw` = $N_i$: the estimated total bacterial concentration in sample $i$ (expressed as *genome copies per swab*),
+- `abs_ab_raw` = $n_{ij}$: the estimated absolute abundance of taxon $j$ in sample $i$ (expressed as *genome copies per swab*),
+- `abs_ab_lloq` = $\text{LLOQ}(n_{ij})$: the lower limit of quantification for $n_{ij}$,
+- `abs_ab_0_imp` = imputed absolute abundance, where 0s are imputed to `abs_ab_lloq/10`
+- `abs_ab_flag`: a flag categorizing the absolute abundance data of sample $i$ as
+    - `"imputed (missing/outlier)"` if $n_{ij}$ was imputed (either because it was missing or because it was an outlier),
+    - `"outlying value"` if $n_{ij}$ was flagged as an outlier but not imputed,
+    - `""` otherwise.
+
+
+Reminder: 
+
+We estimate $n_{ij}$ the absolute abundance of taxon $j$ in sample $i$ as
+
+$n_{ij} = \frac{p_{ij}}{c_j}C_i$
+
+
+and $N_i$, the estimated total bacterial concentration in sample $i$ as
+
+$N_i = \sum_j n_{ij}$
+
+We also define $\text{LLOQ}(n_{ij})$ as the lower limit of quantification for $n_{ij}$, which is the estimated absolute abundance corresponding to a single read in the sequencing data:
+
+$\text{LLOQ}(n_{ij}) = \frac{1}{R_i c_j} C_i$
+
+
+### Merging relative abundance and qPCR data and computing absolute abundances
+
+```{r}
+Y <-
+  Y |>
+  select(
+    -any_of(c(
+      "copies_per_swab_obs",
+      "copies_per_swab_imputed",
+      "qpcr_source_mae_exp",
+      "qpcr_data_flag"
+    ))
+  ) |>
+  inner_join(
+    qpcr |> select(uid, starts_with("copies_per_swab"), starts_with("qpcr_")),
+    by = join_by(uid)
+  ) |>
+  filter(!is.na(copies_per_swab_imputed))
+
+Y <-
+  Y |>
+  mutate(
+    abs_ab = copies_per_swab_imputed * rel_ab / est_16S_gene_copies,
+    abs_ab_lloq = copies_per_swab_imputed /
+      (ampl_total_reads * est_16S_gene_copies),
+  ) |>
+  group_by(uid) |>
+  mutate(
+    est_n_bact = sum(abs_ab),
+    abs_ab_0_imp = ifelse(abs_ab == 0, max(abs_ab_lloq) / 10, abs_ab)
+  ) |>
+  ungroup()
+```
+
+
+### Outlier detection
+
+> TODO
+
+
+### Imputation over 1-day gaps
+
+
+> TODO
+
+
+
+
+## Adjusted relative abundances
+
+Relative abundances adjusted for 16S rRNA gene copies are computed as follows:
+
+ $q_{ij} =  \frac{p_{ij}/c_j}{\sum_{j = 1}^J p_{ij}/c_j}$ 
+
+```{r}
+Y <-
+  Y |>
+  group_by(uid) |>
+  mutate(
+    rel_ab_adj = (rel_ab / est_16S_gene_copies) /
+      sum(rel_ab / est_16S_gene_copies, na.rm = TRUE)
+  ) |>
+  ungroup()
+```
+
+```{r}
+#| fig-width: 9
+#| fig-height: 6
+Y |>
+  filter(as.integer(taxon) <= 15) |>
+  group_by(uid) |>
+  mutate(
+    rel_ab_Gv = rel_ab_adj[taxon == "Gardnerella vaginalis"]
+  ) |>
+  ungroup() |>
+  ggplot() +
+  facet_wrap(~taxon, nrow = 3) +
+  aes(x = rel_ab, y = rel_ab_adj, color = rel_ab_Gv) +
+  geom_abline(slope = 1, intercept = 0, color = "black") +
+  geom_point(size = 0.5, alpha = 0.5) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  scale_color_viridis_c(
+    option = "plasma",
+    direction = -1,
+    end = 0.9,
+    limits = c(0, 1),
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  labs(
+    x = "Crude relative abundance",
+    y = "Adjusted relative abundance",
+    color = "Adjusted rel. abundance of<br>*Gardnerella vaginalis*",
+    caption = "Each dot is a sample."
+  ) +
+  theme(
+    legend.position = "bottom",
+    legend.title = ggtext::element_markdown()
+  )
+```
+
+
+
+
+
+## Saving the `MultiAssayExperiment` object
+
+We save the MAE for downstream analyses.
+
+```{r}
+#| eval: false
+saveRDS(
+  mae,
+  str_c(
+    get_03_output_dir(),
+    "mae_full_01_",
+    today() |> str_remove_all("-"),
+    ".rds"
+  )
+)
+```
+
+
+

@@ -35,7 +35,6 @@ tmp <- fs::dir_map("R scripts/", source)
 tmp <- fs::dir_map("../VIBRANT-99-utils/R/", source)
 rm(tmp)
 theme_set(theme_light())
-
 ```
 
 
@@ -46,18 +45,17 @@ The purpose of this document is to compute additional "calculated variables" tha
 
 ```{r}
 
-mae_files <- 
+mae_files <-
   fs::dir_ls(
     get_04_output_dir(),
     regexp = "mae_full_.*\\.rds$"
-  ) |> 
+  ) |>
   sort(decreasing = TRUE) |>
   magrittr::extract(1)
 
 mae <- readRDS(mae_files)
 
 rm(mae_files)
-
 ```
 
 
@@ -77,25 +75,31 @@ In this section, this daily qPCR data is analysed to describe patterns of LBP de
 
 ```{r}
 
-df <- 
-  mae[["qPCR_daily"]] |> 
-  as_tibble() |> 
-  select(uid, .feature, copies_per_swab_med, taxon_label, LBP, strain_origin) |> 
-  left_join( 
-    mae@colData |> 
-      as_tibble() |> 
+df <-
+  mae[["qPCR_daily"]] |>
+  as_tibble() |>
+  select(uid, .feature, copies_per_swab_med, taxon_label, LBP, strain_origin) |>
+  left_join(
+    mae@colData |>
+      as_tibble() |>
       select(
-        uid, 
-        pid, 
-        visit_code, PIPV, visit, study_day, 
-        site, randomized, arm, ITT, mITT, PP
+        uid,
+        pid,
+        visit_code,
+        PIPV,
+        visit,
+        study_day,
+        site,
+        randomized,
+        arm,
+        ITT,
+        mITT,
+        PP
       ),
     by = join_by(uid)
-  ) |> 
+  ) |>
   arrange(pid, study_day, LBP, strain_origin) |>
   mutate(.feature = .feature |> fct_inorder())
-
-
 ```
 
 ##### 16S total copies per swabs
@@ -106,8 +110,8 @@ First, to assess general quality of collected swabs, we visualize the qPCR 16S r
 #| fig-width: 10
 #| fig-height: 10
 
-df |> 
-  filter(.feature == "16S", randomized) |> 
+df |>
+  filter(.feature == "16S", randomized) |>
   ggplot() +
   aes(x = visit_code, y = pid, fill = copies_per_swab_med |> log10()) +
   ggh4x::facet_nested(arm + site ~ ., scales = "free", space = "free") +
@@ -117,7 +121,6 @@ df |>
     axis.text = element_text(size = 6),
     axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 6)
   )
-
 ```
 
 ##### LBP strains
@@ -128,23 +131,22 @@ We generate heatmaps of qPCR results for each study arm. For every participant a
 #| fig-width: 10
 #| fig-height: 15
 
-plots <- 
+plots <-
   map(
-  .x = df$arm |> unique() |> sort(),
-  ~ df |> 
-    filter(.feature != "16S", arm == .x) |> 
-    ggplot() +
-    aes(x = visit_code, y = .feature, fill = LBP, alpha = copies_per_swab_med |> asinh()) +
-    ggh4x::facet_nested(site + pid ~ ., scales = "free", space = "free") +
-    geom_tile() +
-    scale_alpha_continuous(range = c(0.1, 1), limits = c(-1/2, 20)) +
-    ggtitle(.x) +
-    theme(
-      axis.text = element_text(size = 4),
-      axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 6)
-    )
-)
-
+    .x = df$arm |> unique() |> sort(),
+    ~ df |>
+      filter(.feature != "16S", arm == .x) |>
+      ggplot() +
+      aes(x = visit_code, y = .feature, fill = LBP, alpha = copies_per_swab_med |> asinh()) +
+      ggh4x::facet_nested(site + pid ~ ., scales = "free", space = "free") +
+      geom_tile() +
+      scale_alpha_continuous(range = c(0.1, 1), limits = c(-1 / 2, 20)) +
+      ggtitle(.x) +
+      theme(
+        axis.text = element_text(size = 4),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 6)
+      )
+  )
 ```
 
 ```{r}
@@ -169,41 +171,61 @@ We plot longitudinal qPCR measurements for each participant and strain, stratifi
 #| fig-width: 10
 #| fig-height: 15
 
-plots <- 
+plots <-
   map(
-  .x = df$arm |> unique() |> sort(),
-  ~ df |> 
-    filter(.feature != "16S", arm == .x, study_day >= 0) |> 
-    ggplot() +
-    aes(x = study_day, y = copies_per_swab_med, col = LBP ) + #  |> asinh()
-    ggh4x::facet_nested(site + pid ~ .) + # scales = "free", space = "free"
-    geom_hline(yintercept = 10^5, lty = 2, col = "gray40") +
-    geom_rect(
-      data = tibble(study_day = 0, copies_per_swab_med = NA), 
-      xmin = 0.5, xmax = 7.5, ymin = -Inf, ymax = Inf, alpha = 0.1, fill = "red", col = NA
-    ) +
-    geom_rect(
-      data = tibble(study_day = 0, copies_per_swab_med = NA), 
-      xmin = 7.5, 
-      xmax = case_when(
-        .x == "LC106-3" ~ 10.5,
-        .x == "LC106-o" ~ 10.5,
-        TRUE ~ 14.5
-      ), 
-      ymin = -Inf, ymax = Inf, alpha = 0.1, fill = "gold", col = NA
-    ) +
-    # Rectangle jaune supplémentaire pour LC106-o uniquement
-    {if(.x == "LC106-o") geom_rect(
-      data = tibble(study_day = 0, copies_per_swab_med = NA), 
-      xmin = 3.5, xmax = 7.5, ymin = -Inf, ymax = Inf, alpha = 0.1, fill = "gold", col = NA
-    )} +
-    geom_line(aes(group = .feature)) +
-    geom_point() +
-    scale_y_log10() +
-    expand_limits(y = 10^10) +
-    scale_x_continuous(breaks = seq(0, 35, by = 7)) +
-    ggtitle(.x)
-)
+    .x = df$arm |> unique() |> sort(),
+    ~ df |>
+      filter(.feature != "16S", arm == .x, study_day >= 0) |>
+      ggplot() +
+      aes(x = study_day, y = copies_per_swab_med, col = LBP) + #  |> asinh()
+      ggh4x::facet_nested(site + pid ~ .) + # scales = "free", space = "free"
+      geom_hline(yintercept = 10^5, lty = 2, col = "gray40") +
+      geom_rect(
+        data = tibble(study_day = 0, copies_per_swab_med = NA),
+        xmin = 0.5,
+        xmax = 7.5,
+        ymin = -Inf,
+        ymax = Inf,
+        alpha = 0.1,
+        fill = "red",
+        col = NA
+      ) +
+      geom_rect(
+        data = tibble(study_day = 0, copies_per_swab_med = NA),
+        xmin = 7.5,
+        xmax = case_when(
+          .x == "LC106-3" ~ 10.5,
+          .x == "LC106-o" ~ 10.5,
+          TRUE ~ 14.5
+        ),
+        ymin = -Inf,
+        ymax = Inf,
+        alpha = 0.1,
+        fill = "gold",
+        col = NA
+      ) +
+      # Rectangle jaune supplémentaire pour LC106-o uniquement
+      {
+        if (.x == "LC106-o") {
+          geom_rect(
+            data = tibble(study_day = 0, copies_per_swab_med = NA),
+            xmin = 3.5,
+            xmax = 7.5,
+            ymin = -Inf,
+            ymax = Inf,
+            alpha = 0.1,
+            fill = "gold",
+            col = NA
+          )
+        }
+      } +
+      geom_line(aes(group = .feature)) +
+      geom_point() +
+      scale_y_log10() +
+      expand_limits(y = 10^10) +
+      scale_x_continuous(breaks = seq(0, 35, by = 7)) +
+      ggtitle(.x)
+  )
 ```
 
 ```{r}
@@ -228,10 +250,10 @@ We summarize the qPCR results to compute total LBP copies per swab and the numbe
 
 ```{r}
 
-df_summ <- 
-  df |> 
-  filter(.feature != "16S") |> 
-  group_by(uid, pid, randomized, arm, ITT, mITT, PP, site, visit_code, PIPV, visit, study_day) |> 
+df_summ <-
+  df |>
+  filter(.feature != "16S") |>
+  group_by(uid, pid, randomized, arm, ITT, mITT, PP, site, visit_code, PIPV, visit, study_day) |>
   summarise(
     LC106_total = sum(copies_per_swab_med[str_detect(LBP, "LC106")], na.rm = TRUE),
     LC115_excl_total = sum(copies_per_swab_med[!str_detect(LBP, "LC106")], na.rm = TRUE),
@@ -241,25 +263,22 @@ df_summ <-
     n_LC115_excl = sum(!str_detect(LBP, "LC106") & (copies_per_swab_med != 0), na.rm = TRUE),
     n_LBP = sum(str_detect(LBP, "LC") & (copies_per_swab_med != 0), na.rm = TRUE),
     .groups = "drop"
-  ) |> 
+  ) |>
   mutate(
-    n_expected = 
-      case_when(
-        arm == "Pl" ~ 0,
-        str_detect(arm, "LC106") ~ 6,
-        str_detect(arm, "LC115") ~ 15,
-        TRUE ~ NA_real_
-      ),
-    n_detected_among_expected = 
-      case_when(
-        arm == "Pl" ~ n_LBP,
-        str_detect(arm, "LC106") ~ n_LC106,
-        str_detect(arm, "LC115") ~ n_LBP,
-        TRUE ~ NA_real_
-      ),
-    p_detected = n_detected_among_expected/n_expected,
+    n_expected = case_when(
+      arm == "Pl" ~ 0,
+      str_detect(arm, "LC106") ~ 6,
+      str_detect(arm, "LC115") ~ 15,
+      TRUE ~ NA_real_
+    ),
+    n_detected_among_expected = case_when(
+      arm == "Pl" ~ n_LBP,
+      str_detect(arm, "LC106") ~ n_LC106,
+      str_detect(arm, "LC115") ~ n_LBP,
+      TRUE ~ NA_real_
+    ),
+    p_detected = n_detected_among_expected / n_expected,
   )
-
 ```
 
 
@@ -269,24 +288,26 @@ df_summ <-
 #| fig-width: 7
 #| eval: false
 
-df_summ |> 
-  filter(randomized) |> 
+df_summ |>
+  filter(randomized) |>
   ggplot() +
   aes(x = visit_code, y = pid, fill = total_LBP |> log10()) +
   ggh4x::facet_nested(arm + site ~ ., scales = "free_y", space = "free_y") +
   geom_tile() +
   geom_text(aes(label = n_LBP, col = total_LBP |> log10()), size = 2) +
-  scale_fill_viridis_c(option = "F") + guides(col = "none") +
+  scale_fill_viridis_c(option = "F") +
+  guides(col = "none") +
   scale_color_viridis_c(option = "F", direction = -1, na.value = "white") +
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
-    legend.position = "bottom", legend.direction = "horizontal"
+    legend.position = "bottom",
+    legend.direction = "horizontal"
   ) +
   labs(caption = "Text = number of detected (>0) LBP strains by qPCR.")
 
 
-df_summ |> 
-  filter(randomized) |> 
+df_summ |>
+  filter(randomized) |>
   ggplot() +
   aes(x = visit_code, y = pid, fill = n_LBP) +
   ggh4x::facet_nested(arm + site ~ ., scales = "free_y", space = "free_y") +
@@ -294,13 +315,14 @@ df_summ |>
   scale_fill_viridis_c("") +
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
-    legend.position = "bottom", legend.direction = "horizontal"
+    legend.position = "bottom",
+    legend.direction = "horizontal"
   ) +
   labs(caption = "Number of detected (>0) LBP strains by qPCR.")
 
 
-df_summ |> 
-  filter(randomized) |> 
+df_summ |>
+  filter(randomized) |>
   ggplot() +
   aes(x = visit_code, y = pid, fill = p_detected) +
   ggh4x::facet_nested(arm + site ~ ., scales = "free_y", space = "free_y") +
@@ -309,11 +331,10 @@ df_summ |>
   scale_fill_viridis_c("proportion of LBP strains\ndetected among expected", option = "G") +
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
-    legend.position = "bottom", legend.direction = "horizontal"
+    legend.position = "bottom",
+    legend.direction = "horizontal"
   ) +
   labs(caption = ".")
-
-
 ```
 
 
@@ -323,62 +344,82 @@ Dots indicate whether participants reported inserting the study product on each 
 
 ```{r}
 
-df_summ <- 
+df_summ <-
   df_summ |>
-  full_join( 
-    mae@colData |> 
-      as_tibble() |> 
+  full_join(
+    mae@colData |>
+      as_tibble() |>
       select(
-        uid, 
-        pid, 
-        visit_code, PIPV, visit, study_day, 
-        site, randomized, arm, ITT, mITT, PP)) |>
+        uid,
+        pid,
+        visit_code,
+        PIPV,
+        visit,
+        study_day,
+        site,
+        randomized,
+        arm,
+        ITT,
+        mITT,
+        PP
+      )
+  ) |>
   arrange(pid, study_day) |>
-  select(-ends_with("sp")) |> 
+  select(-ends_with("sp")) |>
   left_join(
-    mae@metadata$exposures |> 
-      select(uid, pid, visit_code, study_day, ends_with("sp"))) |>
+    mae@metadata$exposures |>
+      select(uid, pid, visit_code, study_day, ends_with("sp"))
+  ) |>
   filter(randomized)
-
-
 ```
 
 ```{r}
 #| fig-height: 15
 #| fig-width: 10
 
-df_summ |> 
-  filter(randomized) |> 
+df_summ |>
+  filter(randomized) |>
   ggplot() +
   aes(x = visit_code, y = pid, fill = total_LBP |> log10()) +
   ggh4x::facet_nested(arm + site ~ ., scales = "free_y", space = "free_y") +
   geom_tile() +
-  geom_point(aes(shape = daily_self_reported_adherence_sp |> factor()), size = 2, fill = "black", col = "white") +
+  geom_point(
+    aes(shape = daily_self_reported_adherence_sp |> factor()),
+    size = 2,
+    fill = "black",
+    col = "white"
+  ) +
   scale_shape_manual("self-declared\nexposure", values = c(NA, 21)) +
-  scale_fill_viridis_c(option = "F") + 
+  scale_fill_viridis_c(option = "F") +
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
-    legend.position = "bottom", legend.direction = "horizontal"
-  ) 
-
-
-df_summ |> 
-  filter(randomized) |> 
-  ggplot() +
-  aes(x = visit_code, y = pid, fill = p_detected) +
-  ggh4x::facet_nested(arm + site ~ ., scales = "free_y", space = "free_y") +
-  geom_tile() + # 
-  geom_point(aes(shape = daily_self_reported_adherence_sp |> factor()), size = 2, fill = "black", col = "white") +
-  scale_shape_manual("self-declared\nexposure", values = c(NA, 21)) +
-  scale_fill_viridis_c(
-    "proportion of LBP strains\ndetected among expected", option = "G"
-    ) +
-  theme(
-    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
-    legend.position = "bottom", legend.direction = "horizontal"
+    legend.position = "bottom",
+    legend.direction = "horizontal"
   )
 
 
+df_summ |>
+  filter(randomized) |>
+  ggplot() +
+  aes(x = visit_code, y = pid, fill = p_detected) +
+  ggh4x::facet_nested(arm + site ~ ., scales = "free_y", space = "free_y") +
+  geom_tile() + #
+  geom_point(
+    aes(shape = daily_self_reported_adherence_sp |> factor()),
+    size = 2,
+    fill = "black",
+    col = "white"
+  ) +
+  scale_shape_manual("self-declared\nexposure", values = c(NA, 21)) +
+  scale_fill_viridis_c(
+    "proportion of LBP strains\ndetected among expected",
+    option = "G"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+    legend.position = "bottom",
+    legend.direction = "horizontal"
+  )
 ```
 
 Here we adjust for reported product losses, representing actual exposure (i.e., tablets that remained in place).
@@ -387,38 +428,49 @@ Here we adjust for reported product losses, representing actual exposure (i.e., 
 #| fig-height: 15
 #| fig-width: 10
 
-df_summ |> 
-  filter(randomized) |> 
+df_summ |>
+  filter(randomized) |>
   ggplot() +
   aes(x = visit_code, y = pid, fill = total_LBP |> log10()) +
   ggh4x::facet_nested(arm + site ~ ., scales = "free_y", space = "free_y") +
   geom_tile() +
-  geom_point(aes(shape = daily_self_reported_exposure_sp |> round() |> factor()), size = 2, fill = "black", col = "white") +
+  geom_point(
+    aes(shape = daily_self_reported_exposure_sp |> round() |> factor()),
+    size = 2,
+    fill = "black",
+    col = "white"
+  ) +
   scale_shape_manual("self-declared\nexposure", values = c(NA, 21)) +
-  scale_fill_viridis_c(option = "F") + 
+  scale_fill_viridis_c(option = "F") +
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
-    legend.position = "bottom", legend.direction = "horizontal"
+    legend.position = "bottom",
+    legend.direction = "horizontal"
   )
 
 
-df_summ |> 
-  filter(randomized) |> 
+df_summ |>
+  filter(randomized) |>
   ggplot() +
   aes(x = visit_code, y = pid, fill = p_detected) +
   ggh4x::facet_nested(arm + site ~ ., scales = "free_y", space = "free_y") +
-  geom_tile() + # 
-  geom_point(aes(shape = daily_self_reported_exposure_sp |> round() |> factor()), size = 2, fill = "black", col = "white") +
+  geom_tile() + #
+  geom_point(
+    aes(shape = daily_self_reported_exposure_sp |> round() |> factor()),
+    size = 2,
+    fill = "black",
+    col = "white"
+  ) +
   scale_shape_manual("self-declared\nexposure", values = c(NA, 21)) +
   scale_fill_viridis_c(
-    "proportion of LBP strains\ndetected among expected", option = "G"
-    ) +
+    "proportion of LBP strains\ndetected among expected",
+    option = "G"
+  ) +
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
-    legend.position = "bottom", legend.direction = "horizontal"
-  ) 
-
-
+    legend.position = "bottom",
+    legend.direction = "horizontal"
+  )
 ```
 
 
@@ -427,25 +479,36 @@ df_summ |>
 
 ```{r}
 
-tmp <- 
-   metadata(mae)$participant_crfs_merged |> 
-   as_tibble() |> 
-   select(pid, used_applicators, number_applicators, applicator_stain_positive, applicator_stain_negative, applicator_stain_indeterminant, total_applicators_stained, proportion_positive_applicators, total) |> 
-   dplyr::rename(
-     returned_used_applicators = used_applicators,
-     number_of_returned_applicators = number_applicators
-   )
+tmp <-
+  metadata(mae)$participant_crfs_merged |>
+  as_tibble() |>
+  select(
+    pid,
+    used_applicators,
+    number_applicators,
+    applicator_stain_positive,
+    applicator_stain_negative,
+    applicator_stain_indeterminant,
+    total_applicators_stained,
+    proportion_positive_applicators,
+    total
+  ) |>
+  dplyr::rename(
+    returned_used_applicators = used_applicators,
+    number_of_returned_applicators = number_applicators
+  )
 
-applicator <- 
-  mae@colData |> as_tibble() |>
+applicator <-
+  mae@colData |>
+  as_tibble() |>
   select(pid, site, randomized, arm, ITT, mITT, PP) |>
   distinct() |>
   filter(randomized, mITT) |>
-  left_join(tmp, by = c("pid")) 
+  left_join(tmp, by = c("pid"))
 
 
-applicator <- 
-  applicator |> 
+applicator <-
+  applicator |>
   mutate(
     returned_complete_set = (number_of_returned_applicators >= 7),
     return_category = case_when(
@@ -453,58 +516,62 @@ applicator <-
       (returned_used_applicators == "Yes") & !returned_complete_set ~ "Returned incomplete set",
       returned_used_applicators == "No" ~ "Did not return applicators",
       TRUE ~ "Missing"
-    ) |> fct_infreq()
-  ) 
-
-applicator |> 
-  dplyr::count(return_category) |> 
-  mutate(`%` = round(n / sum(n), 3) * 100) |> 
-  gt() |> 
-  cols_label(return_category = "")
-
-applicator <- 
-  applicator |> 
-  mutate(
-    staining_done_category = 
-      case_when(
-        (number_of_returned_applicators == 0) | is.na(number_of_returned_applicators) ~ "No applicators returned",
-        is.na(total_applicators_stained) ~ "No staining done",
-        total_applicators_stained == number_of_returned_applicators ~ "All returned applicators stained",
-        total_applicators_stained < number_of_returned_applicators ~ "Partial staining",
-        total_applicators_stained > number_of_returned_applicators ~ "???",
-        TRUE ~ "???"
-      )
+    ) |>
+      fct_infreq()
   )
 
+applicator |>
+  dplyr::count(return_category) |>
+  mutate(`%` = round(n / sum(n), 3) * 100) |>
+  gt() |>
+  cols_label(return_category = "")
 
+applicator <-
+  applicator |>
+  mutate(
+    staining_done_category = case_when(
+      (number_of_returned_applicators == 0) |
+        is.na(number_of_returned_applicators) ~ "No applicators returned",
+      is.na(total_applicators_stained) ~ "No staining done",
+      total_applicators_stained ==
+        number_of_returned_applicators ~ "All returned applicators stained",
+      total_applicators_stained < number_of_returned_applicators ~ "Partial staining",
+      total_applicators_stained > number_of_returned_applicators ~ "???",
+      TRUE ~ "???"
+    )
+  )
 ```
 
 
 ```{r}
 
-df_summ <- 
-  df_summ |> 
-  select(-contains("applicator")) |> 
+df_summ <-
+  df_summ |>
+  select(-contains("applicator")) |>
   left_join(
-    applicator |> 
+    applicator |>
       select(
-        pid, returned_used_applicators, number_of_returned_applicators, 
-             starts_with("applicator_stain")
-        )
-  ) |> 
+        pid,
+        returned_used_applicators,
+        number_of_returned_applicators,
+        starts_with("applicator_stain")
+      )
+  ) |>
   mutate(
     number_of_returned_applicators = number_of_returned_applicators |> replace_na(0),
     n_pos_applicator = applicator_stain_positive |> replace_na(0),
     n_undetermined_applicator = applicator_stain_indeterminant |> replace_na(0),
-    p_pos_applicator = ifelse(number_of_returned_applicators == 0, 0.4, n_pos_applicator/number_of_returned_applicators),
-    p_pos_or_undet_applicator = 
-      ifelse(
-        number_of_returned_applicators == 0, 0.4, 
-        (n_pos_applicator + n_undetermined_applicator)/number_of_returned_applicators
-      )
+    p_pos_applicator = ifelse(
+      number_of_returned_applicators == 0,
+      0.4,
+      n_pos_applicator / number_of_returned_applicators
+    ),
+    p_pos_or_undet_applicator = ifelse(
+      number_of_returned_applicators == 0,
+      0.4,
+      (n_pos_applicator + n_undetermined_applicator) / number_of_returned_applicators
+    )
   )
-
-
 ```
 
 
@@ -516,63 +583,74 @@ df_summ <-
 #| eval: false
 
 df_summ |>
-  filter(randomized) |> 
+  filter(randomized) |>
   ggplot() +
   aes(x = visit_code, y = pid, fill = total_LBP |> log10()) +
   ggh4x::facet_nested(arm + site ~ ., scales = "free_y", space = "free_y") +
   geom_tile() +
-  scale_fill_viridis_c(option = "F") + 
+  scale_fill_viridis_c(option = "F") +
   ggnewscale::new_scale_fill() +
   geom_point(
     data = df_summ |> filter(randomized, daily_self_reported_adherence_sp == 1),
-    aes(shape = returned_used_applicators, fill = p_pos_applicator), 
-    size = 2, col = "white"
-    ) +
-  scale_fill_gradient2(
-    "Prop. pos.\napplicators",
-    high = "black", mid = "green", low = "yellow", 
-    midpoint = 0.5, breaks = c(0, 1/2, 1)
-    )  +
-  scale_shape_manual(
-    "Returned\napplicators", values = c(23, 21), 
-    guide = guide_legend(override.aes = list(color = "black", fill = "black"))
-    ) +
-  theme(
-    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
-    legend.position = "bottom", legend.direction = "horizontal"
-  ) 
-
-
-df_summ |> 
-  filter(randomized) |> 
-  ggplot() +
-  aes(x = visit_code, y = pid, fill = p_detected) +
-  ggh4x::facet_nested(arm + site ~ ., scales = "free_y", space = "free_y") +
-  geom_tile() + 
-  scale_fill_viridis_c(
-    "proportion of LBP strains\ndetected among expected", option = "G"
-    ) +
-  ggnewscale::new_scale_fill() +
-  geom_point(
-    data = df_summ |> filter(randomized, daily_self_reported_adherence_sp == 1),
-    aes(shape = returned_used_applicators, fill = p_pos_applicator), 
-    size = 2, col = "white"
+    aes(shape = returned_used_applicators, fill = p_pos_applicator),
+    size = 2,
+    col = "white"
   ) +
   scale_fill_gradient2(
     "Prop. pos.\napplicators",
-    high = "black", mid = "green", low = "yellow", 
-    midpoint = 0.5, breaks = c(0, 1/2, 1)
-    ) +
+    high = "black",
+    mid = "green",
+    low = "yellow",
+    midpoint = 0.5,
+    breaks = c(0, 1 / 2, 1)
+  ) +
   scale_shape_manual(
-    "Returned\napplicators", values = c(23, 21), 
+    "Returned\napplicators",
+    values = c(23, 21),
     guide = guide_legend(override.aes = list(color = "black", fill = "black"))
-    ) +
+  ) +
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
-    legend.position = "bottom", legend.direction = "horizontal"
-  ) 
+    legend.position = "bottom",
+    legend.direction = "horizontal"
+  )
 
 
+df_summ |>
+  filter(randomized) |>
+  ggplot() +
+  aes(x = visit_code, y = pid, fill = p_detected) +
+  ggh4x::facet_nested(arm + site ~ ., scales = "free_y", space = "free_y") +
+  geom_tile() +
+  scale_fill_viridis_c(
+    "proportion of LBP strains\ndetected among expected",
+    option = "G"
+  ) +
+  ggnewscale::new_scale_fill() +
+  geom_point(
+    data = df_summ |> filter(randomized, daily_self_reported_adherence_sp == 1),
+    aes(shape = returned_used_applicators, fill = p_pos_applicator),
+    size = 2,
+    col = "white"
+  ) +
+  scale_fill_gradient2(
+    "Prop. pos.\napplicators",
+    high = "black",
+    mid = "green",
+    low = "yellow",
+    midpoint = 0.5,
+    breaks = c(0, 1 / 2, 1)
+  ) +
+  scale_shape_manual(
+    "Returned\napplicators",
+    values = c(23, 21),
+    guide = guide_legend(override.aes = list(color = "black", fill = "black"))
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+    legend.position = "bottom",
+    legend.direction = "horizontal"
+  )
 ```
 
 
@@ -582,64 +660,75 @@ df_summ |>
 #| fig-height: 15
 #| fig-width: 10
 
-df_summ |> 
-  filter(randomized) |> 
+df_summ |>
+  filter(randomized) |>
   ggplot() +
   aes(x = visit_code, y = pid, fill = total_LBP |> log10()) +
   ggh4x::facet_nested(arm + site ~ ., scales = "free_y", space = "free_y") +
   geom_tile() +
-  scale_fill_viridis_c(option = "F") + 
+  scale_fill_viridis_c(option = "F") +
   ggnewscale::new_scale_fill() +
   geom_point(
     data = df_summ |> filter(randomized, daily_self_reported_adherence_sp == 1),
-    aes(shape = returned_used_applicators, fill = p_pos_or_undet_applicator), 
-    size = 2, col = "white"
-    ) +
-  scale_fill_gradient2(
-    "Prop. pos. or ?\napplicators",
-    high = "black", mid = "green", low = "yellow", 
-    midpoint = 0.5, breaks = c(0, 1/2, 1)
-    )  +
-  scale_shape_manual(
-    "Returned\napplicators", values = c(23, 21), 
-    guide = guide_legend(override.aes = list(color = "black", fill = "black"))
-    ) +
-  theme(
-    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
-    legend.position = "bottom", legend.direction = "horizontal"
-  ) 
-
-
-df_summ |> 
-  filter(randomized) |> 
-  ggplot() +
-  aes(x = visit_code, y = pid, fill = p_detected) +
-  ggh4x::facet_nested(arm + site ~ ., scales = "free_y", space = "free_y") +
-  geom_tile() + 
-  scale_fill_viridis_c(
-    "proportion of LBP strains\ndetected among expected", option = "G"
-    ) +
-  ggnewscale::new_scale_fill() +
-  geom_point(
-    data = df_summ |> filter(randomized, daily_self_reported_adherence_sp == 1),
-    aes(shape = returned_used_applicators, fill = p_pos_or_undet_applicator), 
-    size = 2, col = "white"
+    aes(shape = returned_used_applicators, fill = p_pos_or_undet_applicator),
+    size = 2,
+    col = "white"
   ) +
   scale_fill_gradient2(
     "Prop. pos. or ?\napplicators",
-    high = "black", mid = "green", low = "yellow", 
-    midpoint = 0.5, breaks = c(0, 1/2, 1)
-    ) +
+    high = "black",
+    mid = "green",
+    low = "yellow",
+    midpoint = 0.5,
+    breaks = c(0, 1 / 2, 1)
+  ) +
   scale_shape_manual(
-    "Returned\napplicators", values = c(23, 21), 
+    "Returned\napplicators",
+    values = c(23, 21),
     guide = guide_legend(override.aes = list(color = "black", fill = "black"))
-    ) +
+  ) +
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
-    legend.position = "bottom", legend.direction = "horizontal"
-  ) 
+    legend.position = "bottom",
+    legend.direction = "horizontal"
+  )
 
 
+df_summ |>
+  filter(randomized) |>
+  ggplot() +
+  aes(x = visit_code, y = pid, fill = p_detected) +
+  ggh4x::facet_nested(arm + site ~ ., scales = "free_y", space = "free_y") +
+  geom_tile() +
+  scale_fill_viridis_c(
+    "proportion of LBP strains\ndetected among expected",
+    option = "G"
+  ) +
+  ggnewscale::new_scale_fill() +
+  geom_point(
+    data = df_summ |> filter(randomized, daily_self_reported_adherence_sp == 1),
+    aes(shape = returned_used_applicators, fill = p_pos_or_undet_applicator),
+    size = 2,
+    col = "white"
+  ) +
+  scale_fill_gradient2(
+    "Prop. pos. or ?\napplicators",
+    high = "black",
+    mid = "green",
+    low = "yellow",
+    midpoint = 0.5,
+    breaks = c(0, 1 / 2, 1)
+  ) +
+  scale_shape_manual(
+    "Returned\napplicators",
+    values = c(23, 21),
+    guide = guide_legend(override.aes = list(color = "black", fill = "black"))
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+    legend.position = "bottom",
+    legend.direction = "horizontal"
+  )
 ```
 
 
@@ -649,21 +738,20 @@ For each study day, we define "effective exposure by qPCR" as having at least 50
 
 ```{r}
 
-df_summ <- 
-  df_summ |> 
+df_summ <-
+  df_summ |>
   mutate(
-    rel_ab = pmin(total_LBP/total_16S/2, 1),
+    rel_ab = pmin(total_LBP / total_16S / 2, 1),
     exposed = (p_detected >= 0.5) & (total_LBP > 10^7)
   )
-
 ```
 
 ```{r}
 #| fig-height: 15
 #| fig-width: 10
 
-df_summ |> 
-  filter(randomized) |> 
+df_summ |>
+  filter(randomized) |>
   ggplot() +
   aes(x = visit_code, y = pid, fill = exposed) +
   ggh4x::facet_nested(arm + site ~ ., scales = "free_y", space = "free_y") +
@@ -672,10 +760,11 @@ df_summ |>
     "Exposed by qPCR",
     values = c("TRUE" = "blue", "FALSE" = "gray80"),
     labels = c("TRUE" = "Yes", "FALSE" = "No")
-    ) +
+  ) +
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
-    legend.position = "bottom", legend.direction = "horizontal"
+    legend.position = "bottom",
+    legend.direction = "horizontal"
   ) +
   labs(caption = ".")
 ```
@@ -696,7 +785,7 @@ df_summ <-
       pid == "068100045" ~ NA_real_,
       TRUE ~ na_if(min(study_day[daily_self_reported_adherence_sp == 1], na.rm = TRUE), Inf)
     )
-  ) |> 
+  ) |>
   ungroup() |>
   filter(!(is.na(LC106_total) & is.na(daily_self_reported_adherence_sp))) |>
   mutate(
@@ -704,26 +793,26 @@ df_summ <-
       arm %in% c("LC106-7", "LC115", "LC106-o") ~
         study_day >= first_day_of_self_report_sp &
         study_day <= first_day_of_self_report_sp + 6,
-      
+
       arm %in% "LC106-3" ~
         study_day >= first_day_of_self_report_sp &
         study_day <= first_day_of_self_report_sp + 2,
-      
+
       arm %in% "Pl" ~ FALSE
     ),
     dosing_days_placebo = case_when(
       arm %in% c("LC106-7", "LC115", "LC106-o") ~ FALSE,
-      
+
       arm %in% "LC106-3" ~
         study_day >= first_day_of_self_report_sp + 3 &
         study_day <= first_day_of_self_report_sp + 6,
-      
+
       arm %in% "Pl" ~
         study_day >= first_day_of_self_report_sp &
         study_day <= first_day_of_self_report_sp + 6
     ),
     exposed_tmp = exposed & dosing_days_sp
-  ) 
+  )
 
 df_summ_pid <- df_summ |>
   group_by(arm, site, pid, ITT, mITT, PP) |>
@@ -733,14 +822,19 @@ df_summ_pid <- df_summ |>
     n_days_dosed = sum(dosing_days_sp, na.rm = TRUE),
     .groups = "drop"
   ) |>
-  mutate(prop_days_exposed = ifelse(n_days_exposed == 0, 0, n_days_exposed /
-                                      n_days_dosed))
-
+  mutate(
+    prop_days_exposed = ifelse(
+      n_days_exposed == 0,
+      0,
+      n_days_exposed /
+        n_days_dosed
+    )
+  )
 ```
 
 ```{r}
-df_summ_pid <- 
-  df_summ_pid |> 
+df_summ_pid <-
+  df_summ_pid |>
   mutate(
     pid_exposed_by_qPCR = pid_exposed,
     exposed_by_qPCR_lc106 = pid_exposed & str_detect(arm, "LC106"),
@@ -763,13 +857,12 @@ df_summ_pid |>
   scale_x_continuous(labels = scales::percent, limits = c(0, 1)) +
   scale_color_manual(values = c("TRUE" = "steelblue", "FALSE" = "grey80")) +
   labs(
-    x     = "Proportion of dosing days exposed",
-    y     = "",
+    x = "Proportion of dosing days exposed",
+    y = "",
     color = "Exposed by qPCR",
     title = "CTV05 exposure by qPCR — participant level"
   ) +
   theme(axis.text.y = element_text(size = 8))
-
 ```
 
 ```{r}
@@ -778,11 +871,12 @@ df_summ_pid |>
   dplyr::count(arm, site, pid_exposed_by_qPCR) |>
   ggplot(aes(x = arm, y = n, fill = pid_exposed_by_qPCR)) +
   geom_col(position = "fill") +
-  facet_wrap(~ site) +
+  facet_wrap(~site) +
   scale_y_continuous(labels = scales::percent) +
   scale_fill_manual(values = c("TRUE" = "steelblue", "FALSE" = "grey80")) +
   labs(
-    x = "Arm", y = "Proportion of participants",
+    x = "Arm",
+    y = "Proportion of participants",
     fill = "Exposed by qPCR",
     title = "Proportion of participants exposed to CTV05 (by qPCR)"
   )
@@ -801,11 +895,12 @@ df_summ_pid |>
   dplyr::count(arm, site, exposed_by_qPCR_all) |>
   ggplot(aes(x = arm, y = n, fill = exposed_by_qPCR_all)) +
   geom_col(position = "fill") +
-  facet_wrap(~ site) +
+  facet_wrap(~site) +
   scale_y_continuous(labels = scales::percent) +
   scale_fill_discrete(na.value = "lightgray") +
   labs(
-    x = "Arm", y = "Proportion of participants",
+    x = "Arm",
+    y = "Proportion of participants",
     fill = "Exposed by qPCR",
     title = "Proportion of participants exposed to CTV05 (by qPCR)"
   )
@@ -822,7 +917,11 @@ df_summ |>
   filter(arm == "LC106-3") |>
   filter(study_day < 20) |>
   ggplot() +
-  aes(x = study_day |> factor(), y = pid, color = daily_self_reported_adherence_sp |> as.character()) +
+  aes(
+    x = study_day |> factor(),
+    y = pid,
+    color = daily_self_reported_adherence_sp |> as.character()
+  ) +
   geom_point() +
   scale_color_manual(
     "Self-declared study product",
@@ -830,8 +929,6 @@ df_summ |>
     na.value = "transparent"
   ) +
   labs(y = "Participant", x = "Study day")
-  
-
 ```
 From the figure above, we see that no participants have delayed study product intake. We can thus use `dosing_days_sp` and `dosing_days_placebo` to differentiate between placebo and study product doses in LC106-3 arm.
 
@@ -841,30 +938,33 @@ Finally, we create daily variables, which represents daily exposure to the study
 
 ```{r}
 
-calc_var <- 
-mae@metadata$calc_vars_study_day |>
+calc_var <-
+  mae@metadata$calc_vars_study_day |>
   select(pid, study_day, daily_self_reported_exposure_sp) |>
   left_join(df_summ_pid |> select(pid, exposed_by_qPCR_lc106, exposed_by_qPCR_lc115)) |>
-  left_join(df_summ |> select(pid, study_day, arm, site, dosing_days_sp, dosing_days_placebo) |> distinct()) |>
+  left_join(
+    df_summ |> select(pid, study_day, arm, site, dosing_days_sp, dosing_days_placebo) |> distinct()
+  ) |>
   mutate(
-         daily_exposure_to_lc106 = case_when(
-            arm == "LC106-3" ~ daily_self_reported_exposure_sp * exposed_by_qPCR_lc106 * dosing_days_sp,
-            TRUE ~ daily_self_reported_exposure_sp * exposed_by_qPCR_lc106),
-         
-         daily_exposure_to_lc115 = daily_self_reported_exposure_sp * exposed_by_qPCR_lc115,
-         
-         daily_exposure_to_placebo = case_when(
-            arm == "Pl" ~ daily_self_reported_exposure_sp,
-            arm == "LC106-3" ~ daily_self_reported_exposure_sp * dosing_days_placebo,
-            TRUE ~ NA
-         ))
+    daily_exposure_to_lc106 = case_when(
+      arm == "LC106-3" ~ daily_self_reported_exposure_sp * exposed_by_qPCR_lc106 * dosing_days_sp,
+      TRUE ~ daily_self_reported_exposure_sp * exposed_by_qPCR_lc106
+    ),
+
+    daily_exposure_to_lc115 = daily_self_reported_exposure_sp * exposed_by_qPCR_lc115,
+
+    daily_exposure_to_placebo = case_when(
+      arm == "Pl" ~ daily_self_reported_exposure_sp,
+      arm == "LC106-3" ~ daily_self_reported_exposure_sp * dosing_days_placebo,
+      TRUE ~ NA
+    )
+  )
 ```
 
 
 ```{r}
 #| fig-height: 10
 #| fig-width: 8
-
 
 calc_var |>
   filter(!is.na(study_day), !is.na(site)) |>
@@ -878,7 +978,7 @@ calc_var |>
   ) |>
   ggplot() +
   aes(x = study_day, y = pid, color = daily_exposure_to) +
-  geom_point() + 
+  geom_point() +
   ggh4x::facet_nested(arm + site ~ ., scales = "free_y", space = "free_y") +
   scale_color_manual(
     "Daily exposure to",
@@ -886,8 +986,6 @@ calc_var |>
     na.value = "transparent"
   ) +
   labs(y = "Participant", x = "Study day")
-
-
 ```
 
 In the plot above, we can see that, for participant `068200387` in arm LC106-3, it is indicated that the placebo product was taken, but not the LBP product. 
@@ -896,16 +994,14 @@ In this case, we will consider that, if the participant said they have taken all
 
 ```{r}
 
-calc_var <- 
+calc_var <-
   calc_var |>
   mutate(daily_exposure_to_placebo = ifelse(pid == "068200387", 0, daily_exposure_to_placebo))
-
 ```
 
 ```{r}
 #| fig-height: 10
 #| fig-width: 8
-
 
 calc_var |>
   filter(!is.na(study_day), !is.na(site)) |>
@@ -919,7 +1015,7 @@ calc_var |>
   ) |>
   ggplot() +
   aes(x = study_day, y = pid, color = daily_exposure_to) +
-  geom_point() + 
+  geom_point() +
   ggh4x::facet_nested(arm + site ~ ., scales = "free_y", space = "free_y") +
   scale_color_manual(
     "Daily exposure to",
@@ -927,8 +1023,6 @@ calc_var |>
     na.value = "transparent"
   ) +
   labs(y = "Participant", x = "Study day")
-
-
 ```
 
 # Saving pid-level and daily-level variables
@@ -939,26 +1033,29 @@ We add these variables to the calculated variables table in the MAE metadata.
 ```{r}
 
 selected_vars_pid <- c("pid_exposed_by_qPCR", "n_days_exposed_by_qPCR", "n_days_exp_dosed")
-selected_vars_study_day <- c("daily_exposure_to_lc106", "daily_exposure_to_lc115", "daily_exposure_to_placebo")
+selected_vars_study_day <- c(
+  "daily_exposure_to_lc106",
+  "daily_exposure_to_lc115",
+  "daily_exposure_to_placebo"
+)
 
-mae@metadata$calc_vars_pid <- 
-  mae@metadata$calc_vars_pid |> 
-  select(-any_of(selected_vars_pid)) |> 
+mae@metadata$calc_vars_pid <-
+  mae@metadata$calc_vars_pid |>
+  select(-any_of(selected_vars_pid)) |>
   left_join(
-    df_summ_pid |> 
+    df_summ_pid |>
       select(pid, all_of(selected_vars_pid)),
     by = join_by(pid)
   )
 
-mae@metadata$calc_vars_study_day <- 
-  mae@metadata$calc_vars_study_day |> 
-   select(-any_of(selected_vars_study_day)) |>
+mae@metadata$calc_vars_study_day <-
+  mae@metadata$calc_vars_study_day |>
+  select(-any_of(selected_vars_study_day)) |>
   left_join(
-    calc_var |> 
+    calc_var |>
       select(pid, study_day, all_of(selected_vars_study_day)),
     by = join_by(pid, study_day)
   )
-  
 ```
 
 # Saving the `MultiAssayExperiment` objects
@@ -971,10 +1068,11 @@ saveRDS(
   mae,
   str_c(
     get_05_output_dir(),
-    "mae_full_", today() |> str_remove_all("-"), ".rds"
+    "mae_full_",
+    today() |> str_remove_all("-"),
+    ".rds"
   )
 )
-
 ```
 
 

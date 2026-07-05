@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="Laura Symul, Laura Vermeren">
-<meta name="dcterms.date" content="2026-04-19">
+<meta name="dcterms.date" content="2026-07-03">
 
 <title>Arm unblinding</title>
 <style>
@@ -2209,7 +2209,7 @@ vertical-align: -.125em;
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">April 19, 2026</p>
+      <p class="date">July 3, 2026</p>
     </div>
   </div>
   
@@ -2246,11 +2246,11 @@ vertical-align: -.125em;
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>mae_files <span class="ot">&lt;-</span> </span>
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>mae_files <span class="ot">&lt;-</span></span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  fs<span class="sc">::</span><span class="fu">dir_ls</span>(</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">get_03_output_dir</span>(),</span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">regexp =</span> <span class="st">&quot;mae_full_06_.*</span><span class="sc">\\</span><span class="st">.rds$&quot;</span></span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span> </span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">regexp =</span> <span class="st">&quot;mae_full_08_.*</span><span class="sc">\\</span><span class="st">.rds$&quot;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
 <span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">sort</span>(<span class="at">decreasing =</span> <span class="cn">TRUE</span>) <span class="sc">|&gt;</span></span>
 <span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>  magrittr<span class="sc">::</span><span class="fu">extract</span>(<span class="dv">1</span>)</span>
 <span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a></span>
@@ -2269,20 +2269,20 @@ vertical-align: -.125em;
 <div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>mae<span class="sc">$</span>arm <span class="sc">|&gt;</span> <span class="fu">table</span>() <span class="sc">|&gt;</span> <span class="fu">as.data.frame</span>() <span class="sc">|&gt;</span> <span class="fu">gt</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output-display">
-<div id="jkjlurpopf" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
-<style>#jkjlurpopf table {
+<div id="tgxxoaunit" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
+<style>#tgxxoaunit table {
 font-family: system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 -webkit-font-smoothing: antialiased;
 -moz-osx-font-smoothing: grayscale;
 }
-#jkjlurpopf thead, #jkjlurpopf tbody, #jkjlurpopf tfoot, #jkjlurpopf tr, #jkjlurpopf td, #jkjlurpopf th {
+#tgxxoaunit thead, #tgxxoaunit tbody, #tgxxoaunit tfoot, #tgxxoaunit tr, #tgxxoaunit td, #tgxxoaunit th {
 border-style: none;
 }
-#jkjlurpopf p {
+#tgxxoaunit p {
 margin: 0;
 padding: 0;
 }
-#jkjlurpopf .gt_table {
+#tgxxoaunit .gt_table {
 display: table;
 border-collapse: collapse;
 line-height: normal;
@@ -2307,11 +2307,11 @@ border-left-style: none;
 border-left-width: 2px;
 border-left-color: #D3D3D3;
 }
-#jkjlurpopf .gt_caption {
+#tgxxoaunit .gt_caption {
 padding-top: 4px;
 padding-bottom: 4px;
 }
-#jkjlurpopf .gt_title {
+#tgxxoaunit .gt_title {
 color: #333333;
 font-size: 125%;
 font-weight: initial;
@@ -2322,7 +2322,7 @@ padding-right: 5px;
 border-bottom-color: #FFFFFF;
 border-bottom-width: 0;
 }
-#jkjlurpopf .gt_subtitle {
+#tgxxoaunit .gt_subtitle {
 color: #333333;
 font-size: 85%;
 font-weight: initial;
@@ -2333,7 +2333,7 @@ padding-right: 5px;
 border-top-color: #FFFFFF;
 border-top-width: 0;
 }
-#jkjlurpopf .gt_heading {
+#tgxxoaunit .gt_heading {
 background-color: #FFFFFF;
 text-align: center;
 border-bottom-color: #FFFFFF;
@@ -2344,12 +2344,12 @@ border-right-style: none;
 border-right-width: 1px;
 border-right-color: #D3D3D3;
 }
-#jkjlurpopf .gt_bottom_border {
+#tgxxoaunit .gt_bottom_border {
 border-bottom-style: solid;
 border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
 }
-#jkjlurpopf .gt_col_headings {
+#tgxxoaunit .gt_col_headings {
 border-top-style: solid;
 border-top-width: 2px;
 border-top-color: #D3D3D3;
@@ -2363,7 +2363,7 @@ border-right-style: none;
 border-right-width: 1px;
 border-right-color: #D3D3D3;
 }
-#jkjlurpopf .gt_col_heading {
+#tgxxoaunit .gt_col_heading {
 color: #333333;
 background-color: #FFFFFF;
 font-size: 100%;
@@ -2382,7 +2382,7 @@ padding-left: 5px;
 padding-right: 5px;
 overflow-x: hidden;
 }
-#jkjlurpopf .gt_column_spanner_outer {
+#tgxxoaunit .gt_column_spanner_outer {
 color: #333333;
 background-color: #FFFFFF;
 font-size: 100%;
@@ -2393,13 +2393,13 @@ padding-bottom: 0;
 padding-left: 4px;
 padding-right: 4px;
 }
-#jkjlurpopf .gt_column_spanner_outer:first-child {
+#tgxxoaunit .gt_column_spanner_outer:first-child {
 padding-left: 0;
 }
-#jkjlurpopf .gt_column_spanner_outer:last-child {
+#tgxxoaunit .gt_column_spanner_outer:last-child {
 padding-right: 0;
 }
-#jkjlurpopf .gt_column_spanner {
+#tgxxoaunit .gt_column_spanner {
 border-bottom-style: solid;
 border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
@@ -2410,10 +2410,10 @@ overflow-x: hidden;
 display: inline-block;
 width: 100%;
 }
-#jkjlurpopf .gt_spanner_row {
+#tgxxoaunit .gt_spanner_row {
 border-bottom-style: hidden;
 }
-#jkjlurpopf .gt_group_heading {
+#tgxxoaunit .gt_group_heading {
 padding-top: 8px;
 padding-bottom: 8px;
 padding-left: 5px;
@@ -2438,7 +2438,7 @@ border-right-color: #D3D3D3;
 vertical-align: middle;
 text-align: left;
 }
-#jkjlurpopf .gt_empty_group_heading {
+#tgxxoaunit .gt_empty_group_heading {
 padding: 0.5px;
 color: #333333;
 background-color: #FFFFFF;
@@ -2452,13 +2452,13 @@ border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
 vertical-align: middle;
 }
-#jkjlurpopf .gt_from_md > :first-child {
+#tgxxoaunit .gt_from_md > :first-child {
 margin-top: 0;
 }
-#jkjlurpopf .gt_from_md > :last-child {
+#tgxxoaunit .gt_from_md > :last-child {
 margin-bottom: 0;
 }
-#jkjlurpopf .gt_row {
+#tgxxoaunit .gt_row {
 padding-top: 8px;
 padding-bottom: 8px;
 padding-left: 5px;
@@ -2476,7 +2476,7 @@ border-right-color: #D3D3D3;
 vertical-align: middle;
 overflow-x: hidden;
 }
-#jkjlurpopf .gt_stub {
+#tgxxoaunit .gt_stub {
 color: #333333;
 background-color: #FFFFFF;
 font-size: 100%;
@@ -2488,7 +2488,7 @@ border-right-color: #D3D3D3;
 padding-left: 5px;
 padding-right: 5px;
 }
-#jkjlurpopf .gt_stub_row_group {
+#tgxxoaunit .gt_stub_row_group {
 color: #333333;
 background-color: #FFFFFF;
 font-size: 100%;
@@ -2501,13 +2501,13 @@ padding-left: 5px;
 padding-right: 5px;
 vertical-align: top;
 }
-#jkjlurpopf .gt_row_group_first td {
+#tgxxoaunit .gt_row_group_first td {
 border-top-width: 2px;
 }
-#jkjlurpopf .gt_row_group_first th {
+#tgxxoaunit .gt_row_group_first th {
 border-top-width: 2px;
 }
-#jkjlurpopf .gt_summary_row {
+#tgxxoaunit .gt_summary_row {
 color: #333333;
 background-color: #FFFFFF;
 text-transform: inherit;
@@ -2516,14 +2516,14 @@ padding-bottom: 8px;
 padding-left: 5px;
 padding-right: 5px;
 }
-#jkjlurpopf .gt_first_summary_row {
+#tgxxoaunit .gt_first_summary_row {
 border-top-style: solid;
 border-top-color: #D3D3D3;
 }
-#jkjlurpopf .gt_first_summary_row.thick {
+#tgxxoaunit .gt_first_summary_row.thick {
 border-top-width: 2px;
 }
-#jkjlurpopf .gt_last_summary_row {
+#tgxxoaunit .gt_last_summary_row {
 padding-top: 8px;
 padding-bottom: 8px;
 padding-left: 5px;
@@ -2532,7 +2532,7 @@ border-bottom-style: solid;
 border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
 }
-#jkjlurpopf .gt_grand_summary_row {
+#tgxxoaunit .gt_grand_summary_row {
 color: #333333;
 background-color: #FFFFFF;
 text-transform: inherit;
@@ -2541,7 +2541,7 @@ padding-bottom: 8px;
 padding-left: 5px;
 padding-right: 5px;
 }
-#jkjlurpopf .gt_first_grand_summary_row {
+#tgxxoaunit .gt_first_grand_summary_row {
 padding-top: 8px;
 padding-bottom: 8px;
 padding-left: 5px;
@@ -2550,7 +2550,7 @@ border-top-style: double;
 border-top-width: 6px;
 border-top-color: #D3D3D3;
 }
-#jkjlurpopf .gt_last_grand_summary_row_top {
+#tgxxoaunit .gt_last_grand_summary_row_top {
 padding-top: 8px;
 padding-bottom: 8px;
 padding-left: 5px;
@@ -2559,10 +2559,10 @@ border-bottom-style: double;
 border-bottom-width: 6px;
 border-bottom-color: #D3D3D3;
 }
-#jkjlurpopf .gt_striped {
+#tgxxoaunit .gt_striped {
 background-color: rgba(128, 128, 128, 0.05);
 }
-#jkjlurpopf .gt_table_body {
+#tgxxoaunit .gt_table_body {
 border-top-style: solid;
 border-top-width: 2px;
 border-top-color: #D3D3D3;
@@ -2570,7 +2570,7 @@ border-bottom-style: solid;
 border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
 }
-#jkjlurpopf .gt_footnotes {
+#tgxxoaunit .gt_footnotes {
 color: #333333;
 background-color: #FFFFFF;
 border-bottom-style: none;
@@ -2583,7 +2583,7 @@ border-right-style: none;
 border-right-width: 2px;
 border-right-color: #D3D3D3;
 }
-#jkjlurpopf .gt_footnote {
+#tgxxoaunit .gt_footnote {
 margin: 0px;
 font-size: 90%;
 padding-top: 4px;
@@ -2591,7 +2591,7 @@ padding-bottom: 4px;
 padding-left: 5px;
 padding-right: 5px;
 }
-#jkjlurpopf .gt_sourcenotes {
+#tgxxoaunit .gt_sourcenotes {
 color: #333333;
 background-color: #FFFFFF;
 border-bottom-style: none;
@@ -2604,64 +2604,64 @@ border-right-style: none;
 border-right-width: 2px;
 border-right-color: #D3D3D3;
 }
-#jkjlurpopf .gt_sourcenote {
+#tgxxoaunit .gt_sourcenote {
 font-size: 90%;
 padding-top: 4px;
 padding-bottom: 4px;
 padding-left: 5px;
 padding-right: 5px;
 }
-#jkjlurpopf .gt_left {
+#tgxxoaunit .gt_left {
 text-align: left;
 }
-#jkjlurpopf .gt_center {
+#tgxxoaunit .gt_center {
 text-align: center;
 }
-#jkjlurpopf .gt_right {
+#tgxxoaunit .gt_right {
 text-align: right;
 font-variant-numeric: tabular-nums;
 }
-#jkjlurpopf .gt_font_normal {
+#tgxxoaunit .gt_font_normal {
 font-weight: normal;
 }
-#jkjlurpopf .gt_font_bold {
+#tgxxoaunit .gt_font_bold {
 font-weight: bold;
 }
-#jkjlurpopf .gt_font_italic {
+#tgxxoaunit .gt_font_italic {
 font-style: italic;
 }
-#jkjlurpopf .gt_super {
+#tgxxoaunit .gt_super {
 font-size: 65%;
 }
-#jkjlurpopf .gt_footnote_marks {
+#tgxxoaunit .gt_footnote_marks {
 font-size: 75%;
 vertical-align: 0.4em;
 position: initial;
 }
-#jkjlurpopf .gt_asterisk {
+#tgxxoaunit .gt_asterisk {
 font-size: 100%;
 vertical-align: 0;
 }
-#jkjlurpopf .gt_indent_1 {
+#tgxxoaunit .gt_indent_1 {
 text-indent: 5px;
 }
-#jkjlurpopf .gt_indent_2 {
+#tgxxoaunit .gt_indent_2 {
 text-indent: 10px;
 }
-#jkjlurpopf .gt_indent_3 {
+#tgxxoaunit .gt_indent_3 {
 text-indent: 15px;
 }
-#jkjlurpopf .gt_indent_4 {
+#tgxxoaunit .gt_indent_4 {
 text-indent: 20px;
 }
-#jkjlurpopf .gt_indent_5 {
+#tgxxoaunit .gt_indent_5 {
 text-indent: 25px;
 }
-#jkjlurpopf .katex-display {
+#tgxxoaunit .katex-display {
 display: inline-flex !important;
 margin-bottom: 0.75em !important;
 }
-#jkjlurpopf div.Reactable > div.rt-table > div.rt-thead > div.rt-tr.rt-tr-group-header > div.rt-th-group:after {
+#tgxxoaunit div.Reactable > div.rt-table > div.rt-thead > div.rt-tr.rt-tr-group-header > div.rt-th-group:after {
 height: 0px !important;
 }
 </style>
@@ -2688,7 +2688,7 @@ height: 0px !important;
 </tr>
 <tr class="even">
 <td class="gt_row gt_center" headers="Var1">LC106-o</td>
-<td class="gt_row gt_right" headers="Freq">788</td>
+<td class="gt_row gt_right" headers="Freq">796</td>
 </tr>
 <tr class="odd">
 <td class="gt_row gt_center" headers="Var1">LC115</td>
@@ -2696,7 +2696,7 @@ height: 0px !important;
 </tr>
 <tr class="even">
 <td class="gt_row gt_center" headers="Var1">Blinded</td>
-<td class="gt_row gt_right" headers="Freq">3963</td>
+<td class="gt_row gt_right" headers="Freq">4018</td>
 </tr>
 </tbody>
 </table>
@@ -2718,41 +2718,45 @@ height: 0px !important;
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>mgh_arm_data <span class="ot">&lt;-</span> </span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>  readxl<span class="sc">::</span><span class="fu">read_excel</span>(mgh_arm_data_file) <span class="sc">|&gt;</span> </span>
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>mgh_arm_data <span class="ot">&lt;-</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>  readxl<span class="sc">::</span><span class="fu">read_excel</span>(mgh_arm_data_file) <span class="sc">|&gt;</span></span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
 <span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">treatment_code =</span> PHARMCODE,</span>
 <span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">arm =</span> <span class="fu">case_when</span>(</span>
 <span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>      TREATMENT <span class="sc">==</span> <span class="st">&quot;LC-106 daily for 7d after metronidazole treatment&quot;</span> <span class="sc">~</span> <span class="st">&quot;LC106-7&quot;</span>,</span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>      TREATMENT <span class="sc">==</span> <span class="st">&quot;LC-106 daily for 3d + 4 d of placebo, starting after metronidazole treatment&quot;</span> <span class="sc">~</span> <span class="st">&quot;LC106-3&quot;</span>,</span>
-<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>      TREATMENT <span class="sc">==</span> <span class="st">&quot;LC-106 daily for 7d, starting on day 3 of metronidazole treatment&quot;</span> <span class="sc">~</span> <span class="st">&quot;LC106-o&quot;</span>,</span>
-<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>      TREATMENT <span class="sc">==</span> <span class="st">&quot;LC-115 daily for 7d after metronidazole treatment&quot;</span> <span class="sc">~</span> <span class="st">&quot;LC115&quot;</span>,</span>
-<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>      TREATMENT <span class="sc">==</span> <span class="st">&quot;Placebo daily for 7d after metronidazole treatment (Control for LC-106)&quot;</span> <span class="sc">~</span> <span class="st">&quot;Pl&quot;</span>,</span>
-<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>      <span class="cn">TRUE</span> <span class="sc">~</span> <span class="cn">NA_character_</span></span>
-<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span> </span>
-<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">left_join</span>(</span>
-<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>    mae<span class="sc">@</span>metadata<span class="sc">$</span>crf_data_clean<span class="sc">$</span>crf13 <span class="sc">|&gt;</span> </span>
-<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>      <span class="fu">select</span>(pid, treatment_code, group4)</span>
-<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>cap_arm_data <span class="ot">&lt;-</span> </span>
-<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>  readxl<span class="sc">::</span><span class="fu">read_excel</span>(cap_arm_data_file) <span class="sc">|&gt;</span> </span>
-<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
-<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>    <span class="at">treatment_code =</span> PHARM_CODE,</span>
-<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>    <span class="at">arm =</span> <span class="fu">case_when</span>(</span>
-<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>      TREATMENT_NAME <span class="sc">==</span> <span class="st">&quot;LC-106 daily for 7d after metronidazole treatment&quot;</span> <span class="sc">~</span> <span class="st">&quot;LC106-7&quot;</span>,</span>
-<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>      TREATMENT_NAME <span class="sc">==</span> <span class="st">&quot;LC-106 daily for 3d + 4 d of placebo, starting after metronidazole treatment&quot;</span> <span class="sc">~</span> <span class="st">&quot;LC106-3&quot;</span>,</span>
-<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>      TREATMENT_NAME <span class="sc">==</span> <span class="st">&quot;LC-106 daily for 7d, starting on day 3 of metronidazole treatment&quot;</span> <span class="sc">~</span> <span class="st">&quot;LC106-o&quot;</span>,</span>
-<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>      TREATMENT_NAME <span class="sc">==</span> <span class="st">&quot;LC-115 daily for 7d after metronidazole treatment&quot;</span> <span class="sc">~</span> <span class="st">&quot;LC115&quot;</span>,</span>
-<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>      TREATMENT_NAME <span class="sc">==</span> <span class="st">&quot;Placebo daily for 7d after metronidazole treatment (Control for LC-106)&quot;</span> <span class="sc">~</span> <span class="st">&quot;Pl&quot;</span>,</span>
-<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>      <span class="cn">TRUE</span> <span class="sc">~</span> <span class="cn">NA_character_</span></span>
-<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span> </span>
-<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a>  <span class="fu">left_join</span>(</span>
-<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a>    mae<span class="sc">@</span>metadata<span class="sc">$</span>crf_data_clean<span class="sc">$</span>crf13 <span class="sc">|&gt;</span> </span>
-<span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a>      <span class="fu">select</span>(pid, treatment_code, group4)</span>
-<span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a>  )</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>      TREATMENT <span class="sc">==</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;LC-106 daily for 3d + 4 d of placebo, starting after metronidazole treatment&quot;</span> <span class="sc">~</span> <span class="st">&quot;LC106-3&quot;</span>,</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>      TREATMENT <span class="sc">==</span> <span class="st">&quot;LC-106 daily for 7d, starting on day 3 of metronidazole treatment&quot;</span> <span class="sc">~</span> <span class="st">&quot;LC106-o&quot;</span>,</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>      TREATMENT <span class="sc">==</span> <span class="st">&quot;LC-115 daily for 7d after metronidazole treatment&quot;</span> <span class="sc">~</span> <span class="st">&quot;LC115&quot;</span>,</span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>      TREATMENT <span class="sc">==</span> <span class="st">&quot;Placebo daily for 7d after metronidazole treatment (Control for LC-106)&quot;</span> <span class="sc">~</span> <span class="st">&quot;Pl&quot;</span>,</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>      <span class="cn">TRUE</span> <span class="sc">~</span> <span class="cn">NA_character_</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">left_join</span>(</span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>    mae<span class="sc">@</span>metadata<span class="sc">$</span>crf_data_clean<span class="sc">$</span>crf13 <span class="sc">|&gt;</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>      <span class="fu">select</span>(pid, treatment_code, group4)</span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>cap_arm_data <span class="ot">&lt;-</span></span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>  readxl<span class="sc">::</span><span class="fu">read_excel</span>(cap_arm_data_file) <span class="sc">|&gt;</span></span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>    <span class="at">treatment_code =</span> PHARM_CODE,</span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>    <span class="at">arm =</span> <span class="fu">case_when</span>(</span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>      TREATMENT_NAME <span class="sc">==</span> <span class="st">&quot;LC-106 daily for 7d after metronidazole treatment&quot;</span> <span class="sc">~</span> <span class="st">&quot;LC106-7&quot;</span>,</span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>      TREATMENT_NAME <span class="sc">==</span></span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;LC-106 daily for 3d + 4 d of placebo, starting after metronidazole treatment&quot;</span> <span class="sc">~</span> <span class="st">&quot;LC106-3&quot;</span>,</span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>      TREATMENT_NAME <span class="sc">==</span></span>
+<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;LC-106 daily for 7d, starting on day 3 of metronidazole treatment&quot;</span> <span class="sc">~</span> <span class="st">&quot;LC106-o&quot;</span>,</span>
+<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>      TREATMENT_NAME <span class="sc">==</span> <span class="st">&quot;LC-115 daily for 7d after metronidazole treatment&quot;</span> <span class="sc">~</span> <span class="st">&quot;LC115&quot;</span>,</span>
+<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a>      TREATMENT_NAME <span class="sc">==</span></span>
+<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;Placebo daily for 7d after metronidazole treatment (Control for LC-106)&quot;</span> <span class="sc">~</span> <span class="st">&quot;Pl&quot;</span>,</span>
+<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a>      <span class="cn">TRUE</span> <span class="sc">~</span> <span class="cn">NA_character_</span></span>
+<span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
+<span id="cb5-36"><a href="#cb5-36" aria-hidden="true" tabindex="-1"></a>  <span class="fu">left_join</span>(</span>
+<span id="cb5-37"><a href="#cb5-37" aria-hidden="true" tabindex="-1"></a>    mae<span class="sc">@</span>metadata<span class="sc">$</span>crf_data_clean<span class="sc">$</span>crf13 <span class="sc">|&gt;</span></span>
+<span id="cb5-38"><a href="#cb5-38" aria-hidden="true" tabindex="-1"></a>      <span class="fu">select</span>(pid, treatment_code, group4)</span>
+<span id="cb5-39"><a href="#cb5-39" aria-hidden="true" tabindex="-1"></a>  )</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
 <div class="cell">
@@ -2765,18 +2769,17 @@ height: 0px !important;
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>arm_data <span class="ot">&lt;-</span> </span>
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>arm_data <span class="ot">&lt;-</span></span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">bind_rows</span>(</span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    mgh_arm_data <span class="sc">|&gt;</span> <span class="fu">filter</span>(<span class="sc">!</span><span class="fu">is.na</span>(pid)) <span class="sc">|&gt;</span> <span class="fu">select</span>(pid, treatment_code, arm),</span>
 <span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    cap_arm_data <span class="sc">|&gt;</span> <span class="fu">filter</span>(<span class="sc">!</span><span class="fu">is.na</span>(pid)) <span class="sc">|&gt;</span> <span class="fu">select</span>(pid, treatment_code, arm)</span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span> </span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
 <span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
-<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">arm =</span> </span>
-<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>      arm <span class="sc">|&gt;</span> </span>
-<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>      <span class="fu">factor</span>(</span>
-<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>        <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">&quot;Pl&quot;</span>, <span class="st">&quot;LC106-7&quot;</span>, <span class="st">&quot;LC106-3&quot;</span>, <span class="st">&quot;LC106-o&quot;</span>, <span class="st">&quot;LC115&quot;</span>, <span class="st">&quot;Blinded&quot;</span>)</span>
-<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>      )</span>
-<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>  )</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">arm =</span> arm <span class="sc">|&gt;</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>      <span class="fu">factor</span>(</span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>        <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">&quot;Pl&quot;</span>, <span class="st">&quot;LC106-7&quot;</span>, <span class="st">&quot;LC106-3&quot;</span>, <span class="st">&quot;LC106-o&quot;</span>, <span class="st">&quot;LC115&quot;</span>, <span class="st">&quot;Blinded&quot;</span>)</span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>      )</span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>  )</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
 <div class="cell">
@@ -2790,7 +2793,7 @@ height: 0px !important;
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>mae<span class="sc">@</span>colData<span class="sc">$</span>arm <span class="ot">&lt;-</span>  arm_data<span class="sc">$</span>arm[<span class="fu">match</span>(mae<span class="sc">@</span>colData<span class="sc">$</span>pid, arm_data<span class="sc">$</span>pid)]</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>mae<span class="sc">@</span>colData<span class="sc">$</span>arm <span class="ot">&lt;-</span> arm_data<span class="sc">$</span>arm[<span class="fu">match</span>(mae<span class="sc">@</span>colData<span class="sc">$</span>pid, arm_data<span class="sc">$</span>pid)]</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
 <p>We are now unblinded.</p>
@@ -2798,41 +2801,41 @@ height: 0px !important;
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>mae<span class="sc">@</span>colData <span class="sc">|&gt;</span> </span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">as_tibble</span>() <span class="sc">|&gt;</span> </span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(pid, site, arm, ITT, mITT, PP) <span class="sc">|&gt;</span> </span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">distinct</span>() <span class="sc">|&gt;</span> </span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(<span class="sc">!</span><span class="fu">is.na</span>(ITT), <span class="sc">!</span><span class="fu">is.na</span>(arm)) <span class="sc">|&gt;</span> </span>
+<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>mae<span class="sc">@</span>colData <span class="sc">|&gt;</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">as_tibble</span>() <span class="sc">|&gt;</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(pid, site, arm, ITT, mITT, PP) <span class="sc">|&gt;</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">distinct</span>() <span class="sc">|&gt;</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(<span class="sc">!</span><span class="fu">is.na</span>(ITT), <span class="sc">!</span><span class="fu">is.na</span>(arm)) <span class="sc">|&gt;</span></span>
 <span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
-<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">study_population =</span> </span>
-<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>      <span class="fu">case_when</span>(</span>
-<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>        ITT <span class="sc">&amp;</span> mITT <span class="sc">&amp;</span> PP <span class="sc">~</span> <span class="st">&quot;ITT, mITT, PP&quot;</span>,</span>
-<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>        ITT <span class="sc">&amp;</span> mITT <span class="sc">&amp;</span> <span class="sc">!</span>PP <span class="sc">~</span> <span class="st">&quot;ITT, mITT&quot;</span>,</span>
-<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a>        ITT <span class="sc">&amp;</span> <span class="sc">!</span>mITT <span class="sc">&amp;</span> <span class="sc">!</span>PP <span class="sc">~</span> <span class="st">&quot;ITT&quot;</span>,</span>
-<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>        <span class="cn">TRUE</span> <span class="sc">~</span> <span class="st">&quot;???&quot;</span></span>
-<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>      ) <span class="sc">|&gt;</span> <span class="fu">factor</span>(<span class="at">levels =</span> <span class="fu">c</span>(<span class="st">&quot;ITT, mITT, PP&quot;</span>,<span class="st">&quot;ITT, mITT&quot;</span>, <span class="st">&quot;ITT&quot;</span>, <span class="st">&quot;???&quot;</span>))</span>
-<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span> </span>
-<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">count</span>(site, arm, study_population) <span class="sc">|&gt;</span> </span>
-<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pivot_wider</span>(<span class="at">names_from =</span> site, <span class="at">values_from =</span> n, <span class="at">values_fill =</span> <span class="dv">0</span>) <span class="sc">|&gt;</span> </span>
-<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(arm, study_population) <span class="sc">|&gt;</span> </span>
-<span id="cb10-18"><a href="#cb10-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(arm) <span class="sc">|&gt;</span> </span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">study_population =</span> <span class="fu">case_when</span>(</span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>      ITT <span class="sc">&amp;</span> mITT <span class="sc">&amp;</span> PP <span class="sc">~</span> <span class="st">&quot;ITT, mITT, PP&quot;</span>,</span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>      ITT <span class="sc">&amp;</span> mITT <span class="sc">&amp;</span> <span class="sc">!</span>PP <span class="sc">~</span> <span class="st">&quot;ITT, mITT&quot;</span>,</span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>      ITT <span class="sc">&amp;</span> <span class="sc">!</span>mITT <span class="sc">&amp;</span> <span class="sc">!</span>PP <span class="sc">~</span> <span class="st">&quot;ITT&quot;</span>,</span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a>      <span class="cn">TRUE</span> <span class="sc">~</span> <span class="st">&quot;???&quot;</span></span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>    ) <span class="sc">|&gt;</span></span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>      <span class="fu">factor</span>(<span class="at">levels =</span> <span class="fu">c</span>(<span class="st">&quot;ITT, mITT, PP&quot;</span>, <span class="st">&quot;ITT, mITT&quot;</span>, <span class="st">&quot;ITT&quot;</span>, <span class="st">&quot;???&quot;</span>))</span>
+<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
+<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">count</span>(site, arm, study_population) <span class="sc">|&gt;</span></span>
+<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pivot_wider</span>(<span class="at">names_from =</span> site, <span class="at">values_from =</span> n, <span class="at">values_fill =</span> <span class="dv">0</span>) <span class="sc">|&gt;</span></span>
+<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(arm, study_population) <span class="sc">|&gt;</span></span>
+<span id="cb10-18"><a href="#cb10-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(arm) <span class="sc">|&gt;</span></span>
 <span id="cb10-19"><a href="#cb10-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">gt</span>(<span class="at">row_group_as_column =</span> <span class="cn">TRUE</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output-display">
-<div id="axbwelbkmy" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
-<style>#axbwelbkmy table {
+<div id="okdndsnbky" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
+<style>#okdndsnbky table {
 font-family: system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 -webkit-font-smoothing: antialiased;
 -moz-osx-font-smoothing: grayscale;
 }
-#axbwelbkmy thead, #axbwelbkmy tbody, #axbwelbkmy tfoot, #axbwelbkmy tr, #axbwelbkmy td, #axbwelbkmy th {
+#okdndsnbky thead, #okdndsnbky tbody, #okdndsnbky tfoot, #okdndsnbky tr, #okdndsnbky td, #okdndsnbky th {
 border-style: none;
 }
-#axbwelbkmy p {
+#okdndsnbky p {
 margin: 0;
 padding: 0;
 }
-#axbwelbkmy .gt_table {
+#okdndsnbky .gt_table {
 display: table;
 border-collapse: collapse;
 line-height: normal;
@@ -2857,11 +2860,11 @@ border-left-style: none;
 border-left-width: 2px;
 border-left-color: #D3D3D3;
 }
-#axbwelbkmy .gt_caption {
+#okdndsnbky .gt_caption {
 padding-top: 4px;
 padding-bottom: 4px;
 }
-#axbwelbkmy .gt_title {
+#okdndsnbky .gt_title {
 color: #333333;
 font-size: 125%;
 font-weight: initial;
@@ -2872,7 +2875,7 @@ padding-right: 5px;
 border-bottom-color: #FFFFFF;
 border-bottom-width: 0;
 }
-#axbwelbkmy .gt_subtitle {
+#okdndsnbky .gt_subtitle {
 color: #333333;
 font-size: 85%;
 font-weight: initial;
@@ -2883,7 +2886,7 @@ padding-right: 5px;
 border-top-color: #FFFFFF;
 border-top-width: 0;
 }
-#axbwelbkmy .gt_heading {
+#okdndsnbky .gt_heading {
 background-color: #FFFFFF;
 text-align: center;
 border-bottom-color: #FFFFFF;
@@ -2894,12 +2897,12 @@ border-right-style: none;
 border-right-width: 1px;
 border-right-color: #D3D3D3;
 }
-#axbwelbkmy .gt_bottom_border {
+#okdndsnbky .gt_bottom_border {
 border-bottom-style: solid;
 border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
 }
-#axbwelbkmy .gt_col_headings {
+#okdndsnbky .gt_col_headings {
 border-top-style: solid;
 border-top-width: 2px;
 border-top-color: #D3D3D3;
@@ -2913,7 +2916,7 @@ border-right-style: none;
 border-right-width: 1px;
 border-right-color: #D3D3D3;
 }
-#axbwelbkmy .gt_col_heading {
+#okdndsnbky .gt_col_heading {
 color: #333333;
 background-color: #FFFFFF;
 font-size: 100%;
@@ -2932,7 +2935,7 @@ padding-left: 5px;
 padding-right: 5px;
 overflow-x: hidden;
 }
-#axbwelbkmy .gt_column_spanner_outer {
+#okdndsnbky .gt_column_spanner_outer {
 color: #333333;
 background-color: #FFFFFF;
 font-size: 100%;
@@ -2943,13 +2946,13 @@ padding-bottom: 0;
 padding-left: 4px;
 padding-right: 4px;
 }
-#axbwelbkmy .gt_column_spanner_outer:first-child {
+#okdndsnbky .gt_column_spanner_outer:first-child {
 padding-left: 0;
 }
-#axbwelbkmy .gt_column_spanner_outer:last-child {
+#okdndsnbky .gt_column_spanner_outer:last-child {
 padding-right: 0;
 }
-#axbwelbkmy .gt_column_spanner {
+#okdndsnbky .gt_column_spanner {
 border-bottom-style: solid;
 border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
@@ -2960,10 +2963,10 @@ overflow-x: hidden;
 display: inline-block;
 width: 100%;
 }
-#axbwelbkmy .gt_spanner_row {
+#okdndsnbky .gt_spanner_row {
 border-bottom-style: hidden;
 }
-#axbwelbkmy .gt_group_heading {
+#okdndsnbky .gt_group_heading {
 padding-top: 8px;
 padding-bottom: 8px;
 padding-left: 5px;
@@ -2988,7 +2991,7 @@ border-right-color: #D3D3D3;
 vertical-align: middle;
 text-align: left;
 }
-#axbwelbkmy .gt_empty_group_heading {
+#okdndsnbky .gt_empty_group_heading {
 padding: 0.5px;
 color: #333333;
 background-color: #FFFFFF;
@@ -3002,13 +3005,13 @@ border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
 vertical-align: middle;
 }
-#axbwelbkmy .gt_from_md > :first-child {
+#okdndsnbky .gt_from_md > :first-child {
 margin-top: 0;
 }
-#axbwelbkmy .gt_from_md > :last-child {
+#okdndsnbky .gt_from_md > :last-child {
 margin-bottom: 0;
 }
-#axbwelbkmy .gt_row {
+#okdndsnbky .gt_row {
 padding-top: 8px;
 padding-bottom: 8px;
 padding-left: 5px;
@@ -3026,7 +3029,7 @@ border-right-color: #D3D3D3;
 vertical-align: middle;
 overflow-x: hidden;
 }
-#axbwelbkmy .gt_stub {
+#okdndsnbky .gt_stub {
 color: #333333;
 background-color: #FFFFFF;
 font-size: 100%;
@@ -3038,7 +3041,7 @@ border-right-color: #D3D3D3;
 padding-left: 5px;
 padding-right: 5px;
 }
-#axbwelbkmy .gt_stub_row_group {
+#okdndsnbky .gt_stub_row_group {
 color: #333333;
 background-color: #FFFFFF;
 font-size: 100%;
@@ -3051,13 +3054,13 @@ padding-left: 5px;
 padding-right: 5px;
 vertical-align: top;
 }
-#axbwelbkmy .gt_row_group_first td {
+#okdndsnbky .gt_row_group_first td {
 border-top-width: 2px;
 }
-#axbwelbkmy .gt_row_group_first th {
+#okdndsnbky .gt_row_group_first th {
 border-top-width: 2px;
 }
-#axbwelbkmy .gt_summary_row {
+#okdndsnbky .gt_summary_row {
 color: #333333;
 background-color: #FFFFFF;
 text-transform: inherit;
@@ -3066,14 +3069,14 @@ padding-bottom: 8px;
 padding-left: 5px;
 padding-right: 5px;
 }
-#axbwelbkmy .gt_first_summary_row {
+#okdndsnbky .gt_first_summary_row {
 border-top-style: solid;
 border-top-color: #D3D3D3;
 }
-#axbwelbkmy .gt_first_summary_row.thick {
+#okdndsnbky .gt_first_summary_row.thick {
 border-top-width: 2px;
 }
-#axbwelbkmy .gt_last_summary_row {
+#okdndsnbky .gt_last_summary_row {
 padding-top: 8px;
 padding-bottom: 8px;
 padding-left: 5px;
@@ -3082,7 +3085,7 @@ border-bottom-style: solid;
 border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
 }
-#axbwelbkmy .gt_grand_summary_row {
+#okdndsnbky .gt_grand_summary_row {
 color: #333333;
 background-color: #FFFFFF;
 text-transform: inherit;
@@ -3091,7 +3094,7 @@ padding-bottom: 8px;
 padding-left: 5px;
 padding-right: 5px;
 }
-#axbwelbkmy .gt_first_grand_summary_row {
+#okdndsnbky .gt_first_grand_summary_row {
 padding-top: 8px;
 padding-bottom: 8px;
 padding-left: 5px;
@@ -3100,7 +3103,7 @@ border-top-style: double;
 border-top-width: 6px;
 border-top-color: #D3D3D3;
 }
-#axbwelbkmy .gt_last_grand_summary_row_top {
+#okdndsnbky .gt_last_grand_summary_row_top {
 padding-top: 8px;
 padding-bottom: 8px;
 padding-left: 5px;
@@ -3109,10 +3112,10 @@ border-bottom-style: double;
 border-bottom-width: 6px;
 border-bottom-color: #D3D3D3;
 }
-#axbwelbkmy .gt_striped {
+#okdndsnbky .gt_striped {
 background-color: rgba(128, 128, 128, 0.05);
 }
-#axbwelbkmy .gt_table_body {
+#okdndsnbky .gt_table_body {
 border-top-style: solid;
 border-top-width: 2px;
 border-top-color: #D3D3D3;
@@ -3120,7 +3123,7 @@ border-bottom-style: solid;
 border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
 }
-#axbwelbkmy .gt_footnotes {
+#okdndsnbky .gt_footnotes {
 color: #333333;
 background-color: #FFFFFF;
 border-bottom-style: none;
@@ -3133,7 +3136,7 @@ border-right-style: none;
 border-right-width: 2px;
 border-right-color: #D3D3D3;
 }
-#axbwelbkmy .gt_footnote {
+#okdndsnbky .gt_footnote {
 margin: 0px;
 font-size: 90%;
 padding-top: 4px;
@@ -3141,7 +3144,7 @@ padding-bottom: 4px;
 padding-left: 5px;
 padding-right: 5px;
 }
-#axbwelbkmy .gt_sourcenotes {
+#okdndsnbky .gt_sourcenotes {
 color: #333333;
 background-color: #FFFFFF;
 border-bottom-style: none;
@@ -3154,64 +3157,64 @@ border-right-style: none;
 border-right-width: 2px;
 border-right-color: #D3D3D3;
 }
-#axbwelbkmy .gt_sourcenote {
+#okdndsnbky .gt_sourcenote {
 font-size: 90%;
 padding-top: 4px;
 padding-bottom: 4px;
 padding-left: 5px;
 padding-right: 5px;
 }
-#axbwelbkmy .gt_left {
+#okdndsnbky .gt_left {
 text-align: left;
 }
-#axbwelbkmy .gt_center {
+#okdndsnbky .gt_center {
 text-align: center;
 }
-#axbwelbkmy .gt_right {
+#okdndsnbky .gt_right {
 text-align: right;
 font-variant-numeric: tabular-nums;
 }
-#axbwelbkmy .gt_font_normal {
+#okdndsnbky .gt_font_normal {
 font-weight: normal;
 }
-#axbwelbkmy .gt_font_bold {
+#okdndsnbky .gt_font_bold {
 font-weight: bold;
 }
-#axbwelbkmy .gt_font_italic {
+#okdndsnbky .gt_font_italic {
 font-style: italic;
 }
-#axbwelbkmy .gt_super {
+#okdndsnbky .gt_super {
 font-size: 65%;
 }
-#axbwelbkmy .gt_footnote_marks {
+#okdndsnbky .gt_footnote_marks {
 font-size: 75%;
 vertical-align: 0.4em;
 position: initial;
 }
-#axbwelbkmy .gt_asterisk {
+#okdndsnbky .gt_asterisk {
 font-size: 100%;
 vertical-align: 0;
 }
-#axbwelbkmy .gt_indent_1 {
+#okdndsnbky .gt_indent_1 {
 text-indent: 5px;
 }
-#axbwelbkmy .gt_indent_2 {
+#okdndsnbky .gt_indent_2 {
 text-indent: 10px;
 }
-#axbwelbkmy .gt_indent_3 {
+#okdndsnbky .gt_indent_3 {
 text-indent: 15px;
 }
-#axbwelbkmy .gt_indent_4 {
+#okdndsnbky .gt_indent_4 {
 text-indent: 20px;
 }
-#axbwelbkmy .gt_indent_5 {
+#okdndsnbky .gt_indent_5 {
 text-indent: 25px;
 }
-#axbwelbkmy .katex-display {
+#okdndsnbky .katex-display {
 display: inline-flex !important;
 margin-bottom: 0.75em !important;
 }
-#axbwelbkmy div.Reactable > div.rt-table > div.rt-thead > div.rt-tr.rt-tr-group-header > div.rt-th-group:after {
+#okdndsnbky div.Reactable > div.rt-table > div.rt-thead > div.rt-tr.rt-tr-group-header > div.rt-th-group:after {
 height: 0px !important;
 }
 </style>
@@ -3315,12 +3318,14 @@ height: 0px !important;
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="fu">saveRDS</span>(</span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>  mae, </span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>  mae,</span>
 <span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">str_c</span>(</span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">get_04_output_dir</span>(),  </span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;mae_full_&quot;</span>, <span class="fu">today</span>() <span class="sc">|&gt;</span> <span class="fu">str_remove_all</span>(<span class="st">&quot;-&quot;</span>), <span class="st">&quot;.rds&quot;</span></span>
-<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">get_04_output_dir</span>(),</span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;mae_full_&quot;</span>,</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>    <span class="fu">today</span>() <span class="sc">|&gt;</span> <span class="fu">str_remove_all</span>(<span class="st">&quot;-&quot;</span>),</span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;.rds&quot;</span></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
 </section>

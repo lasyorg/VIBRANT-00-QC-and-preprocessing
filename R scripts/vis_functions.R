@@ -1,4 +1,3 @@
-
 plot_tabs <- function(plots) {
   purrr::walk(
     names(plots),

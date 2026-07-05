@@ -44,18 +44,17 @@ theme_set(theme_light())
 
 ```{r}
 
-mae_files <- 
+mae_files <-
   fs::dir_ls(
     get_03_output_dir(),
     regexp = "mae_full_02_.*\\.rds$"
-  ) |> 
+  ) |>
   sort(decreasing = TRUE) |>
   magrittr::extract(1)
 
 mae <- readRDS(mae_files)
 
 rm(mae_files)
-
 ```
 
 
@@ -73,28 +72,31 @@ The resulting table is stored in `mae@metadata$calc_vars_study_day` and contains
 
 ```{r}
 
-# Initialize the table with one row per participant and study day until day 35 
-pid <- mae@colData |> as_tibble() |> filter(!is.na(pid)) |>  pull(pid) |> unique()
+# Initialize the table with one row per participant and study day until day 35
+pid <- mae@colData |>
+  as_tibble() |>
+  filter(!is.na(pid)) |>
+  pull(pid) |>
+  unique()
 study_day <- 0:35
 
-calc_vars_study_day <- 
-  expand_grid(pid, study_day) 
+calc_vars_study_day <-
+  expand_grid(pid, study_day)
 
-# add the rest of study_day (>35) to the table 
+# add the rest of study_day (>35) to the table
 
-calc_vars_study_day <- 
-  calc_vars_study_day |> 
+calc_vars_study_day <-
+  calc_vars_study_day |>
   bind_rows(
-    mae@colData |> 
-      as_tibble() |> 
-      select(pid, study_day) |> 
+    mae@colData |>
+      as_tibble() |>
+      select(pid, study_day) |>
       filter(!is.na(pid), !is.na(study_day), study_day > 35) |>
       distinct()
   )
 
-mae@metadata$calc_vars_study_day <- 
+mae@metadata$calc_vars_study_day <-
   calc_vars_study_day
-
 ```
 
 
@@ -105,12 +107,13 @@ All variables in the `calc_vars_study_day` table are created by merging and tran
 visits_crfs_merged <-
   metadata(mae)$visits_crfs_merged |>
   left_join(
-    mae@colData |> as_tibble() |> select(uid, site, visit_type, randomized, ITT, mITT, PP) |> distinct(),
+    mae@colData |>
+      as_tibble() |>
+      select(uid, site, visit_type, randomized, ITT, mITT, PP) |>
+      distinct(),
     by = c("uid")
   ) |>
   select(uid, pid, visit_code, study_day, visit_type, everything())
-
-
 ```
 
 ## Sexual behavior
@@ -127,10 +130,25 @@ The goal of this exploratory analysis is to assess the consistency between self-
 
 ```{r}
 
-sex <- 
-  visits_crfs_merged |> 
-  select(uid, pid, study_day, visit_code, visit_type, randomized, site, sex_past_24hours.crf33, condom_use.crf33 = condom_use, lubricant_use, sex_type, past_week_sex_partner, sex_past_24hours.crf20, condom_use.crf20 = use_condoms, psa_results)
-
+sex <-
+  visits_crfs_merged |>
+  select(
+    uid,
+    pid,
+    study_day,
+    visit_code,
+    visit_type,
+    randomized,
+    site,
+    sex_past_24hours.crf33,
+    condom_use.crf33 = condom_use,
+    lubricant_use,
+    sex_type,
+    past_week_sex_partner,
+    sex_past_24hours.crf20,
+    condom_use.crf20 = use_condoms,
+    psa_results
+  )
 ```
 
 ### PSA results
@@ -142,22 +160,21 @@ PSA was performed on swabs collecetd at the clinic visits 1000, 1200, 1500 and 2
 #| fig-height: 8
 #| fig-width: 6
 
-
-sex |> 
+sex |>
   filter(randomized) |>
   filter(!is.na(psa_results)) |>
   ggplot() +
   aes(x = visit_code, y = pid, fill = psa_results) +
-  geom_tile() + 
-  facet_grid(site ~ ., scales = "free_y", space = "free") + 
+  geom_tile() +
+  facet_grid(site ~ ., scales = "free_y", space = "free") +
   scale_fill_manual(
     values = c(
-      "Negative" = "lightgray", 
-      "Positive" = "steelblue", 
-      "Not done" = "white", 
-      "Invalid" = "black")
+      "Negative" = "lightgray",
+      "Positive" = "steelblue",
+      "Not done" = "white",
+      "Invalid" = "black"
+    )
   )
-
 ```
 
 
@@ -184,64 +201,79 @@ We first explore the daily responses from CRF33. We are interested in the sexual
 #| fig.height: 8
 #| fig.width: 10
 
-
-p1 <- 
-  sex |> 
-  filter(sex_past_24hours.crf33 == "Yes") |> 
+p1 <-
+  sex |>
+  filter(sex_past_24hours.crf33 == "Yes") |>
   filter(randomized) |>
-  #mutate(pid = pid |> as.character() |> factor(levels = all_pids) |> fct_infreq() |> fct_rev()) |> 
+  #mutate(pid = pid |> as.character() |> factor(levels = all_pids) |> fct_infreq() |> fct_rev()) |>
   ggplot() +
   aes(
-    x = visit_code |> factor(), y = pid, 
-    col = condom_use.crf33, shape = sex_type
+    x = visit_code |> factor(),
+    y = pid,
+    col = condom_use.crf33,
+    shape = sex_type
   ) +
   geom_point() +
   facet_grid(site ~ ., scales = "free_y", space = "free") +
   scale_color_manual(
-    "Condom use", 
-    values = c("Never" = "black", "Sometimes" = "deeppink4", "Always" = "deeppink1", "Unknown" = "gray70")
+    "Condom use",
+    values = c(
+      "Never" = "black",
+      "Sometimes" = "deeppink4",
+      "Always" = "deeppink1",
+      "Unknown" = "gray70"
+    )
   ) +
   scale_shape_manual(values = c(16, 17, 15, 18, 8, 22, 5, 2)) +
   scale_y_discrete(drop = FALSE) +
   labs(
-    x = "Visit code", y = "Participants",
-    shape = "Sex type", 
+    x = "Visit code",
+    y = "Participants",
+    shape = "Sex type",
     title = "Condom use"
   ) +
   theme(
     axis.text.y = element_blank(),
-    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), 
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
     plot.title = element_text(hjust = 0.5)
   )
 
-p2 <- 
-  sex |> 
-  filter(sex_past_24hours.crf33 == "Yes") |> 
+p2 <-
+  sex |>
+  filter(sex_past_24hours.crf33 == "Yes") |>
   filter(randomized) |>
-  #mutate(pid = pid |> as.character() |> factor(levels = all_pids) |> fct_infreq() |> fct_rev()) |> 
+  #mutate(pid = pid |> as.character() |> factor(levels = all_pids) |> fct_infreq() |> fct_rev()) |>
   ggplot() +
   aes(
-    x = visit_code |> factor(), y = pid, 
-    col = lubricant_use, shape = sex_type
+    x = visit_code |> factor(),
+    y = pid,
+    col = lubricant_use,
+    shape = sex_type
   ) +
   geom_point() +
   facet_grid(site ~ ., scales = "free_y", space = "free") +
   scale_color_manual(
-    "Lubricant use", 
-    values = c("Never" = "black", "Sometimes" = "gold3", "Always" = "gold", "Unknown" = "gray70")
+    "Lubricant use",
+    values = c(
+      "Never" = "black",
+      "Sometimes" = "gold3",
+      "Always" = "gold",
+      "Unknown" = "gray70"
+    )
   ) +
   scale_shape_manual(values = c(16, 17, 15, 18, 8, 22, 5, 2)) +
   scale_y_discrete(drop = FALSE) +
   labs(
-    x = "Visit code", y = "Participants",
-    shape = "Sex type", 
+    x = "Visit code",
+    y = "Participants",
+    shape = "Sex type",
     title = "Lubricant use"
   ) +
   theme(
     axis.text.y = element_blank(),
-    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), 
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
     plot.title = element_text(hjust = 0.5)
-  ) 
+  )
 
 (p1 + p2) +
   plot_layout(guides = "collect") &
@@ -256,24 +288,24 @@ We look at the relationship between condom use, lubricant use and sex. All parti
 
 sex |>
   mutate(visit_code = visit_code |> as.numeric()) |>
-  filter(visit_type == "Home") |> 
+  filter(visit_type == "Home") |>
   filter(randomized) |>
-  dplyr::count(site, sex_past_24hours.crf33, condom_use.crf33, lubricant_use) |> 
-  ggplot() + 
+  dplyr::count(site, sex_past_24hours.crf33, condom_use.crf33, lubricant_use) |>
+  ggplot() +
   geom_tile(aes(x = condom_use.crf33, y = lubricant_use, fill = n)) +
-  geom_text(aes(x = condom_use.crf33, y = lubricant_use, label = n)) + 
-  scale_fill_gradient(low = "white", high = "steelblue1") + 
-  facet_grid(site ~ sex_past_24hours.crf33, 
-             labeller = as_labeller(c(
-               "No" = "No sex in the past 24h", 
-               "Yes" = "Sex in the past 24h", 
-               "MGH" = "MGH",
-               "CAP" = "CAP"
-               ))
-             ) +
+  geom_text(aes(x = condom_use.crf33, y = lubricant_use, label = n)) +
+  scale_fill_gradient(low = "white", high = "steelblue1") +
+  facet_grid(
+    site ~ sex_past_24hours.crf33,
+    labeller = as_labeller(c(
+      "No" = "No sex in the past 24h",
+      "Yes" = "Sex in the past 24h",
+      "MGH" = "MGH",
+      "CAP" = "CAP"
+    ))
+  ) +
   labs(x = "Condom use", y = "Lubricant use") +
   guides(fill = "none")
-
 ```
 
 We look at the relationship between condom use, sex type and sex. All participants that reported no sex in the past 24 hours reported "Blank" for condom use and "NA" for sex type. Participants that reported having sex in the past 24 hours reported mainly "Never" for condom use and "Vaginal" for sex type.
@@ -284,37 +316,43 @@ We look at the relationship between condom use, sex type and sex. All participan
 
 sex |>
   mutate(visit_code = visit_code |> as.numeric()) |>
-  filter(visit_type == "Home") |> 
+  filter(visit_type == "Home") |>
   filter(randomized) |>
-  dplyr::count(site, sex_past_24hours.crf33, condom_use.crf33, sex_type) |> 
-  ggplot() + 
+  dplyr::count(site, sex_past_24hours.crf33, condom_use.crf33, sex_type) |>
+  ggplot() +
   geom_tile(aes(x = condom_use.crf33, y = sex_type, fill = n)) +
-  geom_text(aes(x = condom_use.crf33, y = sex_type, label = n)) + 
-  scale_fill_gradient(low = "white", high = "steelblue1") + 
-  facet_grid(site ~ sex_past_24hours.crf33, 
-             labeller = as_labeller(c(
-               "No" = "No sex in the past 24h", 
-               "Yes" = "Sex in the past 24h", 
-                "MGH" = "MGH",
-                "CAP" = "CAP"
-             ))
-             ) +
+  geom_text(aes(x = condom_use.crf33, y = sex_type, label = n)) +
+  scale_fill_gradient(low = "white", high = "steelblue1") +
+  facet_grid(
+    site ~ sex_past_24hours.crf33,
+    labeller = as_labeller(c(
+      "No" = "No sex in the past 24h",
+      "Yes" = "Sex in the past 24h",
+      "MGH" = "MGH",
+      "CAP" = "CAP"
+    ))
+  ) +
   labs(x = "Condom use", y = "Sex type") +
   guides(fill = "none")
-
 ```
 
 Three participants that reported having sex in the last 24 hours reported "Unknown" for condom use and lubricant use. For two of them, the type of sex was "mounth-vagina".
 
 ```{r}
  
-sex |> 
+sex |>
   filter(!is.na(sex_past_24hours.crf33)) |>
   filter(randomized) |>
   filter(condom_use.crf33 == "Unknown" | lubricant_use == "Unknown") |>
-  select(pid, visit_code, sex_past_24hours.crf33, sex_type, condom_use.crf33, lubricant_use) |> 
+  select(
+    pid,
+    visit_code,
+    sex_past_24hours.crf33,
+    sex_type,
+    condom_use.crf33,
+    lubricant_use
+  ) |>
   gt(caption = "Zoom on unknown condom/lubricant use")
-
 ```
 
 
@@ -326,36 +364,40 @@ We first look at the past week sex partner and the condom use.
 
 ```{r}
 
-sex |> 
-  filter(visit_type == "Clinic") |> 
+sex |>
+  filter(visit_type == "Clinic") |>
   filter(randomized) |>
   select(pid, visit_code, past_week_sex_partner) |>
-  distinct() |> 
-  dplyr::count(visit_code, past_week_sex_partner) |> 
-  pivot_wider(names_from = past_week_sex_partner, values_from = n, values_fill = 0) |>
+  distinct() |>
+  dplyr::count(visit_code, past_week_sex_partner) |>
+  pivot_wider(
+    names_from = past_week_sex_partner,
+    values_from = n,
+    values_fill = 0
+  ) |>
   gt(caption = "Past week sex partner by visit")
-
 ```
 
 ```{r}
 
-sex |> 
-  filter(visit_type == "Clinic") |> 
+sex |>
+  filter(visit_type == "Clinic") |>
   filter(randomized) |>
-  select(pid, visit_code, past_week_sex_partner, condom_use.crf20) |> 
-  distinct() |> 
-  dplyr::count(past_week_sex_partner, condom_use.crf20) |> 
-  ggplot() + 
+  select(pid, visit_code, past_week_sex_partner, condom_use.crf20) |>
+  distinct() |>
+  dplyr::count(past_week_sex_partner, condom_use.crf20) |>
+  ggplot() +
   aes(x = past_week_sex_partner, y = condom_use.crf20, fill = n) +
-  geom_tile() + 
-  geom_text(aes(label=n)) + 
-  scale_fill_gradient(low = "white", high = "steelblue1") + 
+  geom_tile() +
+  geom_text(aes(label = n)) +
+  scale_fill_gradient(low = "white", high = "steelblue1") +
   guides(fill = "none") +
-  labs(y = "Use condom", x = "Sexual partner(s) in the past week") + 
-  theme(strip.text = element_text(size = 12), 
-        axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(y = "Use condom", x = "Sexual partner(s) in the past week") +
+  theme(
+    strip.text = element_text(size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
   coord_fixed()
-
 ```
 
 
@@ -366,20 +408,20 @@ Here the variable is encoded as the "sex.type" variable.
 #| fig.height: 8
 #| fig.width: 10
 
-sex |> 
-  filter(visit_type == "Clinic") |> 
+sex |>
+  filter(visit_type == "Clinic") |>
   filter(randomized) |>
-  filter(sex_past_24hours.crf20 !="No") |> 
-  ggplot() + 
-  aes(x = visit_code |> as.factor(), y = pid, shape = sex_past_24hours.crf20) + 
-  geom_point() + 
+  filter(sex_past_24hours.crf20 != "No") |>
+  ggplot() +
+  aes(x = visit_code |> as.factor(), y = pid, shape = sex_past_24hours.crf20) +
+  geom_point() +
   facet_grid(site ~ ., scales = "free_y", space = "free") +
-  scale_shape_manual(values = c(16, 17, 15, 18, 8, 22, 5, 2)) + 
+  scale_shape_manual(values = c(16, 17, 15, 18, 8, 22, 5, 2)) +
   labs(
-        x = "Visit code", y = "Participants",
-        shape = "Sex past 24h\n(=Sex type)"
-    )
-
+    x = "Visit code",
+    y = "Participants",
+    shape = "Sex past 24h\n(=Sex type)"
+  )
 ```
 
 ```{r}
@@ -387,7 +429,7 @@ sex |>
 sex |>
   filter(visit_type == "Clinic", visit_code != "0000", visit_code != "0010") |>
   filter(randomized) |>
-  dplyr::count(site, visit_code, sex_past_24hours.crf20) |> 
+  dplyr::count(site, visit_code, sex_past_24hours.crf20) |>
   ggplot() +
   aes(y = sex_past_24hours.crf20, x = visit_code |> as_factor()) +
   geom_tile(aes(fill = n)) +
@@ -395,8 +437,7 @@ sex |>
   facet_grid(site ~ ., scales = "free_y", space = "free") +
   scale_fill_gradient(low = "white", high = "steelblue1") +
   labs(y = "Sex in past 24h", x = "Visit") +
-  guides(fill = "none") 
-
+  guides(fill = "none")
 ```
 
 We plot the relationship between `past_week_sex_partner`, `condom_use.crf20` and `sex_past_24hours.crf20`. We can see that participants
@@ -405,26 +446,35 @@ We plot the relationship between `past_week_sex_partner`, `condom_use.crf20` and
 #| fig.height: 8
 #| fig.width: 10
 
-
-sex |> 
-  filter(visit_type == "Clinic") |> 
+sex |>
+  filter(visit_type == "Clinic") |>
   filter(randomized) |>
-  filter(!str_detect(past_week_sex_partner, "No")) |> 
-  ggplot() + 
-  aes(x = visit_code |> as.factor(), y = pid, shape = past_week_sex_partner, col = condom_use.crf20) + 
-  geom_point() + 
+  filter(!str_detect(past_week_sex_partner, "No")) |>
+  ggplot() +
+  aes(
+    x = visit_code |> as.factor(),
+    y = pid,
+    shape = past_week_sex_partner,
+    col = condom_use.crf20
+  ) +
+  geom_point() +
   facet_grid(site ~ ., scales = "free_y", space = "free") +
   scale_shape_manual(values = c(16, 17)) +
   scale_color_manual(
-    "Condom use", 
-    values = c("No" = "black", "Sometimes" = "deeppink4", "Every time" = "deeppink1", "Not applicable" = "gray70")
-  ) + 
-  labs(
-        x = "Visit code", y = "Participants",
-        shape = "Past week sexual partner(s)",
-        col = "Condom use in the past week"
+    "Condom use",
+    values = c(
+      "No" = "black",
+      "Sometimes" = "deeppink4",
+      "Every time" = "deeppink1",
+      "Not applicable" = "gray70"
     )
-
+  ) +
+  labs(
+    x = "Visit code",
+    y = "Participants",
+    shape = "Past week sexual partner(s)",
+    col = "Condom use in the past week"
+  )
 ```
 
 
@@ -438,34 +488,39 @@ Is it possible that the inconsistencies are due to the fact that the question "D
 #| fig.height: 8
 #| fig.width: 10
 
-sex |> 
-  filter(visit_type == "Clinic") |> 
+sex |>
+  filter(visit_type == "Clinic") |>
   filter(randomized) |>
-  #filter(sex_past_24hours.crf20 !="No") |> 
-  ggplot() + 
-  aes(x = visit_code |> as.factor(), y = pid, shape = sex_past_24hours.crf20, colour = past_week_sex_partner) + 
-  geom_point() + 
+  #filter(sex_past_24hours.crf20 !="No") |>
+  ggplot() +
+  aes(
+    x = visit_code |> as.factor(),
+    y = pid,
+    shape = sex_past_24hours.crf20,
+    colour = past_week_sex_partner
+  ) +
+  geom_point() +
   facet_grid(site ~ ., scales = "free_y", space = "free") +
-  scale_shape_manual(values = c(1, 17, 15, 18, 8, 22, 5, 2)) + 
+  scale_shape_manual(values = c(1, 17, 15, 18, 8, 22, 5, 2)) +
   scale_color_manual(values = c("gray70", "orchid1", "orchid4")) +
   labs(
-        x = "Visit code", y = "Participants",
-        shape = "Did you have sex in the past 24 hour ?",
-        col = "In the past week have you had sex with"
-    )
-
+    x = "Visit code",
+    y = "Participants",
+    shape = "Did you have sex in the past 24 hour ?",
+    col = "In the past week have you had sex with"
+  )
 ```
 
 ```{r}
 #| eval: false
 
-sex |> 
-  filter(visit_type == "Clinic") |> 
-  group_by(visit_code) |> 
+sex |>
+  filter(visit_type == "Clinic") |>
+  group_by(visit_code) |>
   dplyr::count(
-    (sex_past_24hours.crf20 != "No" & !is.na(sex_past_24hours.crf20)) & past_week_sex_partner == "No sex in the past week"
-  ) 
-
+    (sex_past_24hours.crf20 != "No" & !is.na(sex_past_24hours.crf20)) &
+      past_week_sex_partner == "No sex in the past week"
+  )
 ```
 
 
@@ -485,41 +540,49 @@ We merged the information from sex_past_24hours from the daily CRF (CRF33) and t
 # sex_past_24hours in the weekly crf20 is encoded as the sex_type
 # we also complete the sex_type variable with this information
 
-sex <- 
-  sex |> 
+sex <-
+  sex |>
   mutate(
     sex_past_24hours = case_when(
       !is.na(sex_past_24hours.crf33) ~ sex_past_24hours.crf33,
       !is.na(sex_past_24hours.crf20) & sex_past_24hours.crf20 != "No" ~ "Yes",
-      !is.na(sex_past_24hours.crf20) & sex_past_24hours.crf20 == "No"  ~ "No",
+      !is.na(sex_past_24hours.crf20) & sex_past_24hours.crf20 == "No" ~ "No",
       TRUE ~ NA_character_
     ),
-    
+
     condom_use = case_when(
-      !is.na(sex_past_24hours.crf20) & sex_past_24hours.crf20 != "No" ~ "Unknown",
+      !is.na(sex_past_24hours.crf20) &
+        sex_past_24hours.crf20 != "No" ~ "Unknown",
       TRUE ~ condom_use.crf33
     ),
-    
+
     lubricant_use = case_when(
-      !is.na(sex_past_24hours.crf20) & sex_past_24hours.crf20 != "No" ~ "Unknown",
+      !is.na(sex_past_24hours.crf20) &
+        sex_past_24hours.crf20 != "No" ~ "Unknown",
       TRUE ~ lubricant_use
     ),
-    
+
     sex_type = case_when(
-      sex_past_24hours.crf20 == "penis_vagina" ~ "penis-vagina", 
+      sex_past_24hours.crf20 == "penis_vagina" ~ "penis-vagina",
       sex_past_24hours.crf20 == "oral_sex" ~ "mouth-vagina",
-      sex_past_24hours.crf20 == "fingering, penis_vagina" ~ "penis-vagina, finger-vagina", 
+      sex_past_24hours.crf20 == "fingering, penis_vagina" ~ "penis-vagina, finger-vagina",
       sex_past_24hours.crf20 == "oral_sex, penis_vagina" ~ "penis-vagina, mouth-vagina",
-      sex_past_24hours.crf20 == "fingering, oral_sex, penis_vagina" ~ "penis-vagina, finger-vagina, mouth-vagina",
+      sex_past_24hours.crf20 ==
+        "fingering, oral_sex, penis_vagina" ~ "penis-vagina, finger-vagina, mouth-vagina",
       sex_past_24hours.crf20 == "anal_sex" ~ "anal",
       TRUE ~ sex_type
     )
   )
 
 #check
-sex |> 
-  dplyr::count(sex_past_24hours, sex_past_24hours.crf33, sex_past_24hours.crf20, sex_type) |> 
-  gt() |> 
+sex |>
+  dplyr::count(
+    sex_past_24hours,
+    sex_past_24hours.crf33,
+    sex_past_24hours.crf20,
+    sex_type
+  ) |>
+  gt() |>
   cols_label(
     sex_past_24hours = "sex_past_24hours (harmonized)",
     sex_past_24hours.crf33 = "sex_past_24hours (CRF33 - daily)",
@@ -527,7 +590,6 @@ sex |>
     sex_type = "sex_type",
     n = "Count"
   )
- 
 ```
 
 Some participants have the same `study_day` for both a clinic visit and a home (daily diary) visit. This occurs when a clinical visit and a daily diary entry fall on the same calendar day. In those cases, we have two rows for the same participant and study day, with potentially conflicting information on sexual behaviour. 
@@ -553,45 +615,50 @@ sex |>
   left_join(sex, by = c("pid", "study_day")) |>
   select(pid, study_day, sex_past_24hours, condom_use, sex_type, psa_results) |>
   arrange(pid, study_day) |>
-  gt(caption = "Duplicated (pid, study_day) before harmonisation") 
-
+  gt(caption = "Duplicated (pid, study_day) before harmonisation")
 ```
 
 ```{r}
 
-sex <- 
+sex <-
   sex |>
   group_by(pid, study_day) |>
   mutate(
     # Sex : Clinic prime si Clinic = Yes, sinon Home prime
     sex_past_24hours = case_when(
       any(visit_type == "Clinic" & sex_past_24hours == "Yes") ~ "Yes",
-      any(visit_type == "Home")   ~ sex_past_24hours[visit_type == "Home"][1],
+      any(visit_type == "Home") ~ sex_past_24hours[visit_type == "Home"][1],
       TRUE ~ sex_past_24hours[1]
     ),
-    
+
     # Condom : si Clinic a forcé sex = Yes → Unknown, sinon Home prime
     condom_use = case_when(
-      any(visit_type == "Clinic" & sex_past_24hours == "Yes") & 
+      any(visit_type == "Clinic" & sex_past_24hours == "Yes") &
         any(visit_type == "Home" & sex_past_24hours == "No") ~ "Unknown", # Clinic a primé
-      any(visit_type == "Home" & sex_past_24hours == "Yes") ~ condom_use[visit_type == "Home" & sex_past_24hours == "Yes"][1],
+      any(visit_type == "Home" & sex_past_24hours == "Yes") ~ condom_use[
+        visit_type == "Home" & sex_past_24hours == "Yes"
+      ][1],
       TRUE ~ condom_use[1]
     ),
-    
+
     # Sex type : même logique que condom
     sex_type = case_when(
       any(visit_type == "Clinic" & sex_past_24hours == "Yes") &
-        any(visit_type == "Home" & sex_past_24hours == "No") ~ sex_type[visit_type == "Clinic"][1],
-      any(visit_type == "Home" & sex_past_24hours == "Yes") ~ sex_type[visit_type == "Home" & sex_past_24hours == "Yes"][1],
+        any(visit_type == "Home" & sex_past_24hours == "No") ~ sex_type[
+        visit_type == "Clinic"
+      ][1],
+      any(visit_type == "Home" & sex_past_24hours == "Yes") ~ sex_type[
+        visit_type == "Home" & sex_past_24hours == "Yes"
+      ][1],
       TRUE ~ sex_type[1]
     ),
-    
+
     # PSA toujours depuis Clinic
     psa_results = case_when(
       any(visit_type == "Clinic") ~ psa_results[visit_type == "Clinic"][1],
       TRUE ~ psa_results[1]
     ),
-    
+
     # Metadata : visit_code Clinic, visit_type concaténé si doublon
     visit_code = case_when(
       any(visit_type == "Clinic") ~ visit_code[visit_type == "Clinic"][1],
@@ -602,21 +669,22 @@ sex <-
       TRUE ~ visit_type[1]
     )
   ) |>
-  dplyr::slice(1) |>  # une seule ligne par (pid, study_day)
+  dplyr::slice(1) |> # une seule ligne par (pid, study_day)
   ungroup()
 
 
 # Vérifier les cas Clinic & Home
-sex |> 
+sex |>
   filter(visit_type == "Clinic & Home") |>
   dplyr::count(sex_past_24hours, condom_use) |>
-  gt(caption = "Duplicated (pid, study_day) after harmonisation - Clinic & Home") |>
+  gt(
+    caption = "Duplicated (pid, study_day) after harmonisation - Clinic & Home"
+  ) |>
   cols_label(
     sex_past_24hours = "Sex in past 24h (harmonized)",
     condom_use = "Condom use (harmonized)",
     n = "Count"
   )
-
 ```
 
 
@@ -633,38 +701,44 @@ We first look at the consitency between the variable `sex_past_24hours` from CRF
 #| fig-height: 10
 #| fig-width: 10
 
-sex |> 
-  filter(!is.na(visit_code)) |> 
-  ggplot() + 
+sex |>
+  filter(!is.na(visit_code)) |>
+  ggplot() +
   aes(x = visit_code, y = pid) +
-  geom_point(data = sex |> 
-               filter(sex_past_24hours.crf33 == "Yes"), 
-             aes(fill = sex_past_24hours.crf33),
-             size = 2.5, alpha = 0.5, shape = 21) +
-  geom_point(data = sex |> 
-               filter(!is.na(past_week_sex_partner)), 
-             aes(color = past_week_sex_partner), 
-             size = 2.5) +
+  geom_point(
+    data = sex |>
+      filter(sex_past_24hours.crf33 == "Yes"),
+    aes(fill = sex_past_24hours.crf33),
+    size = 2.5,
+    alpha = 0.5,
+    shape = 21
+  ) +
+  geom_point(
+    data = sex |>
+      filter(!is.na(past_week_sex_partner)),
+    aes(color = past_week_sex_partner),
+    size = 2.5
+  ) +
   scale_fill_manual(
     name = "Sex in past 24h",
     values = c("Yes" = "orchid1", "No" = "white")
   ) +
   scale_color_manual(
     name = "Sex partner past week",
-    values = c("No sex in the past week" = "grey80", 
-               "A single male partner" = "orchid1", 
-               "Multiple male partners" = "orchid3")
+    values = c(
+      "No sex in the past week" = "grey80",
+      "A single male partner" = "orchid1",
+      "Multiple male partners" = "orchid3"
+    )
   ) +
-  labs(x = "Visit", y = "Participant ID") + 
+  labs(x = "Visit", y = "Participant ID") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-
 ```
 
 
 ```{r}
 
-daily_summary <- 
+daily_summary <-
   sex |>
   filter(visit_type %in% c("Home", "Clinic & Home")) |>
   mutate(period = str_sub(visit_code, 1, 2)) |>
@@ -680,22 +754,24 @@ daily_summary <-
 sex |>
   filter(visit_type == "Clinic") |>
   mutate(period = str_sub(visit_code, 1, 2)) |>
-  select(pid, period, past_week_sex_partner) |> 
+  select(pid, period, past_week_sex_partner) |>
   left_join(daily_summary, by = c("pid", "period")) |>
-  filter(period < 16 & period !="00") |> 
+  filter(period < 16 & period != "00") |>
   mutate(
-    inconsistency_1 = any_daily_sex & (past_week_sex_partner == "No sex in the past week"),
-    inconsistency_2 = all_daily_no_sex & (past_week_sex_partner != "No sex in the past week")
-  ) |> 
-  dplyr::count(inconsistency_1, inconsistency_2) |> 
-  gt(caption = "Table of inconsistencies between daily and weekly sexual behaviour reports between visits 1000 and 1500") |> 
+    inconsistency_1 = any_daily_sex &
+      (past_week_sex_partner == "No sex in the past week"),
+    inconsistency_2 = all_daily_no_sex &
+      (past_week_sex_partner != "No sex in the past week")
+  ) |>
+  dplyr::count(inconsistency_1, inconsistency_2) |>
+  gt(
+    caption = "Table of inconsistencies between daily and weekly sexual behaviour reports between visits 1000 and 1500"
+  ) |>
   cols_label(
     inconsistency_1 = "Daily sex but no weekly",
     inconsistency_2 = "Weekly sex but no daily",
     n = "Count"
-  ) 
-
-
+  )
 ```
 
 We do the same with the condom use. At the weekly clinical visits, participants were ask if they used condom in the past week (In the past week, if you had male partners, did you use condoms? - `use_condom`). This should be consistent with the daily reports of condom use in the past 24 hours.
@@ -705,36 +781,59 @@ We do the same with the condom use. At the weekly clinical visits, participants 
 #| fig-height: 10
 #| fig-width: 10
 
-sex |> 
-  filter(!is.na(visit_code)) |> 
-  ggplot() + 
+sex |>
+  filter(!is.na(visit_code)) |>
+  ggplot() +
   aes(x = visit_code, y = pid) +
-  geom_point(data = sex |> 
-               mutate(condom_daily = ifelse(condom_use.crf33 %in% c("Always", "Sometimes"), "Yes", "No")) |>
-               filter(condom_daily == "Yes"), 
-             aes(fill = condom_daily),
-             size = 2.5, alpha = 0.5, shape = 21) +
-  geom_point(data = sex |> 
-               mutate(condom_weekly = ifelse(condom_use.crf20 %in% c("Every time", "Sometimes"), "Yes", "No")) |>
-               filter(condom_weekly == "Yes"),
-             aes(color = condom_weekly), 
-             size = 2.5) +
-  labs(x = "Visit", y = "Participant ID") + 
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
-
+  geom_point(
+    data = sex |>
+      mutate(
+        condom_daily = ifelse(
+          condom_use.crf33 %in% c("Always", "Sometimes"),
+          "Yes",
+          "No"
+        )
+      ) |>
+      filter(condom_daily == "Yes"),
+    aes(fill = condom_daily),
+    size = 2.5,
+    alpha = 0.5,
+    shape = 21
+  ) +
+  geom_point(
+    data = sex |>
+      mutate(
+        condom_weekly = ifelse(
+          condom_use.crf20 %in% c("Every time", "Sometimes"),
+          "Yes",
+          "No"
+        )
+      ) |>
+      filter(condom_weekly == "Yes"),
+    aes(color = condom_weekly),
+    size = 2.5
+  ) +
+  labs(x = "Visit", y = "Participant ID") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
 
 ```{r}
 
-daily_summary <- 
+daily_summary <-
   sex |>
   filter(visit_type %in% c("Home", "Clinic & Home")) |>
   mutate(period = str_sub(visit_code, 1, 2)) |>
   group_by(pid, period) |>
   summarise(
-    any_daily_condom= any(condom_use.crf33 %in% c("Always", "Sometimes"), na.rm = TRUE),
-    all_daily_no_condom = all(condom_use.crf33 %in% c("Never", "Unknown", "Blank"), na.rm = TRUE),
+    any_daily_condom = any(
+      condom_use.crf33 %in% c("Always", "Sometimes"),
+      na.rm = TRUE
+    ),
+    all_daily_no_condom = all(
+      condom_use.crf33 %in% c("Never", "Unknown", "Blank"),
+      na.rm = TRUE
+    ),
     n_daily_visits = n(),
     .groups = "drop"
   )
@@ -746,25 +845,30 @@ sex |>
   select(pid, period, condom_use.crf20) |>
   mutate(
     past_week_condom = case_when(
-      condom_use.crf20 %in% c("Every time", "Sometimes") ~ "Yes condom in past week",
-      condom_use.crf20 %in% c("Never", "Not applicable") ~ "No condom in past week",
+      condom_use.crf20 %in%
+        c("Every time", "Sometimes") ~ "Yes condom in past week",
+      condom_use.crf20 %in%
+        c("Never", "Not applicable") ~ "No condom in past week",
       TRUE ~ NA_character_
     )
   ) |>
   left_join(daily_summary, by = c("pid", "period")) |>
-  filter(period < 16 & period !="00") |> 
+  filter(period < 16 & period != "00") |>
   mutate(
-    inconsistency_1 = any_daily_condom & (past_week_condom == "No condom in past week"),
-    inconsistency_2 = all_daily_no_condom & (past_week_condom == "Yes condom in past week")
-  ) |> 
-  dplyr::count(inconsistency_1, inconsistency_2) |> 
-  gt(caption = "Table of inconsistencies between daily and weekly condom use reports between visits 1000 and 1500") |> 
+    inconsistency_1 = any_daily_condom &
+      (past_week_condom == "No condom in past week"),
+    inconsistency_2 = all_daily_no_condom &
+      (past_week_condom == "Yes condom in past week")
+  ) |>
+  dplyr::count(inconsistency_1, inconsistency_2) |>
+  gt(
+    caption = "Table of inconsistencies between daily and weekly condom use reports between visits 1000 and 1500"
+  ) |>
   cols_label(
     inconsistency_1 = "Any condom use daily but no reported weekly",
     inconsistency_2 = "No condom use daily but reported weekly",
     n = "Count"
-  ) 
-
+  )
 ```
 
 #### SF Semen Exposure Variables
@@ -787,19 +891,34 @@ If a participant have FALSE values for all the SF variables, it means they did n
 
 # Creating SF_semen_exposure
 
-sex <- 
-  sex |> 
+sex <-
+  sex |>
   mutate(
-    SF_pv_sex_w_semen_exposure = sex_past_24hours == "Yes" & str_detect(sex_type, "penis-vagina") & (condom_use == "Never" | condom_use == "Sometimes"),
-    SF_pv_sex_wo_semen_exposure = sex_past_24hours == "Yes" & str_detect(sex_type, "penis-vagina") & condom_use == "Always",
-    SF_pv_sex_unknown_semen_exposure = sex_past_24hours == "Yes" & str_detect(sex_type, "penis-vagina") & (is.na(condom_use) | condom_use == "Unknown" | condom_use == "Blank"),
-    SF_other_sex_wo_semen_exposure = sex_past_24hours == "Yes" & str_detect(sex_type, "finger-vagina|mouth-vagina|anal")
+    SF_pv_sex_w_semen_exposure = sex_past_24hours == "Yes" &
+      str_detect(sex_type, "penis-vagina") &
+      (condom_use == "Never" | condom_use == "Sometimes"),
+    SF_pv_sex_wo_semen_exposure = sex_past_24hours == "Yes" &
+      str_detect(sex_type, "penis-vagina") &
+      condom_use == "Always",
+    SF_pv_sex_unknown_semen_exposure = sex_past_24hours == "Yes" &
+      str_detect(sex_type, "penis-vagina") &
+      (is.na(condom_use) | condom_use == "Unknown" | condom_use == "Blank"),
+    SF_other_sex_wo_semen_exposure = sex_past_24hours == "Yes" &
+      str_detect(sex_type, "finger-vagina|mouth-vagina|anal")
   )
 
-# check 
-sex |> 
-  dplyr::count(sex_past_24hours, sex_type, condom_use, SF_pv_sex_w_semen_exposure, SF_pv_sex_wo_semen_exposure, SF_pv_sex_unknown_semen_exposure, SF_other_sex_wo_semen_exposure) |> 
-  gt(caption = "Table of self-reported semen exposure variables") |> 
+# check
+sex |>
+  dplyr::count(
+    sex_past_24hours,
+    sex_type,
+    condom_use,
+    SF_pv_sex_w_semen_exposure,
+    SF_pv_sex_wo_semen_exposure,
+    SF_pv_sex_unknown_semen_exposure,
+    SF_other_sex_wo_semen_exposure
+  ) |>
+  gt(caption = "Table of self-reported semen exposure variables") |>
   cols_label(
     sex_past_24hours = "Sex in\npast 24h",
     condom_use = "Condom\nuse",
@@ -810,36 +929,61 @@ sex |>
     SF_other_sex_wo_semen_exposure = "SF other sex wo\nsemen exposure",
     n = "Count"
   )
-
 ```
 
 ```{r}
 #| fig.height: 8
 #| fig.width: 10
 
-
-sex |> 
-  pivot_longer(cols = starts_with("SF_"), names_to = "semen_exposure", values_to = "value") |> 
-  filter(value == TRUE) |> 
-  mutate(semen_exposure = semen_exposure |> factor(levels = c("SF_pv_sex_w_semen_exposure", "SF_pv_sex_wo_semen_exposure", "SF_pv_sex_unknown_semen_exposure", "SF_other_sex_wo_semen_exposure"))) |> 
+sex |>
+  pivot_longer(
+    cols = starts_with("SF_"),
+    names_to = "semen_exposure",
+    values_to = "value"
+  ) |>
+  filter(value == TRUE) |>
+  mutate(
+    semen_exposure = semen_exposure |>
+      factor(
+        levels = c(
+          "SF_pv_sex_w_semen_exposure",
+          "SF_pv_sex_wo_semen_exposure",
+          "SF_pv_sex_unknown_semen_exposure",
+          "SF_other_sex_wo_semen_exposure"
+        )
+      )
+  ) |>
   ggplot() +
   aes(y = pid, x = visit_code, col = semen_exposure, shape = semen_exposure) +
-  geom_point() + 
-  facet_grid(site ~ semen_exposure, scales = "free_y") + 
-  scale_color_manual(values = c("deeppink", "orange", "gray70", "black")) + 
-  scale_shape_manual(values = c(16, 17, 18, 4)) 
+  geom_point() +
+  facet_grid(site ~ semen_exposure, scales = "free_y") +
+  scale_color_manual(values = c("deeppink", "orange", "gray70", "black")) +
+  scale_shape_manual(values = c(16, 17, 18, 4))
 
-sex |> 
-  pivot_longer(cols = starts_with("SF_"), names_to = "semen_exposure", values_to = "value") |> 
-  filter(value == TRUE) |> 
-  mutate(semen_exposure = semen_exposure |> factor(levels = c("SF_pv_sex_w_semen_exposure", "SF_pv_sex_wo_semen_exposure", "SF_pv_sex_unknown_semen_exposure", "SF_other_sex_wo_semen_exposure"))) |> 
+sex |>
+  pivot_longer(
+    cols = starts_with("SF_"),
+    names_to = "semen_exposure",
+    values_to = "value"
+  ) |>
+  filter(value == TRUE) |>
+  mutate(
+    semen_exposure = semen_exposure |>
+      factor(
+        levels = c(
+          "SF_pv_sex_w_semen_exposure",
+          "SF_pv_sex_wo_semen_exposure",
+          "SF_pv_sex_unknown_semen_exposure",
+          "SF_other_sex_wo_semen_exposure"
+        )
+      )
+  ) |>
   ggplot() +
   aes(y = pid, x = visit_code, col = semen_exposure, shape = semen_exposure) +
-  geom_point() + 
-  facet_grid(site ~ ., scales = "free_y") + 
-  scale_color_manual(values = c("deeppink", "orange", "gray70", "black")) + 
-  scale_shape_manual(values = c(16, 17, 18, 4)) 
-
+  geom_point() +
+  facet_grid(site ~ ., scales = "free_y") +
+  scale_color_manual(values = c("deeppink", "orange", "gray70", "black")) +
+  scale_shape_manual(values = c(16, 17, 18, 4))
 ```
 
 
@@ -862,39 +1006,50 @@ A solution could be to look at the variable `sexual_partners_past_month` and `se
 ```{r}
 # Approximate the last sexual intercourse before the study start
 
-sex <- 
+sex <-
   sex |>
   arrange(pid, study_day) |>
-  group_by(pid) |> 
+  group_by(pid) |>
   mutate(
-  # with condom only
+    # with condom only
     last_sex_day_w_cndm = case_when(
-      sex_past_24hours == "Yes" & str_detect(sex_type, "penis-vagina") & condom_use == "Always" ~ study_day,
+      sex_past_24hours == "Yes" &
+        str_detect(sex_type, "penis-vagina") &
+        condom_use == "Always" ~ study_day,
       TRUE ~ NA_integer_
     ),
-    last_sex_day_w_cndm = zoo::na.locf(last_sex_day_w_cndm, na.rm = FALSE), 
+    last_sex_day_w_cndm = zoo::na.locf(last_sex_day_w_cndm, na.rm = FALSE),
     sf_days_since_last_sex_w_cndm = study_day - last_sex_day_w_cndm,
-    
+
     # without condom only
     last_sex_day_wo_cndm = case_when(
-      sex_past_24hours == "Yes" & str_detect(sex_type, "penis-vagina") & (condom_use == "Never"|condom_use == "Sometimes") ~ study_day,
+      sex_past_24hours == "Yes" &
+        str_detect(sex_type, "penis-vagina") &
+        (condom_use == "Never" | condom_use == "Sometimes") ~ study_day,
       TRUE ~ NA_integer_
     ),
     last_sex_day_wo_cndm = zoo::na.locf(last_sex_day_wo_cndm, na.rm = FALSE),
-    sf_days_since_last_sex_wo_cndm = study_day - last_sex_day_wo_cndm, 
+    sf_days_since_last_sex_wo_cndm = study_day - last_sex_day_wo_cndm,
 
     # unknown condom use
     last_sex_day_unknown_cndm = case_when(
-      sex_past_24hours == "Yes" & str_detect(sex_type, "penis-vagina") & (is.na(condom_use)|condom_use == "Unknown"|condom_use == "Blank") ~ study_day,
+      sex_past_24hours == "Yes" &
+        str_detect(sex_type, "penis-vagina") &
+        (is.na(condom_use) |
+          condom_use == "Unknown" |
+          condom_use == "Blank") ~ study_day,
       TRUE ~ NA_integer_
     ),
-    last_sex_day_unknown_cndm = zoo::na.locf(last_sex_day_unknown_cndm, na.rm = FALSE),
+    last_sex_day_unknown_cndm = zoo::na.locf(
+      last_sex_day_unknown_cndm,
+      na.rm = FALSE
+    ),
     sf_days_since_last_sex_unknown_cndm = study_day - last_sex_day_unknown_cndm
-  ) |> 
-  ungroup() |> 
-  select(-c(last_sex_day_wo_cndm, last_sex_day_w_cndm, last_sex_day_unknown_cndm))
-
-
+  ) |>
+  ungroup() |>
+  select(
+    -c(last_sex_day_wo_cndm, last_sex_day_w_cndm, last_sex_day_unknown_cndm)
+  )
 ```
 
 Numbers and colors represent the number of day since the last sexual intercourse without condom
@@ -904,20 +1059,27 @@ Numbers and colors represent the number of day since the last sexual intercourse
 #| fig.height: 10
 #| fig.width: 10
 
-sex |> 
+sex |>
   filter(randomized) |>
-  ggplot() + 
-  aes(x = visit_code |> as.factor(), y = pid, fill = sf_days_since_last_sex_wo_cndm) +
+  ggplot() +
+  aes(
+    x = visit_code |> as.factor(),
+    y = pid,
+    fill = sf_days_since_last_sex_wo_cndm
+  ) +
   geom_tile() +
   facet_grid(site ~ ., scales = "free_y", space = "free") +
-  geom_text(aes(label = sf_days_since_last_sex_wo_cndm), size = 2) + 
-  scale_fill_gradient("Day since last sex\n(wo cndm)", low = "#EBFAFE", high =  "lightskyblue4") +
-  labs(x = "Visit code", y="") +
+  geom_text(aes(label = sf_days_since_last_sex_wo_cndm), size = 2) +
+  scale_fill_gradient(
+    "Day since last sex\n(wo cndm)",
+    low = "#EBFAFE",
+    high = "lightskyblue4"
+  ) +
+  labs(x = "Visit code", y = "") +
   theme(
     #axis.text.y = element_blank(),
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
   )
-
 ```
 
 
@@ -932,23 +1094,36 @@ Each time a participant report a sexual intercourse in the past 24h with semen e
 #| fig-height: 10
 #| fig-width: 10
 
-sex |> 
-  filter(!is.na(visit_code)) |> 
+sex |>
+  filter(!is.na(visit_code)) |>
   filter(randomized) |>
-  ggplot() + 
+  ggplot() +
   aes(x = visit_code, y = pid) +
-  geom_point(data = sex |> 
-               filter(SF_pv_sex_w_semen_exposure | SF_pv_sex_unknown_semen_exposure) |> 
-               pivot_longer(cols = c(SF_pv_sex_w_semen_exposure, SF_pv_sex_unknown_semen_exposure), names_to = "semen_exposure", values_to = "value") |>
-               filter(value == TRUE),
-             aes(fill = semen_exposure),
-             size = 2.5, alpha = 0.5, shape = 21) +
-  geom_point(data = sex |> 
-               filter(psa_results == "Positive"), 
-             aes(shape = psa_results), 
-             size = 2.5) +
+  geom_point(
+    data = sex |>
+      filter(SF_pv_sex_w_semen_exposure | SF_pv_sex_unknown_semen_exposure) |>
+      pivot_longer(
+        cols = c(SF_pv_sex_w_semen_exposure, SF_pv_sex_unknown_semen_exposure),
+        names_to = "semen_exposure",
+        values_to = "value"
+      ) |>
+      filter(value == TRUE),
+    aes(fill = semen_exposure),
+    size = 2.5,
+    alpha = 0.5,
+    shape = 21
+  ) +
+  geom_point(
+    data = sex |>
+      filter(psa_results == "Positive"),
+    aes(shape = psa_results),
+    size = 2.5
+  ) +
   geom_vline(
-    data = sex |>  select(visit_code, visit_type) |> filter(visit_type == "Clinic") |> distinct(),
+    data = sex |>
+      select(visit_code, visit_type) |>
+      filter(visit_type == "Clinic") |>
+      distinct(),
     aes(xintercept = visit_code),
     color = "gray70",
     linetype = "dashed",
@@ -959,12 +1134,11 @@ sex |>
     values = c("gray70", "deeppink"),
   ) +
   scale_shape_manual(
-    name = "PSA results", 
+    name = "PSA results",
     values = c("Positive" = 4)
-  )  +
-  labs(x = "Visit", y = "Participant ID") + 
+  ) +
+  labs(x = "Visit", y = "Participant ID") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
 ```
 
 
@@ -982,75 +1156,89 @@ Some participants that have a PSA positive but a day since last sex > 4 had repo
 
 ```{r}
 
-sex |> 
+sex |>
   #filter(randomized) |>
   filter(visit_type %in% c("Clinic", "Clinic & Home")) |>
   group_by(pid) |>
-  mutate(last_sex_wo_cndm_cat = case_when(
-    is.na(sf_days_since_last_sex_wo_cndm) ~ "Unknown",
-    sf_days_since_last_sex_wo_cndm == 0 ~ "0 day",
-    sf_days_since_last_sex_wo_cndm == 1 ~ "1 day",
-    sf_days_since_last_sex_wo_cndm == 2 ~ "2 days",
-    sf_days_since_last_sex_wo_cndm == 3 ~ "3 days",
-    sf_days_since_last_sex_wo_cndm >= 4 ~ "4+ days",
-    TRUE ~ NA_character_
-  )) |>
+  mutate(
+    last_sex_wo_cndm_cat = case_when(
+      is.na(sf_days_since_last_sex_wo_cndm) ~ "Unknown",
+      sf_days_since_last_sex_wo_cndm == 0 ~ "0 day",
+      sf_days_since_last_sex_wo_cndm == 1 ~ "1 day",
+      sf_days_since_last_sex_wo_cndm == 2 ~ "2 days",
+      sf_days_since_last_sex_wo_cndm == 3 ~ "3 days",
+      sf_days_since_last_sex_wo_cndm >= 4 ~ "4+ days",
+      TRUE ~ NA_character_
+    )
+  ) |>
   ungroup() |>
   select(pid, visit_code, last_sex_wo_cndm_cat, psa_results, visit_type) |>
   distinct() |>
-  filter(visit_type %in% c("Clinic", "Clinic & Home"), visit_code > "0000", visit_code != "1000") |>
-  filter(!is.na(psa_results)) |> 
+  filter(
+    visit_type %in% c("Clinic", "Clinic & Home"),
+    visit_code > "0000",
+    visit_code != "1000"
+  ) |>
+  filter(!is.na(psa_results)) |>
   dplyr::count(visit_code, last_sex_wo_cndm_cat, psa_results) |>
   ggplot(aes(x = psa_results, y = last_sex_wo_cndm_cat, fill = n)) +
   geom_tile() +
-  facet_grid(~ visit_code) +
+  facet_grid(~visit_code) +
   geom_text(aes(label = n)) +
   scale_fill_gradient(low = "white", high = "steelblue1") +
   ylab("Last sex without condom") +
-  xlab("Psa result") + 
+  xlab("Psa result") +
   guides(fill = "none") +
-  theme(strip.text = element_text(size = 12), 
-        axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme(
+    strip.text = element_text(size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
   coord_fixed()
-
-
 ```
 
 Let's do the same plot but taking the variable `day_since_last_sex_unknown_cndm` to account for the fact that at the weekly visit we don't have information about the condom use. If a participant reported a sexual intercourse in the last 24h at the weekly visit, we set the variable `day_since_last_sex_unknown_cndm` to 0 for that visit, even if we don't know if they used condom or not.
 
 ```{r}
 
-sex |> 
+sex |>
   filter(randomized) |>
   filter(visit_type == "Clinic") |>
   group_by(pid) |>
-  mutate(last_sex_wo_cndm_cat = case_when(
-    is.na(sf_days_since_last_sex_wo_cndm) ~ "Unknown",
-    sf_days_since_last_sex_wo_cndm == 0 | sf_days_since_last_sex_unknown_cndm == 0 ~ "0 day",
-    sf_days_since_last_sex_wo_cndm == 1 | sf_days_since_last_sex_unknown_cndm == 1 ~ "1 day",
-    sf_days_since_last_sex_wo_cndm == 2 | sf_days_since_last_sex_unknown_cndm == 2 ~ "2 days",
-    sf_days_since_last_sex_wo_cndm == 3 | sf_days_since_last_sex_unknown_cndm == 3 ~ "3 days",
-    sf_days_since_last_sex_wo_cndm >= 4 | sf_days_since_last_sex_unknown_cndm >= 4 ~ "4+ days",
-    TRUE ~ NA_character_
-  )) |>
+  mutate(
+    last_sex_wo_cndm_cat = case_when(
+      is.na(sf_days_since_last_sex_wo_cndm) ~ "Unknown",
+      sf_days_since_last_sex_wo_cndm == 0 |
+        sf_days_since_last_sex_unknown_cndm == 0 ~ "0 day",
+      sf_days_since_last_sex_wo_cndm == 1 |
+        sf_days_since_last_sex_unknown_cndm == 1 ~ "1 day",
+      sf_days_since_last_sex_wo_cndm == 2 |
+        sf_days_since_last_sex_unknown_cndm == 2 ~ "2 days",
+      sf_days_since_last_sex_wo_cndm == 3 |
+        sf_days_since_last_sex_unknown_cndm == 3 ~ "3 days",
+      sf_days_since_last_sex_wo_cndm >= 4 |
+        sf_days_since_last_sex_unknown_cndm >= 4 ~ "4+ days",
+      TRUE ~ NA_character_
+    )
+  ) |>
   ungroup() |>
   select(pid, visit_code, last_sex_wo_cndm_cat, psa_results, visit_type) |>
   distinct() |>
   filter(visit_type == "Clinic", visit_code > "0000", visit_code != "1000") |>
-  filter(!is.na(psa_results)) |> 
+  filter(!is.na(psa_results)) |>
   dplyr::count(visit_code, last_sex_wo_cndm_cat, psa_results) |>
   ggplot(aes(x = psa_results, y = last_sex_wo_cndm_cat, fill = n)) +
   geom_tile() +
-  facet_grid(~ visit_code) +
+  facet_grid(~visit_code) +
   geom_text(aes(label = n)) +
   scale_fill_gradient(low = "white", high = "steelblue1") +
   ylab("Last sex without condom") +
-  xlab("Psa result") + 
+  xlab("Psa result") +
   guides(fill = "none") +
-  theme(strip.text = element_text(size = 12), 
-        axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme(
+    strip.text = element_text(size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
   coord_fixed()
-
 ```
 
 ### Summary variable for semen exposure 
@@ -1083,24 +1271,26 @@ refined using PSA results to resolve ambiguous self-reports :
 
 ```{r}
 
-psa_correction_days <- 
+psa_correction_days <-
   sex |>
   filter(psa_results == "Positive") |>
   select(pid, study_day) |>
-  reframe(correction_day = c(study_day, study_day - 1, study_day - 2), 
-          .by = c(pid, study_day)) |>
+  reframe(
+    correction_day = c(study_day, study_day - 1, study_day - 2),
+    .by = c(pid, study_day)
+  ) |>
   select(pid, correction_day) |>
   distinct() |>
   mutate(psa_positive_nearby = TRUE)
 
-sex <- 
+sex <-
   sex |>
   mutate(
     # conversion booléen → numérique
-    pv_sex_w_semen_exposure  = as.numeric(SF_pv_sex_w_semen_exposure  == TRUE),
+    pv_sex_w_semen_exposure = as.numeric(SF_pv_sex_w_semen_exposure == TRUE),
     pv_sex_wo_semen_exposure = as.numeric(SF_pv_sex_wo_semen_exposure == TRUE),
-    other_sex_wo_semen_exp   = as.numeric(SF_other_sex_wo_semen_exposure == TRUE),
-    
+    other_sex_wo_semen_exp = as.numeric(SF_other_sex_wo_semen_exposure == TRUE),
+
     # Résolution du "unknown" aux visites weekly avec le PSA
     pv_sex_w_semen_exposure = case_when(
       SF_pv_sex_unknown_semen_exposure & psa_results == "Positive" ~ 0.5,
@@ -1111,9 +1301,12 @@ sex <-
       TRUE ~ pv_sex_wo_semen_exposure
     )
   ) |>
-  
+
   # Correction PSA pour les jours entourant un PSA positif
-  left_join(psa_correction_days, by = c("pid", "study_day" = "correction_day")) |>
+  left_join(
+    psa_correction_days,
+    by = c("pid", "study_day" = "correction_day")
+  ) |>
   mutate(
     pv_sex_w_semen_exposure = case_when(
       psa_positive_nearby & pv_sex_w_semen_exposure == 0 ~ 0.5,
@@ -1121,37 +1314,46 @@ sex <-
     )
   ) |>
   select(-psa_positive_nearby)
-
 ```
 
 ```{r}
 #| fig.height: 10
 #| fig.width: 10
 
-
 sex |>
   filter(randomized, study_day >= 0) |>
   pivot_longer(
-    cols = c(pv_sex_w_semen_exposure, pv_sex_wo_semen_exposure, other_sex_wo_semen_exp),
-    names_to = "variable", values_to = "value"
+    cols = c(
+      pv_sex_w_semen_exposure,
+      pv_sex_wo_semen_exposure,
+      other_sex_wo_semen_exp
+    ),
+    names_to = "variable",
+    values_to = "value"
   ) |>
   ggplot(aes(x = study_day, y = pid, fill = value)) +
   geom_tile() +
   # Overlay PSA positif
   geom_point(
     data = sex |> filter(psa_results == "Positive", study_day >= 0),
-    aes(x = study_day, y = pid), 
+    aes(x = study_day, y = pid),
     inherit.aes = FALSE,
-    shape = 4, size = 2, color = "red"
+    shape = 4,
+    size = 2,
+    color = "red"
   ) +
-  facet_grid(.~variable, scales = "free_y") +
-  scale_fill_gradient("Value", low = "white", high = "steelblue", na.value = "grey90")+ 
-  scale_x_continuous(breaks = seq(0, 100, by = 7)) + 
+  facet_grid(. ~ variable, scales = "free_y") +
+  scale_fill_gradient(
+    "Value",
+    low = "white",
+    high = "steelblue",
+    na.value = "grey90"
+  ) +
+  scale_x_continuous(breaks = seq(0, 100, by = 7)) +
   theme(
     axis.text.y = element_blank(),
     axis.ticks.y = element_blank()
   )
-
 ```
 
 ### Adding semen exposure variables to the metadata 
@@ -1160,76 +1362,96 @@ We add the summary variables for sexual activity and semen exposure to the `calc
 
 ```{r}
 
-mae@metadata$calc_vars_study_day <- 
-  mae@metadata$calc_vars_study_day |> 
+mae@metadata$calc_vars_study_day <-
+  mae@metadata$calc_vars_study_day |>
   left_join(
-    sex |> 
+    sex |>
       select(
-        pid, study_day, sex_past_24hours, condom_use, sf_days_since_last_sex_wo_cndm, sf_days_since_last_sex_w_cndm, pv_sex_w_semen_exposure, sf_days_since_last_sex_unknown_cndm, pv_sex_wo_semen_exposure, other_sex_wo_semen_exp),
+        pid,
+        study_day,
+        sex_past_24hours,
+        condom_use,
+        sf_days_since_last_sex_wo_cndm,
+        sf_days_since_last_sex_w_cndm,
+        pv_sex_w_semen_exposure,
+        sf_days_since_last_sex_unknown_cndm,
+        pv_sex_wo_semen_exposure,
+        other_sex_wo_semen_exp
+      ),
     by = join_by(pid, study_day)
   )
-
 ```
 
 ## Metronidazole exposure
 
 ```{r}
 
-mtz <- 
-  mae@metadata$exposures |> 
-  select(uid, pid, visit_code, study_day, daily_self_reported_exposure_to_mtz, comments_mtz) |> 
-  #filter(!is.na(daily_self_reported_exposure_to_mtz)) |> 
+mtz <-
+  mae@metadata$exposures |>
+  select(
+    uid,
+    pid,
+    visit_code,
+    study_day,
+    daily_self_reported_exposure_to_mtz,
+    comments_mtz
+  ) |>
+  #filter(!is.na(daily_self_reported_exposure_to_mtz)) |>
   distinct()
-
 ```
 
 Metronadizole exposure is alreay calculate in the `01a-clinical-CRF-data-cleaning.qmd` in the `exposures` table of the metadata. This variable is calculated at the `visit_code` level, and study day have not been harmonized in this table. Some participants have a value of `daily_self_reported_exposure_to_mtz` but no study day associated with this value. 
 
 ```{r}
 
-mtz |> 
+mtz |>
   filter(!is.na(daily_self_reported_exposure_to_mtz)) |>
-  filter(is.na(study_day)) |> 
+  filter(is.na(study_day)) |>
   gt()
 
-# mtz |> 
-#   filter(!is.na(study_day)) |> 
-#   dplyr::count(pid, study_day, daily_self_reported_exposure_to_mtz) |> 
-#   filter(n>1) |> 
+# mtz |>
+#   filter(!is.na(study_day)) |>
+#   dplyr::count(pid, study_day, daily_self_reported_exposure_to_mtz) |>
+#   filter(n>1) |>
 #   gt(caption = "Participants with information on metronidazole exposure and study day")
-
 ```
 
 The missing study day for those participants occurs at the visit 1001 or 1002, which is the first home visit after the study start. Those participants have no entry in the `visits_crfs_merged` table for those visits, which is why we don't have the study day for those visits in the `exposures` table.
 
 ```{r}
 
-pid_tmp <- mtz |> filter(!is.na(daily_self_reported_exposure_to_mtz)) |> filter(is.na(study_day)) |> pull(pid)
+pid_tmp <- mtz |>
+  filter(!is.na(daily_self_reported_exposure_to_mtz)) |>
+  filter(is.na(study_day)) |>
+  pull(pid)
 
-mtz |> 
-  filter(pid %in% pid_tmp) |> 
-  filter(visit_code %in% c("1001", "1002", "1003", "1004")) |> 
-  select(pid, visit_code, study_day) |> 
-  distinct() |> 
+mtz |>
+  filter(pid %in% pid_tmp) |>
+  filter(visit_code %in% c("1001", "1002", "1003", "1004")) |>
+  select(pid, visit_code, study_day) |>
+  distinct() |>
   arrange(pid, visit_code) |>
   pivot_wider(names_from = visit_code, values_from = study_day) |>
-  gt(caption = "Visits for participants with missing study day for metronidazole exposure")
-
+  gt(
+    caption = "Visits for participants with missing study day for metronidazole exposure"
+  )
 ```
 
 We will use the `colData` from the `mae` object to impute the missing study day for those participants.  
 
 ```{r}
 
-mtz <- 
+mtz <-
   mtz |>
-  filter(!is.na(daily_self_reported_exposure_to_mtz)) |> 
-  select(-study_day) |> 
+  filter(!is.na(daily_self_reported_exposure_to_mtz)) |>
+  select(-study_day) |>
   left_join(
-    mae@colData |> as_tibble() |> select(pid, visit_code, study_day) |> distinct(),
+    mae@colData |>
+      as_tibble() |>
+      select(pid, visit_code, study_day) |>
+      distinct(),
     by = join_by(pid, visit_code)
-  ) 
-
+  )
 ```
 
 There is no duplicate study day for the metronidazole variable after the imputation.
@@ -1237,20 +1459,19 @@ There is no duplicate study day for the metronidazole variable after the imputat
 ```{r}
 #| include: false
 
-mtz |> 
-  dplyr::count(pid, study_day) |> 
-  filter(n>1) |> 
+mtz |>
+  dplyr::count(pid, study_day) |>
+  filter(n > 1) |>
   gt(caption = "Participants with duplicate study day after imputation")
-
 ```
 
 ```{r}
 
-mtz |> 
-  mutate(site = ifelse(str_detect(pid, "0681"), "MGH", "CAP")) |> 
+mtz |>
+  mutate(site = ifelse(str_detect(pid, "0681"), "MGH", "CAP")) |>
   ggplot() +
   aes(x = study_day, y = pid, fill = daily_self_reported_exposure_to_mtz) +
-  geom_tile() + 
+  geom_tile() +
   facet_grid(site ~ ., scales = "free_y", space = "free") +
   scale_x_continuous(breaks = seq(0, 10, by = 1)) +
   scale_fill_manual(
@@ -1258,24 +1479,26 @@ mtz |>
     values = c("purple", "steelblue1", "steelblue", "lightgoldenrod1")
   )
 
-# mtz |> 
-#   filter(daily_self_reported_exposure_to_mtz == "no info") |> 
-#   select(pid, study_day, comments_mtz) |> 
-#   distinct() |> 
+# mtz |>
+#   filter(daily_self_reported_exposure_to_mtz == "no info") |>
+#   select(pid, study_day, comments_mtz) |>
+#   distinct() |>
 #   gt(caption = "Participants with no information on metronidazole exposure but with comments")
-
 ```
 
 Some participants have a value of `daily_self_reported_exposure_to_mtz` equal to "no info". We will set those values to NA since we have no information about their metronidazole exposure.
 
 ```{r}
 
-mtz <- 
-  mtz |> 
+mtz <-
+  mtz |>
   mutate(
-    daily_self_reported_exposure_to_mtz = ifelse(daily_self_reported_exposure_to_mtz == "no info", NA, daily_self_reported_exposure_to_mtz)
+    daily_self_reported_exposure_to_mtz = ifelse(
+      daily_self_reported_exposure_to_mtz == "no info",
+      NA,
+      daily_self_reported_exposure_to_mtz
+    )
   )
-
 ```
 
 ### Adding metronidazole exposure variable to the metadata
@@ -1284,13 +1507,19 @@ We add the variable `daily_self_reported_exposure_to_mtz` and `comments_daily_se
 
 ```{r}
 
-mae@metadata$calc_vars_study_day <- 
-  mae@metadata$calc_vars_study_day |> 
+mae@metadata$calc_vars_study_day <-
+  mae@metadata$calc_vars_study_day |>
   left_join(
-    mtz |> select(pid, study_day, daily_self_reported_exposure_to_mtz, comments_daily_self_reported_exposure_to_mtz = comments_mtz) |> distinct(),
+    mtz |>
+      select(
+        pid,
+        study_day,
+        daily_self_reported_exposure_to_mtz,
+        comments_daily_self_reported_exposure_to_mtz = comments_mtz
+      ) |>
+      distinct(),
     by = join_by(pid, study_day)
   )
-
 ```
 
 ## Study product variables
@@ -1304,67 +1533,77 @@ Those variable are collected at the `visit_code` level, the goal of this analyse
 
 ```{r}
 
-sp <- 
-  mae@metadata$exposures |> 
-  select(uid, pid, visit_code, study_day, daily_self_reported_adherence_sp, daily_self_reported_exposure_sp, comments_studyproduct) |> 
-  #filter(!is.na(daily_self_reported_exposure_to_study_product)) |> 
+sp <-
+  mae@metadata$exposures |>
+  select(
+    uid,
+    pid,
+    visit_code,
+    study_day,
+    daily_self_reported_adherence_sp,
+    daily_self_reported_exposure_sp,
+    comments_studyproduct
+  ) |>
+  #filter(!is.na(daily_self_reported_exposure_to_study_product)) |>
   distinct()
-
 ```
 
 There is no missing or duplicates study day for the study product variables. 
 
 ```{r}
 #| include: false
-sp |> 
+sp |>
   filter(!is.na(daily_self_reported_adherence_sp)) |>
-  filter(is.na(study_day)) |> 
+  filter(is.na(study_day)) |>
   gt()
-
 ```
 
 
 ```{r}
 #| include: false
 
-sp |> 
+sp |>
   filter(!is.na(daily_self_reported_exposure_sp)) |>
   dplyr::count(pid, study_day) |>
-  filter(n>1) |> 
-  gt(caption = "Participants with duplicate study day for study product variables")
-
+  filter(n > 1) |>
+  gt(
+    caption = "Participants with duplicate study day for study product variables"
+  )
 ```
 
 ```{r}
 
-
-sp |> 
+sp |>
   filter(!is.na(daily_self_reported_adherence_sp)) |>
   mutate(site = ifelse(str_detect(pid, "0681"), "MGH", "CAP")) |>
   ggplot() +
-  aes(x = study_day, y = pid, fill = daily_self_reported_adherence_sp |> factor()) +
+  aes(
+    x = study_day,
+    y = pid,
+    fill = daily_self_reported_adherence_sp |> factor()
+  ) +
   geom_tile() +
-  facet_grid(site ~ ., scales = "free_y", space = "free") + 
+  facet_grid(site ~ ., scales = "free_y", space = "free") +
   scale_fill_manual(
     name = "Daily self-reported\nadherence to study product",
     values = c("0" = "lightgoldenrod1", "1" = "steelblue")
   )
-
 ```
 ```{r}
 
-sp |> 
+sp |>
   filter(!is.na(daily_self_reported_exposure_sp)) |>
   mutate(site = ifelse(str_detect(pid, "0681"), "MGH", "CAP")) |>
   ggplot() +
   aes(x = study_day, y = pid, fill = daily_self_reported_exposure_sp) +
   geom_tile() +
-  facet_grid(site ~ ., scales = "free_y", space = "free") + 
+  facet_grid(site ~ ., scales = "free_y", space = "free") +
   scale_fill_gradient(
     name = "Daily self-reported\nexposure to study product",
-    low = "lightgoldenrod1", high = "steelblue", na.value = "grey90"
+    low = "lightgoldenrod1",
+    high = "steelblue",
+    na.value = "grey90"
   )
-
 ```
 
 ### Adding study product variables to the metadata
@@ -1373,15 +1612,21 @@ We add the variable `daily_self_reported_adherence_sp`, `daily_self_reported_exp
 
 ```{r}
 
-mae@metadata$calc_vars_study_day <- 
-  mae@metadata$calc_vars_study_day |> 
+mae@metadata$calc_vars_study_day <-
+  mae@metadata$calc_vars_study_day |>
   left_join(
-    sp |> 
+    sp |>
       filter(!is.na(daily_self_reported_adherence_sp)) |>
-      select(pid, study_day, daily_self_reported_adherence_sp, daily_self_reported_exposure_sp, comments_daily_self_reported_exposure_sp = comments_studyproduct) |> distinct(),
+      select(
+        pid,
+        study_day,
+        daily_self_reported_adherence_sp,
+        daily_self_reported_exposure_sp,
+        comments_daily_self_reported_exposure_sp = comments_studyproduct
+      ) |>
+      distinct(),
     by = join_by(pid, study_day)
   )
-
 ```
 
 
@@ -1421,11 +1666,20 @@ All those data are available in the `visits_crfs_merged` table stored in the met
 
 ```{r}
 
-bleeding <- 
-  visits_crfs_merged |> 
-  select(uid, pid, visit_code, study_day, visit_type, site, randomized, vaginal_bleeding.crf33, vaginal_bleeding.crf19) |>
+bleeding <-
+  visits_crfs_merged |>
+  select(
+    uid,
+    pid,
+    visit_code,
+    study_day,
+    visit_type,
+    site,
+    randomized,
+    vaginal_bleeding.crf33,
+    vaginal_bleeding.crf19
+  ) |>
   arrange(pid, visit_code)
-
 ```
 
 
@@ -1437,28 +1691,35 @@ We first look at the daily responses from CRF33.
 #| fig.height: 8
 #| fig.width: 8
 
-bleeding |> 
+bleeding |>
   filter(!is.na(vaginal_bleeding.crf33)) |>
   filter(randomized) |>
   ggplot() +
   aes(
-    x = visit_code |> factor(), y = pid, 
+    x = visit_code |> factor(),
+    y = pid,
     col = vaginal_bleeding.crf33
   ) +
   geom_point() +
   facet_grid(site ~ ., scales = "free_y", space = "free_y") +
   scale_color_manual(
-    "Vaginal bleeding", 
-    values = 
-      c("Blank" = "gray80", "No - None" = "transparent", "Yes - Light" = "pink", "Yes - Medium" = "red", "Yes - Heavy" = "red4")) +
+    "Vaginal bleeding",
+    values = c(
+      "Blank" = "gray80",
+      "No - None" = "transparent",
+      "Yes - Light" = "pink",
+      "Yes - Medium" = "red",
+      "Yes - Heavy" = "red4"
+    )
+  ) +
   scale_y_discrete(drop = FALSE) +
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
   ) +
   labs(
-    x = "Visit code", y = "Participants"
-  ) 
-
+    x = "Visit code",
+    y = "Participants"
+  )
 ```
 
 All `Blank` responses are participants who did not report any vaginal bleeding in the past 24 hours. We assume (for now) that no vaginal bleeding occurred at those visits.
@@ -1471,28 +1732,35 @@ Now, we look at the variable `vaginal_bleeding` from CRF19.
 #| fig.height: 8
 #| fig.width: 5
 
-bleeding |> 
-  filter(!is.na(vaginal_bleeding.crf19)) |> 
+bleeding |>
+  filter(!is.na(vaginal_bleeding.crf19)) |>
   filter(randomized) |>
   ggplot() +
   aes(
-    x = visit_code |> factor(), y = pid, 
+    x = visit_code |> factor(),
+    y = pid,
     col = vaginal_bleeding.crf19
   ) +
   geom_point() +
   facet_grid(site ~ ., scales = "free_y", space = "free_y") +
   scale_color_manual(
-    "Vaginal bleeding", 
-    values = 
-      c("Blank" = "gray80", "No-None" = "transparent", "Yes-Light" = "pink", "Yes-Medium" = "red", "Yes-Heavy" = "red4")) +
+    "Vaginal bleeding",
+    values = c(
+      "Blank" = "gray80",
+      "No-None" = "transparent",
+      "Yes-Light" = "pink",
+      "Yes-Medium" = "red",
+      "Yes-Heavy" = "red4"
+    )
+  ) +
   scale_y_discrete(drop = FALSE) +
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
   ) +
   labs(
-    x = "Visit code", y = "Participants"
-  ) 
-
+    x = "Visit code",
+    y = "Participants"
+  )
 ```
 
 From the plots above, we can see that the categorical variable `vaginal_bleeding` is not encoded in the same way in `CRF33` and `CRF19`. The correction will be carried out in the next section.
@@ -1506,20 +1774,22 @@ In this section, we merge the information for `vaginal_bleeding` from the daily 
 # harmonize variable names
 # replace "Blank" by "No-None"
 
-bleeding <- 
+bleeding <-
   bleeding |>
   mutate(
     vaginal_bleeding = coalesce(vaginal_bleeding.crf33, vaginal_bleeding.crf19),
     vaginal_bleeding = case_when(
       vaginal_bleeding %in% c("Blank") ~ "None",
       vaginal_bleeding == "No - None" | vaginal_bleeding == "No-None" ~ "None",
-      vaginal_bleeding == "Yes - Light" | vaginal_bleeding == "Yes-Light" ~ "Light",
-      vaginal_bleeding == "Yes - Medium" | vaginal_bleeding == "Yes-Medium" ~ "Medium",
-      vaginal_bleeding == "Yes - Heavy" | vaginal_bleeding == "Yes-Heavy" ~ "Heavy",
+      vaginal_bleeding == "Yes - Light" |
+        vaginal_bleeding == "Yes-Light" ~ "Light",
+      vaginal_bleeding == "Yes - Medium" |
+        vaginal_bleeding == "Yes-Medium" ~ "Medium",
+      vaginal_bleeding == "Yes - Heavy" |
+        vaginal_bleeding == "Yes-Heavy" ~ "Heavy",
       TRUE ~ vaginal_bleeding
     )
   )
-
 ```
 
 The merged vaginal bleeding plot is displayed below.
@@ -1528,28 +1798,35 @@ The merged vaginal bleeding plot is displayed below.
 #| fig.height: 8
 #| fig.width: 8
 
-bleeding |>  
-  filter(!is.na(vaginal_bleeding)) |> 
+bleeding |>
+  filter(!is.na(vaginal_bleeding)) |>
   filter(randomized) |>
   ggplot() +
   aes(
-    x = visit_code |> factor(), y = pid, 
+    x = visit_code |> factor(),
+    y = pid,
     col = vaginal_bleeding
   ) +
   geom_point() +
   facet_grid(site ~ ., scales = "free_y", space = "free_y") +
   scale_color_manual(
-    "Vaginal bleeding", 
-    values = 
-      c("Blank" = "gray80", "None" = "transparent", "Light" = "pink", "Medium" = "red", "Heavy" = "red4")) +
+    "Vaginal bleeding",
+    values = c(
+      "Blank" = "gray80",
+      "None" = "transparent",
+      "Light" = "pink",
+      "Medium" = "red",
+      "Heavy" = "red4"
+    )
+  ) +
   scale_y_discrete(drop = FALSE) +
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
   ) +
   labs(
-    x = "Visit code", y = "Participants"
-  ) 
-
+    x = "Visit code",
+    y = "Participants"
+  )
 ```
 
 
@@ -1570,16 +1847,28 @@ bleeding |>
   ggplot() +
   aes(x = visit_code, y = pid, fill = vaginal_bleeding) +
   geom_tile() +
-  geom_text(aes(label = study_day,
-                col = ifelse(vaginal_bleeding == "Heavy", "white", "black")), size = 2.5) +
+  geom_text(
+    aes(
+      label = study_day,
+      col = ifelse(vaginal_bleeding == "Heavy", "white", "black")
+    ),
+    size = 2.5
+  ) +
   facet_grid(site ~ ., scales = "free_y", space = "free_y") +
-  scale_fill_manual("Vaginal bleeding", values =  c("None" = "grey90", "Light" = "pink", "Medium" = "red", "Heavy" = "red4")) +
+  scale_fill_manual(
+    "Vaginal bleeding",
+    values = c(
+      "None" = "grey90",
+      "Light" = "pink",
+      "Medium" = "red",
+      "Heavy" = "red4"
+    )
+  ) +
   scale_color_identity() +
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
   ) +
   labs(x = "Visit code", y = "Participant")
-
 ```
 
 We identified `r bleeding |> dplyr::count(pid, study_day) |> filter(n > 1) |> nrow()` duplicated `(pid, study_day)` pairs involving `r bleeding |> dplyr::count(pid, study_day) |> filter(n > 1) |> distinct(pid) |> nrow()` participants. Among these, `r bleeding |> dplyr::count(pid, study_day) |> filter(n > 1) |> left_join(bleeding, by = c("pid", "study_day")) |> group_by(pid, study_day) |> filter(n_distinct(vaginal_bleeding, na.rm = TRUE) > 1) |> ungroup() |> distinct(pid, study_day) |> nrow()` pairs show inconsistent vaginal bleeding values across duplicate entries.
@@ -1596,8 +1885,9 @@ bleeding |>
   ungroup() |>
   select(pid, study_day, visit_code, visit_type, vaginal_bleeding) |>
   arrange(pid, study_day) |>
-  gt(caption = "Duplicated (pid, study_day) with inconsistent vaginal bleeding values")
-
+  gt(
+    caption = "Duplicated (pid, study_day) with inconsistent vaginal bleeding values"
+  )
 ```
 
 ```{r}
@@ -1612,19 +1902,34 @@ bleeding |>
   ggplot() +
   aes(x = visit_code, y = pid, fill = vaginal_bleeding) +
   geom_tile() +
-  geom_text(aes(label = study_day,
-                col = ifelse(vaginal_bleeding == "Heavy", "white", "black")), size = 3) +
-  scale_fill_manual("Vaginal bleeding", 
-                    values =  c("None" = "grey90", "Light" = "pink", "Medium" = "red", "Heavy" = "red4")) +
+  geom_text(
+    aes(
+      label = study_day,
+      col = ifelse(vaginal_bleeding == "Heavy", "white", "black")
+    ),
+    size = 3
+  ) +
+  scale_fill_manual(
+    "Vaginal bleeding",
+    values = c(
+      "None" = "grey90",
+      "Light" = "pink",
+      "Medium" = "red",
+      "Heavy" = "red4"
+    )
+  ) +
   scale_color_identity() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
-  labs(x = "Visit code", y = "Participants", subtitle = "Duplicated (pid, study day) pairs with inconsistent vaginal bleeding values")
-
+  labs(
+    x = "Visit code",
+    y = "Participants",
+    subtitle = "Duplicated (pid, study day) pairs with inconsistent vaginal bleeding values"
+  )
 ```
 
 ```{r}
 
-duplicated_bleeding <- 
+duplicated_bleeding <-
   bleeding |>
   dplyr::count(pid, study_day) |>
   filter(n > 1) |>
@@ -1634,7 +1939,6 @@ duplicated_bleeding <-
   ungroup() |>
   pull(pid) |>
   unique()
-
 ```
 
 
@@ -1642,20 +1946,20 @@ We will create a confusion matrix to evaluate, when there are duplicates in `stu
 
 ```{r}
 
-tmp <- 
+tmp <-
   bleeding |>
   group_by(pid, study_day) |>
   filter(n() > 1) |>
   ungroup()
 
-vb_pairs <- 
+vb_pairs <-
   tmp |>
   group_by(pid, study_day) |>
   mutate(dup_id = row_number()) |>
   ungroup() |>
   select(pid, study_day, dup_id, vaginal_bleeding) |>
   tidyr::pivot_wider(
-    names_from  = dup_id,
+    names_from = dup_id,
     values_from = vaginal_bleeding,
     names_prefix = "vb_"
   )
@@ -1670,7 +1974,6 @@ vb_counts |>
   geom_text(aes(label = n)) +
   scale_fill_gradient(low = "white", high = "steelblue1") +
   labs(x = "Vaginal bleeding", y = "Vaginal bleeding")
-
 ```
 
 Now to keep only one unique value of study day, we will always take the heaviest bleeding, i.e. we always take the highest value between the two: Blank < None < Light < Medium < Heavy.
@@ -1725,7 +2028,6 @@ bleeding <- bleeding |>
     )
   ) |>
   ungroup()
-
 ```
 
 
@@ -1744,26 +2046,37 @@ bleeding |>
   ggplot() +
   aes(x = visit_code, y = pid, fill = vaginal_bleeding) +
   geom_tile() +
-  geom_text(aes(label = study_day,
-                col = ifelse(vaginal_bleeding == "Heavy", "white", "black")), size = 2) +
-  scale_fill_manual("Vaginal bleeding", 
-                    values =  c("Excluded" = "yellow", "None" = "grey90", "Light" = "pink", "Medium" = "red", "Heavy" = "red4")) +
+  geom_text(
+    aes(
+      label = study_day,
+      col = ifelse(vaginal_bleeding == "Heavy", "white", "black")
+    ),
+    size = 2
+  ) +
+  scale_fill_manual(
+    "Vaginal bleeding",
+    values = c(
+      "Excluded" = "yellow",
+      "None" = "grey90",
+      "Light" = "pink",
+      "Medium" = "red",
+      "Heavy" = "red4"
+    )
+  ) +
   scale_color_identity() +
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
   ) +
   labs(x = "Visit code", y = "Participant")
-
 ```
 
 We delete the rows of the duplicates (flagged by "Excluded"), keeping only the highest bleeding values.
 
 ```{r}
 
-bleeding <- 
+bleeding <-
   bleeding |>
   filter(vaginal_bleeding != "Excluded")
-
 ```
 
 ### Adding vaginal bleeding variable to the metadata
@@ -1771,10 +2084,10 @@ bleeding <-
 We add the summary variables for sexual activity and semen exposure to the `calc_vars_study_day` table in the metadata of the `mae` object.
 
 ```{r}
-mae@metadata$calc_vars_study_day <- 
-  mae@metadata$calc_vars_study_day |> 
+mae@metadata$calc_vars_study_day <-
+  mae@metadata$calc_vars_study_day |>
   left_join(
-    bleeding |> 
+    bleeding |>
       select(pid, study_day, vaginal_bleeding),
     by = join_by(pid, study_day)
   )
@@ -1802,10 +2115,19 @@ We have available the following information:
 
 ```{r}
 
-vaginal_insertions <- 
+vaginal_insertions <-
   visits_crfs_merged |>
-  select(uid, pid, visit_code, study_day, visit_type, site, randomized, n_put_in_vagina, put_in_vagina_type.crf21)
-
+  select(
+    uid,
+    pid,
+    visit_code,
+    study_day,
+    visit_type,
+    site,
+    randomized,
+    n_put_in_vagina,
+    put_in_vagina_type.crf21
+  )
 ```
 
 
@@ -1819,28 +2141,34 @@ We first look at the daily responses from CRF33.
 #| fig-height: 10
 #| fig-width: 8
 
-vaginal_insertions |> 
+vaginal_insertions |>
   filter(!is.na(n_put_in_vagina)) |>
   filter(randomized) |>
   ggplot() +
   aes(
-    x = visit_code |> factor(), y = pid, 
+    x = visit_code |> factor(),
+    y = pid,
     col = n_put_in_vagina |> factor()
   ) +
   geom_point() +
   facet_grid(site ~ ., scales = "free_y", space = "free_y") +
   scale_color_manual(
-    "Number of vaginal insertions", 
-    values = 
-      c("0" = "transparent", "1" = "black", "2" = "#E69F00", "3" = "#56B4E9")) +
+    "Number of vaginal insertions",
+    values = c(
+      "0" = "transparent",
+      "1" = "black",
+      "2" = "#E69F00",
+      "3" = "#56B4E9"
+    )
+  ) +
   scale_y_discrete(drop = FALSE) +
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
   ) +
   labs(
-    x = "Visit code", y = "Participants"
-  ) 
-
+    x = "Visit code",
+    y = "Participants"
+  )
 ```
 
 ### Weekly responses
@@ -1859,7 +2187,7 @@ vaginal_insertions <-
       str_replace_all("put_other", "other") |>
       str_replace_all("_", " ") |>
       str_to_sentence(),
-    
+
     n_put_in_vagina.crf21 = case_when(
       is.na(put_in_vagina_type.crf21) ~ NA_integer_,
       put_in_vagina_type.crf21 == "" ~ 0L,
@@ -1869,7 +2197,6 @@ vaginal_insertions <-
     )
   ) |>
   dplyr::rename(n_put_in_vagina.crf33 = n_put_in_vagina)
-
 ```
 
 The variable `n_put_in_vagina.crf22` is created by counting the number of inserted items separated by a comma, excluding the item `Nothing`.
@@ -1880,28 +2207,34 @@ The variable `n_put_in_vagina.crf22` is created by counting the number of insert
 #| fig-height: 10
 #| fig-width: 6
 
-vaginal_insertions |> 
+vaginal_insertions |>
   filter(randomized) |>
   filter(!is.na(n_put_in_vagina.crf21)) |>
   ggplot() +
   aes(
-    x = visit_code |> factor(), y = pid, 
+    x = visit_code |> factor(),
+    y = pid,
     col = n_put_in_vagina.crf21 |> factor()
   ) +
   geom_point() +
   facet_grid(site ~ ., scales = "free_y", space = "free_y") +
   scale_color_manual(
     "Number of vaginal insertions",
-    values =
-      c("0" = "transparent", "1" = "black", "2" = "#E69F00", "3" = "#56B4E9")) +
+    values = c(
+      "0" = "transparent",
+      "1" = "black",
+      "2" = "#E69F00",
+      "3" = "#56B4E9"
+    )
+  ) +
   scale_y_discrete(drop = FALSE) +
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
   ) +
   labs(
-    x = "Visit code", y = "Participants"
-  ) 
-
+    x = "Visit code",
+    y = "Participants"
+  )
 ```
 
 ### Harmonization of weekly and daily responses
@@ -1910,12 +2243,11 @@ In this section, we merge the information for `n_put_in_vagina` from the daily C
 
 ```{r}
 
-vaginal_insertions <- 
+vaginal_insertions <-
   vaginal_insertions |>
   mutate(
     n_put_in_vagina = coalesce(n_put_in_vagina.crf33, n_put_in_vagina.crf21)
   )
-
 ```
 
 
@@ -1925,36 +2257,41 @@ vaginal_insertions <-
 #| fig-height: 10
 #| fig-width: 8
 
-vaginal_insertions |> 
+vaginal_insertions |>
   filter(!is.na(n_put_in_vagina)) |>
   filter(randomized) |>
   ggplot() +
   aes(
-    x = visit_code |> factor(), y = pid, 
+    x = visit_code |> factor(),
+    y = pid,
     col = n_put_in_vagina |> factor()
   ) +
   geom_point() +
   facet_grid(site ~ ., scales = "free_y", space = "free_y") +
   scale_color_manual(
     "Number of vaginal insertions",
-    values =
-      c("0" = "transparent", "1" = "black", "2" = "#E69F00", "3" = "#56B4E9")) +
+    values = c(
+      "0" = "transparent",
+      "1" = "black",
+      "2" = "#E69F00",
+      "3" = "#56B4E9"
+    )
+  ) +
   scale_y_discrete(drop = FALSE) +
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
   ) +
   labs(
-    x = "Visit code", y = "Participants"
-  ) 
-
-
+    x = "Visit code",
+    y = "Participants"
+  )
 ```
 
 There are some missing values in `n_put_in_vagina`, we replace them with 0.
 
 ```{r}
 
-vaginal_insertions <- 
+vaginal_insertions <-
   vaginal_insertions |>
   mutate(
     n_put_in_vagina = case_when(
@@ -1962,7 +2299,6 @@ vaginal_insertions <-
       TRUE ~ as.character(n_put_in_vagina)
     )
   )
-
 ```
 
 ### Deleting duplicate values
@@ -1975,7 +2311,7 @@ As for the previous variable, some values are duplicated. We will remove these d
 #| fig-height: 10
 #| fig-width: 13
 
-vaginal_insertions |> 
+vaginal_insertions |>
   filter(!is.na(n_put_in_vagina)) |>
   filter(randomized) |>
   arrange(pid, study_day) |>
@@ -1983,42 +2319,49 @@ vaginal_insertions |>
   mutate(n_duplicates = n()) |>
   ggplot() +
   aes(
-    x = study_day, y = pid, 
+    x = study_day,
+    y = pid,
     col = n_duplicates |> as.character()
   ) +
   geom_point() +
   facet_grid(site ~ ., scales = "free_y", space = "free_y") +
   scale_color_manual(
     "Number of values per study_day",
-    values =
-      c("0" = "transparent", "1" = "#bdcedb", "2" = "green4", "3" = "orange")) +
+    values = c(
+      "0" = "transparent",
+      "1" = "#bdcedb",
+      "2" = "green4",
+      "3" = "orange"
+    )
+  ) +
   scale_y_discrete(drop = FALSE) +
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
   ) +
   labs(
-    x = "Study day", y = "Participants"
-  ) 
-
+    x = "Study day",
+    y = "Participants"
+  )
 ```
 
 The graph shows that most duplicates come from weekly samples, as expected from the study protocol. We'll first plot confusion matrices to see if these duplicates mostly agree with each other.
 
 ```{r}
 
-duplicates <- 
-  vaginal_insertions |> 
+duplicates <-
+  vaginal_insertions |>
   select(pid, study_day, n_put_in_vagina) |>
   arrange(pid, study_day) |>
   group_by(pid, study_day) |>
-  filter(n()==2) |>
+  filter(n() == 2) |>
   mutate(duplicate_nb = row_number()) |>
   ungroup() |>
   pivot_wider(
-    names_from = duplicate_nb, 
-    values_from = n_put_in_vagina, 
-    names_prefix = "n_put_in_vagina_") |>
-  select(n_put_in_vagina_1, n_put_in_vagina_2) 
+    names_from = duplicate_nb,
+    values_from = n_put_in_vagina,
+    names_prefix = "n_put_in_vagina_"
+  ) |>
+  select(n_put_in_vagina_1, n_put_in_vagina_2)
 
 tab <- table(duplicates$n_put_in_vagina_1, duplicates$n_put_in_vagina_2)
 
@@ -2047,7 +2390,7 @@ We see that most duplicate values agreed with each other.
 We’ll now remove duplicates using `slice_max()` (so we keep the highest `n_put_in_vagina` values).
 
 ```{r}
-vaginal_insertions <- 
+vaginal_insertions <-
   vaginal_insertions |>
   select(uid, pid, study_day, visit_type, n_put_in_vagina) |>
   group_by(pid, study_day) |>
@@ -2060,10 +2403,10 @@ We add the summary variables for vaginal insertion to the `calc_vars_study_day` 
 
 ```{r}
 #| eval: false
-mae@metadata$calc_vars_study_day <- 
-  mae@metadata$calc_vars_study_day |> 
+mae@metadata$calc_vars_study_day <-
+  mae@metadata$calc_vars_study_day |>
   left_join(
-    vaginal_insertions |> 
+    vaginal_insertions |>
       select(pid, study_day, n_put_in_vagina),
     by = join_by(pid, study_day)
   )
@@ -2074,113 +2417,119 @@ mae@metadata$calc_vars_study_day <-
 
 ```{r}
 
-vaginal_insertions <- 
+vaginal_insertions <-
   bind_rows(
-    mae@metadata$crf_data_clean$crf33 |> 
-      select(pid, uid, put_in_vagina_type) |> mutate(crf = 33),
-    mae@metadata$crf_data_clean$crf21 |> 
-      select(pid, uid, put_in_vagina_type) |> mutate(crf = 21)
-  ) |> 
+    mae@metadata$crf_data_clean$crf33 |>
+      select(pid, uid, put_in_vagina_type) |>
+      mutate(crf = 33),
+    mae@metadata$crf_data_clean$crf21 |>
+      select(pid, uid, put_in_vagina_type) |>
+      mutate(crf = 21)
+  ) |>
   distinct()
 
-vaginal_insertions_long <- 
-  vaginal_insertions |> 
+vaginal_insertions_long <-
+  vaginal_insertions |>
   mutate(
     put_in_vagina_type_split = str_split(put_in_vagina_type, ", ")
-  ) |> 
+  ) |>
   unnest(put_in_vagina_type_split) |>
   mutate(
-    put_in_vagina_type_split = 
-      ifelse(
-        (put_in_vagina_type_split == "") | is.na(put_in_vagina_type_split), 
-        "unknown", 
-        put_in_vagina_type_split
-        ) |> 
-      str_replace("put_other", "other") |> 
-      str_replace_all("_", " ") |> 
+    put_in_vagina_type_split = ifelse(
+      (put_in_vagina_type_split == "") | is.na(put_in_vagina_type_split),
+      "unknown",
+      put_in_vagina_type_split
+    ) |>
+      str_replace("put_other", "other") |>
+      str_replace_all("_", " ") |>
       str_to_sentence()
-    )
+  )
 
-vaginal_insertions_long |> dplyr::count(put_in_vagina_type_split) |> 
-  arrange(-n)
+vaginal_insertions_long |> dplyr::count(put_in_vagina_type_split) |> arrange(-n)
 
 
-vaginal_insertions_summary <- 
-  vaginal_insertions_long |> 
-  filter(!(put_in_vagina_type_split %in% c("Nothing", "Water", "None of the above", "Unknown", "Water"))) |> 
-  group_by(pid, uid) |> 
-  summarize(n_put_in_vagina = put_in_vagina_type_split |> n_distinct(), .groups = "drop") |> 
+vaginal_insertions_summary <-
+  vaginal_insertions_long |>
+  filter(
+    !(put_in_vagina_type_split %in%
+      c("Nothing", "Water", "None of the above", "Unknown", "Water"))
+  ) |>
+  group_by(pid, uid) |>
+  summarize(
+    n_put_in_vagina = put_in_vagina_type_split |> n_distinct(),
+    .groups = "drop"
+  ) |>
   arrange(-n_put_in_vagina)
 
-vaginal_insertions_summary |> 
+vaginal_insertions_summary |>
   dplyr::count(n_put_in_vagina)
 
-# vaginal_insertions_wide <- 
-#   vaginal_insertions_long |> 
-#   mutate(tmp = TRUE) |> 
+# vaginal_insertions_wide <-
+#   vaginal_insertions_long |>
+#   mutate(tmp = TRUE) |>
 #   pivot_wider(
-#     names_from = put_in_vagina_type_split, 
-#     values_from = tmp, 
+#     names_from = put_in_vagina_type_split,
+#     values_from = tmp,
 #     values_fill = FALSE
-#   ) 
-
-
+#   )
 ```
 
 
 ```{r}
-vaginal_insertions_summary <- 
-  vaginal_insertions_summary |> 
+vaginal_insertions_summary <-
+  vaginal_insertions_summary |>
   left_join(
-    mae@colData |> as_tibble() |> select(uid, study_day) |> 
-      distinct(),
+    mae@colData |> as_tibble() |> select(uid, study_day) |> distinct(),
     by = join_by(uid)
   )
 
-vaginal_insertions_summary <- 
-  vaginal_insertions_summary |> 
-  group_by(pid, study_day) |> 
-  summarize(n_put_in_vagina = max(n_put_in_vagina), .groups = "drop") 
-
+vaginal_insertions_summary <-
+  vaginal_insertions_summary |>
+  group_by(pid, study_day) |>
+  summarize(n_put_in_vagina = max(n_put_in_vagina), .groups = "drop")
 ```
 
 ```{r}
 #| fig-height: 8
 #| fig-width: 6
 
-vaginal_insertions_summary |> 
+vaginal_insertions_summary |>
   right_join(
-    mae@colData |> as_tibble() |> select(pid, site, arm, randomized) |> 
-      distinct() |> filter(randomized),
+    mae@colData |>
+      as_tibble() |>
+      select(pid, site, arm, randomized) |>
+      distinct() |>
+      filter(randomized),
     by = join_by(pid)
-    ) |> 
-  filter(randomized) |> 
+  ) |>
+  filter(randomized) |>
   ggplot() +
   facet_grid(site ~ ., scales = "free", space = "free", drop = FALSE) +
   aes(x = study_day, y = pid, col = n_put_in_vagina |> factor()) +
   geom_point() +
   scale_color_brewer("N of vag. insertions", na.value = "gray") + #
-  scale_x_continuous("Study day", breaks = seq(0, 140, by = 7), minor_breaks = NULL) +
+  scale_x_continuous(
+    "Study day",
+    breaks = seq(0, 140, by = 7),
+    minor_breaks = NULL
+  ) +
   ylab("Participants") +
   theme(axis.text.y = element_blank())
-  
-
 ```
 
 
 
 ```{r}
 
-mae@metadata$calc_vars_study_day <- 
-  mae@metadata$calc_vars_study_day |> 
-  select(-any_of("n_put_in_vagina")) |> 
+mae@metadata$calc_vars_study_day <-
+  mae@metadata$calc_vars_study_day |>
+  select(-any_of("n_put_in_vagina")) |>
   left_join(
-    vaginal_insertions_summary |> 
+    vaginal_insertions_summary |>
       select(pid, study_day, n_put_in_vagina),
     by = join_by(pid, study_day)
-  ) |> 
+  ) |>
   mutate(n_put_in_vagina = n_put_in_vagina |> replace_na(0))
-
 ```
 
 
@@ -2205,33 +2554,31 @@ Here is the list of all the concomitant medications reported by the participants
 
 ```{r}
 
-
-crf31 <- 
-  metadata(mae)$crf_data_clean$crf31 |> 
+crf31 <-
+  metadata(mae)$crf_data_clean$crf31 |>
   left_join(
-    colData(mae) |> 
-      as_tibble() |> 
-      select(pid, ITT, mITT, PP, randomized, site) |> 
+    colData(mae) |>
+      as_tibble() |>
+      select(pid, ITT, mITT, PP, randomized, site) |>
       distinct()
-    ) |> 
+  ) |>
   filter(randomized)
 
-# we create the pid label variable 
+# we create the pid label variable
 crf31 <- crf31 |> mutate(pid_label = ifelse(!PP, paste("(*) ", pid), pid))
 
-crf31 |> 
-  dplyr::count(medication) |> 
+crf31 |>
+  dplyr::count(medication) |>
   gt::gt(caption = "Concominant medication")
-
 ```
 
 The different route are 
 
 ```{r}
 
-crf31 |> 
-  filter(!is.na(route)) |> 
-  dplyr::count(route) |> 
+crf31 |>
+  filter(!is.na(route)) |>
+  dplyr::count(route) |>
   mutate(
     route_description = case_when(
       route == "IM" ~ "Intramuscular",
@@ -2244,19 +2591,18 @@ crf31 |>
       route == "REC" ~ "Rectal",
       TRUE ~ route
     )
-  ) |> 
+  ) |>
   select(route, route_description, n) |>
   arrange(desc(n)) |>
   gt::gt(caption = "Route of administration")
-
 ```
 
 And the different frequency are
 
 ```{r}
 
-crf31 |> 
-  filter(!is.na(frequency)) |> 
+crf31 |>
+  filter(!is.na(frequency)) |>
   dplyr::count(frequency) |>
   mutate(
     frequency_description = case_when(
@@ -2272,9 +2618,8 @@ crf31 |>
     )
   ) |>
   select(frequency, frequency_description, n) |>
-  arrange(desc(n)) |> 
+  arrange(desc(n)) |>
   gt::gt(caption = "Frequency of administration")
-
 ```
 
 
@@ -2283,24 +2628,38 @@ Some of those medications are antibiotics, which may have an impact on the vagin
 
 ```{r}
 
-antibiotics <- c("METRONIDAZOLE", "FLAGYL", "NITROFURANTOIN", "MACROBID", "AZITHROMYCIN", "PENICILLIN", "AMOXICILLIN", "AUGMENTIN", "CIPROBAY", "CIPROFLOXACIN", "CEFTRIAXONE", "DOXYCYCLINE","FOSFOMYCIN", "BENZATHINE", "URIZONE")
+antibiotics <- c(
+  "METRONIDAZOLE",
+  "FLAGYL",
+  "NITROFURANTOIN",
+  "MACROBID",
+  "AZITHROMYCIN",
+  "PENICILLIN",
+  "AMOXICILLIN",
+  "AUGMENTIN",
+  "CIPROBAY",
+  "CIPROFLOXACIN",
+  "CEFTRIAXONE",
+  "DOXYCYCLINE",
+  "FOSFOMYCIN",
+  "BENZATHINE",
+  "URIZONE"
+)
 
-# crf31 |> 
-#   filter(str_detect(medication, paste(antibiotics, collapse = "|"))) |> 
-#   dplyr::count(medication) |> 
+# crf31 |>
+#   filter(str_detect(medication, paste(antibiotics, collapse = "|"))) |>
+#   dplyr::count(medication) |>
 #   gt::gt(caption="Supplementary antibiotics")
 
-
-crf31 |> 
+crf31 |>
   filter(str_detect(medication, paste(antibiotics, collapse = "|"))) |>
   summarise(
     n = n(),
     n_PP = sum(PP, na.rm = TRUE),
     .by = medication
   ) |>
-  arrange(desc(n)) |> 
+  arrange(desc(n)) |>
   gt::gt(caption = "Supplementary antibiotics")
-
 ```
 
 We create a dictionnary built from distinct combinaition of `medication` and `route` to categorize the antibiotics into different classes. This dictionnary contains the following variables:
@@ -2314,8 +2673,8 @@ We create a dictionnary built from distinct combinaition of `medication` and `ro
 
 ```{r}
 
-dictionnary <- 
-  crf31 |> 
+dictionnary <-
+  crf31 |>
   select(medication, route) |>
   distinct() |>
   mutate(
@@ -2329,61 +2688,103 @@ dictionnary <-
       route == "SC" ~ "Subcutaneous",
       route == "REC" ~ "Rectal",
       TRUE ~ route
-    ), 
-    is_abx = str_detect(medication, paste(antibiotics, collapse = "|")), 
+    ),
+    is_abx = str_detect(medication, paste(antibiotics, collapse = "|")),
     abx_compound = case_when(
-      str_detect(medication, regex("METRONIDAZOLE|FLAGYL", ignore_case = TRUE)) ~ "Metronidazole",
-      str_detect(medication, regex("NITROFURANTOIN|MACROBID", ignore_case = TRUE)) ~ "Nitrofurans",
-      str_detect(medication, regex("AZITHRO", ignore_case = TRUE)) ~ "Macrolides",
-      str_detect(medication, regex("PENICILLIN|AMOXICILLIN|AUGMENTIN", ignore_case = TRUE)) ~ "Penicillins",
-      str_detect(medication, regex("CIPROFLOXACIN|CIPROBAY", ignore_case = TRUE)) ~ "Fluoroquinolones",
-      str_detect(medication, regex("CEFTRIAXONE", ignore_case = TRUE)) ~ "Cephalosporins",
-      str_detect(medication, regex("DOXYCYCLINE", ignore_case = TRUE)) ~ "Tetracyclines",
-      str_detect(medication, regex("FOSFOMYCIN|URIZONE", ignore_case = TRUE)) ~ "Fosfomycin",
-      str_detect(medication, regex("BENZANINE", ignore_case = TRUE)) ~ "Benzanines",
+      str_detect(
+        medication,
+        regex("METRONIDAZOLE|FLAGYL", ignore_case = TRUE)
+      ) ~ "Metronidazole",
+      str_detect(
+        medication,
+        regex("NITROFURANTOIN|MACROBID", ignore_case = TRUE)
+      ) ~ "Nitrofurans",
+      str_detect(
+        medication,
+        regex("AZITHRO", ignore_case = TRUE)
+      ) ~ "Macrolides",
+      str_detect(
+        medication,
+        regex("PENICILLIN|AMOXICILLIN|AUGMENTIN", ignore_case = TRUE)
+      ) ~ "Penicillins",
+      str_detect(
+        medication,
+        regex("CIPROFLOXACIN|CIPROBAY", ignore_case = TRUE)
+      ) ~ "Fluoroquinolones",
+      str_detect(
+        medication,
+        regex("CEFTRIAXONE", ignore_case = TRUE)
+      ) ~ "Cephalosporins",
+      str_detect(
+        medication,
+        regex("DOXYCYCLINE", ignore_case = TRUE)
+      ) ~ "Tetracyclines",
+      str_detect(
+        medication,
+        regex("FOSFOMYCIN|URIZONE", ignore_case = TRUE)
+      ) ~ "Fosfomycin",
+      str_detect(
+        medication,
+        regex("BENZANINE", ignore_case = TRUE)
+      ) ~ "Benzanines",
       TRUE ~ "Non ABX"
-    ), 
+    ),
     abx_cat = case_when(
-      is_abx & abx_compound == "Metronidazole" & route == "PO" ~ "cm_oral_mtz", 
+      is_abx & abx_compound == "Metronidazole" & route == "PO" ~ "cm_oral_mtz",
       is_abx & abx_compound == "Metronidazole" & route == "VAG" ~ "cm_vag_mtz",
-      is_abx & abx_compound == "Metronidazole" & !(route %in% c("PO", "VAG")) ~ "cm_oral_mtz", #other_route_mtz
+      is_abx &
+        abx_compound == "Metronidazole" &
+        !(route %in% c("PO", "VAG")) ~ "cm_oral_mtz", #other_route_mtz
       is_abx & abx_compound != "Metronidazole" ~ "cm_other_abx",
-      
+
       #is_abx & abx_compound != "Metronidazole" & route == "PO" ~ "oral_other_abx",
       #is_abx & abx_compound != "Metronidazole" & route == "VAG" ~ "vaginal_other_abx",
       #is_abx & abx_compound != "Metronidazole" & !(route %in% c("PO", "VAG")) ~ "other_route_other_abx",
-      
+
       TRUE ~ "Non ABX"
     )
   )
 
 dictionnary |> arrange(-is_abx, abx_compound) |> gt()
-
 ```
 
 ```{r}
 #| eval: false
 # output in Excel for Caroline
 
-t1 <- dictionnary |> distinct(medication, is_abx) |> arrange(-is_abx, medication)
+t1 <- dictionnary |>
+  distinct(medication, is_abx) |>
+  arrange(-is_abx, medication)
 t2 <- dictionnary |> distinct(route, route_description) |> arrange(route)
-t3 <- dictionnary |> filter(is_abx) |> distinct(medication, abx_compound) |> arrange(abx_compound, medication)
-t4 <- dictionnary |> filter(is_abx) |> distinct(abx_compound, route_description, abx_cat) |> arrange(abx_compound, route_description) |> mutate(comments = case_when(
-  abx_compound == "Metronidazole" & route_description == "Intramuscular" ~ "Is it ok to categorize intramuscular metronidazole as oral metronidazole (cm_oral_mtz) ?",
-  abx_compound == "Metronidazole" & route_description == "Blank" ~ "Is it ok to categorize metronidazole with missing route as oral metronidazole (cm_oral_mtz) ?",
-  TRUE ~ ""
-))
+t3 <- dictionnary |>
+  filter(is_abx) |>
+  distinct(medication, abx_compound) |>
+  arrange(abx_compound, medication)
+t4 <- dictionnary |>
+  filter(is_abx) |>
+  distinct(abx_compound, route_description, abx_cat) |>
+  arrange(abx_compound, route_description) |>
+  mutate(
+    comments = case_when(
+      abx_compound == "Metronidazole" &
+        route_description ==
+          "Intramuscular" ~ "Is it ok to categorize intramuscular metronidazole as oral metronidazole (cm_oral_mtz) ?",
+      abx_compound == "Metronidazole" &
+        route_description ==
+          "Blank" ~ "Is it ok to categorize metronidazole with missing route as oral metronidazole (cm_oral_mtz) ?",
+      TRUE ~ ""
+    )
+  )
 
 openxlsx::write.xlsx(
   list(
-    medication_is_abx      = t1,
-    route_description      = t2,
+    medication_is_abx = t1,
+    route_description = t2,
     abx_medication_compound = t3,
-    abx_compound_route_cat  = t4
+    abx_compound_route_cat = t4
   ),
   file = "dictionary_check_caroline.xlsx"
 )
-
 ```
 
 
@@ -2391,18 +2792,31 @@ We only are interest in supplementary antibiotics taken during the study period.
 
 ```{r}
 
-suppl_antibiotics_crf31 <- 
-  crf31 |> 
-  select(pid, site, pid_label, med_start_relative_date, med_stop_relative_date, medication, route) |> 
+suppl_antibiotics_crf31 <-
+  crf31 |>
+  select(
+    pid,
+    site,
+    pid_label,
+    med_start_relative_date,
+    med_stop_relative_date,
+    medication,
+    route
+  ) |>
   left_join(
-    dictionnary |> select(medication, route, is_abx, abx_cat, abx_compound) |> distinct(),
+    dictionnary |>
+      select(medication, route, is_abx, abx_cat, abx_compound) |>
+      distinct(),
     by = c("medication", "route")
-  ) |> 
+  ) |>
   filter(is_abx) |>
   mutate(
-    med_stop_relative_date_modified = ifelse(is.na(med_stop_relative_date), med_start_relative_date, med_stop_relative_date)
+    med_stop_relative_date_modified = ifelse(
+      is.na(med_stop_relative_date),
+      med_start_relative_date,
+      med_stop_relative_date
+    )
   )
-
 ```
 
 *Note : stars represent participants not included in the PP population*
@@ -2413,73 +2827,84 @@ suppl_antibiotics_crf31 <-
 
 # by antibiotic compound
 
-suppl_antibiotics_crf31 |> 
+suppl_antibiotics_crf31 |>
   ggplot() +
   aes(
-    x    = med_start_relative_date,
+    x = med_start_relative_date,
     xend = med_stop_relative_date_modified,
-    y    = pid_label,
+    y = pid_label,
     color = abx_compound
   ) +
-    annotate(
+  annotate(
     "rect",
-    xmin = -Inf, xmax = 35,
-    ymin = -Inf, ymax = Inf,
-    fill = "pink", alpha = 0.2
-  ) + 
+    xmin = -Inf,
+    xmax = 35,
+    ymin = -Inf,
+    ymax = Inf,
+    fill = "pink",
+    alpha = 0.2
+  ) +
   geom_segment(linewidth = 1.2, lineend = "round") +
   geom_point(
-    data = suppl_antibiotics_crf31 |> 
-      filter(med_start_relative_date == med_stop_relative_date_modified, is_abx),
+    data = suppl_antibiotics_crf31 |>
+      filter(
+        med_start_relative_date == med_stop_relative_date_modified,
+        is_abx
+      ),
     aes(x = med_start_relative_date),
     size = 1
-  )+
+  ) +
   facet_grid(site ~ ., scales = "free_y", space = "free_y") +
   labs(
     x = "Study day",
     y = "Participant",
     color = "Antibiotic",
-    title = "Periods of additional antibiotic use", 
+    title = "Periods of additional antibiotic use",
     caption = "(*) Randomized participants not included in the per-protocol population"
   ) +
-  scale_x_continuous(breaks = seq(0,100, by=7))
+  scale_x_continuous(breaks = seq(0, 100, by = 7))
 
 
-# by antibiotics cat 
+# by antibiotics cat
 
-suppl_antibiotics_crf31 |> 
+suppl_antibiotics_crf31 |>
   filter(is_abx) |>
   ggplot() +
   aes(
-    x    = med_start_relative_date,
+    x = med_start_relative_date,
     xend = med_stop_relative_date_modified,
-    y    = pid_label,
+    y = pid_label,
     color = abx_cat
   ) +
-    annotate(
+  annotate(
     "rect",
-    xmin = -Inf, xmax = 35,
-    ymin = -Inf, ymax = Inf,
-    fill = "pink", alpha = 0.2
-  ) + 
+    xmin = -Inf,
+    xmax = 35,
+    ymin = -Inf,
+    ymax = Inf,
+    fill = "pink",
+    alpha = 0.2
+  ) +
   geom_segment(linewidth = 1.2, lineend = "round", alpha = 0.6) +
   geom_point(
-    data = suppl_antibiotics_crf31 |> 
-      filter(med_start_relative_date == med_stop_relative_date_modified, is_abx),
+    data = suppl_antibiotics_crf31 |>
+      filter(
+        med_start_relative_date == med_stop_relative_date_modified,
+        is_abx
+      ),
     aes(x = med_start_relative_date),
     alpha = 0.6,
     size = 1
-  )+
+  ) +
   facet_grid(site ~ ., scales = "free_y", space = "free_y") +
   labs(
     x = "Study day",
     y = "Participant",
     color = "Antibiotic",
-    title = "Periods of additional antibiotic use", 
+    title = "Periods of additional antibiotic use",
     caption = "(*) Randomized participants not included in the per-protocol population"
   ) +
-  scale_x_continuous(breaks = seq(0,100, by=7))
-
+  scale_x_continuous(breaks = seq(0, 100, by = 7))
 ```
 
 
@@ -2493,21 +2918,20 @@ One participant (068200457) have a empty value ("", and not `NA`). We will consi
 
 ```{r}
 
-crf20 <- 
-  metadata(mae)$visits_crfs_merged |> 
+crf20 <-
+  metadata(mae)$visits_crfs_merged |>
   left_join(
-    colData(mae) |> 
-      as_tibble() |> 
-      select(pid, ITT, mITT, PP, randomized, site) |> 
+    colData(mae) |>
+      as_tibble() |>
+      select(pid, ITT, mITT, PP, randomized, site) |>
       distinct()
-    ) |> 
+  ) |>
   filter(randomized) |>
-  select(pid, visit_code, study_day, PP, site, used_during_past_week) 
+  select(pid, visit_code, study_day, PP, site, used_during_past_week)
 
-crf20 |> 
-  dplyr::count(used_during_past_week) |> 
+crf20 |>
+  dplyr::count(used_during_past_week) |>
   gt::gt(caption = "Antibiotics/probiotics use during the past week, by visit")
-
 ```
 
 We only look at the vaginal/oral antibiotics. 
@@ -2516,80 +2940,94 @@ We only look at the vaginal/oral antibiotics.
 #| fig.height: 8
 #| fig.width: 8
 
-
-suppl_antibiotics_crf20 <- 
+suppl_antibiotics_crf20 <-
   crf20 |>
-  filter(str_detect(used_during_past_week, "antibiotic")) |> 
+  filter(str_detect(used_during_past_week, "antibiotic")) |>
   mutate(
-    used_during_past_week = 
-      str_remove(used_during_past_week, "lube_with_sex") |> 
-      str_remove("oral_yeast") |> 
+    used_during_past_week = str_remove(
+      used_during_past_week,
+      "lube_with_sex"
+    ) |>
+      str_remove("oral_yeast") |>
       str_replace_all(",\\s*", ""),
-    pid_label = ifelse(!PP, paste("(*) ", pid), pid), 
+    pid_label = ifelse(!PP, paste("(*) ", pid), pid),
     window_start = study_day - 7,
-    window_end   = study_day
+    window_end = study_day
   )
- 
-suppl_antibiotics_crf20 |> 
-  dplyr::count(used_during_past_week) |> 
+
+suppl_antibiotics_crf20 |>
+  dplyr::count(used_during_past_week) |>
   gt::gt(caption = "Antibiotics/probiotics use during the past week, by visit")
 
-suppl_antibiotics_crf20 |> 
+suppl_antibiotics_crf20 |>
   ggplot() +
   aes(
-    x = study_day, 
-    y = pid_label, 
+    x = study_day,
+    y = pid_label,
     color = used_during_past_week
-    ) +
+  ) +
   geom_point() +
   geom_segment(
-    aes(x = window_start, xend = window_end, y = pid_label, yend = pid_label), 
-    linewidth = 1.2, lineend = "round", 
+    aes(x = window_start, xend = window_end, y = pid_label, yend = pid_label),
+    linewidth = 1.2,
+    lineend = "round",
     alpha = 0.4
   ) +
   annotate(
     "rect",
-    xmin = -Inf, xmax = 35,
-    ymin = -Inf, ymax = Inf,
-    fill = "pink", alpha = 0.2
+    xmin = -Inf,
+    xmax = 35,
+    ymin = -Inf,
+    ymax = Inf,
+    fill = "pink",
+    alpha = 0.2
   ) +
   facet_grid(site ~ ., scales = "free_y", space = "free_y") +
   scale_color_manual(
     "Medication use during the past week",
     values = c(
-      "oral_antibiotic" = "deeppink", 
+      "oral_antibiotic" = "deeppink",
       "vaginal_antibiotic" = "orange"
-      )
+    )
   ) +
-   scale_y_discrete(drop = FALSE) +
+  scale_y_discrete(drop = FALSE) +
   labs(
     x = "Study day",
     y = "Participant",
     color = "Medication use during the past week",
-    title = "Medication use during the past week (CRF20)", 
+    title = "Medication use during the past week (CRF20)",
     caption = "(*) Randomized participants not included in the per-protocol population"
   ) +
-  scale_x_continuous(breaks = seq(0,100, by=7))
-
+  scale_x_continuous(breaks = seq(0, 100, by = 7))
 ```
 
 We combine the information from this CRF with the information from CRF31. The goal is to check if the antibiotics reported in CRF31 overlap with the periods of antibiotic use reported in CRF20, and to identify any discrepancies between the two sources of information. We also want to see if there are any antibiotics reported in CRF20 that are not captured in CRF31.
 
 ```{r}
 
-
-suppl_antibiotics_crf31_long <- 
-  suppl_antibiotics_crf31 |> 
+suppl_antibiotics_crf31_long <-
+  suppl_antibiotics_crf31 |>
   filter(is_abx) |>
-  select(pid, pid_label, site, med_start_relative_date, med_stop_relative_date_modified, is_abx, abx_cat, abx_compound) |> 
-  rowwise() |> 
-  mutate(study_day = list(med_start_relative_date:med_stop_relative_date_modified)) |> 
-  unnest(study_day) |> 
-  select(-med_start_relative_date, -med_stop_relative_date_modified) |> 
-  ungroup() 
+  select(
+    pid,
+    pid_label,
+    site,
+    med_start_relative_date,
+    med_stop_relative_date_modified,
+    is_abx,
+    abx_cat,
+    abx_compound
+  ) |>
+  rowwise() |>
+  mutate(
+    study_day = list(med_start_relative_date:med_stop_relative_date_modified)
+  ) |>
+  unnest(study_day) |>
+  select(-med_start_relative_date, -med_stop_relative_date_modified) |>
+  ungroup()
 
-# suppl_antibiotics_crf31_long <- 
-#   suppl_antibiotics_crf31_long |> 
+# suppl_antibiotics_crf31_long <-
+#   suppl_antibiotics_crf31_long |>
 #   group_by(pid, pid_label, site, study_day) |>
 #   summarise(
 #     abx_cat = paste(abx_cat, collapse = "; "),
@@ -2597,16 +3035,21 @@ suppl_antibiotics_crf31_long <-
 #     .groups = "drop"
 #   )
 
-suppl_antibiotics_crf20_long <- 
+suppl_antibiotics_crf20_long <-
   suppl_antibiotics_crf20 |>
-  select(pid, pid_label, site, crf20_start = window_start, crf20_end = window_end, antibiotics_crf20 = used_during_past_week)|>
+  select(
+    pid,
+    pid_label,
+    site,
+    crf20_start = window_start,
+    crf20_end = window_end,
+    antibiotics_crf20 = used_during_past_week
+  ) |>
   rowwise() |>
   mutate(study_day = list(crf20_start:crf20_end)) |>
   unnest(study_day) |>
-  ungroup() |> 
+  ungroup() |>
   select(pid, pid_label, site, study_day, antibiotics_crf20)
-
-
 ```
 
 ```{r}
@@ -2623,43 +3066,45 @@ ggplot() +
     alpha = 0.7
   ) +
   scale_color_manual(
-    name   = "CRF31",
+    name = "CRF31",
     values = c(
-      "oral_mtz"       = "pink",
+      "oral_mtz" = "pink",
       "oral_other_abx" = "purple",
-      "vaginal_mtz"    = "blue",
-      "other_route_mtz"      = "darkgreen",
-      "other_route_other_abx"      = "green"
+      "vaginal_mtz" = "blue",
+      "other_route_mtz" = "darkgreen",
+      "other_route_other_abx" = "green"
     )
   ) +
-  
-  new_scale_color() +  
-  
+
+  new_scale_color() +
+
   # CRF20
   geom_point(
-    data  = suppl_antibiotics_crf20_long,
+    data = suppl_antibiotics_crf20_long,
     aes(x = study_day, y = pid_label, col = antibiotics_crf20),
     shape = 4,
-    size  = 3,
+    size = 3,
     alpha = 0.7
   ) +
   scale_color_manual(
-    name   = "CRF20",
+    name = "CRF20",
     values = c(
-      "oral_antibiotic"    = "red",
+      "oral_antibiotic" = "red",
       "vaginal_antibiotic" = "cyan"
     )
   ) +
-  
+
   annotate(
     "rect",
-    xmin = -Inf, xmax = 35,
-    ymin = -Inf, ymax = Inf,
-    fill = "pink", alpha = 0.2
+    xmin = -Inf,
+    xmax = 35,
+    ymin = -Inf,
+    ymax = Inf,
+    fill = "pink",
+    alpha = 0.2
   ) +
   facet_grid(site ~ ., scales = "free_y", space = "free_y") +
   labs(x = "Study day", y = NULL)
-
 ```
 
 ### Combining CRF20 and CRF31 information
@@ -2673,7 +3118,7 @@ We create two variables : `daily_exposure_add_abx` which take the value of `abx_
 
 ```{r}
 #| eval: false
-suppl_antibiotics_crf20_long <- 
+suppl_antibiotics_crf20_long <-
   suppl_antibiotics_crf20_long |>
   mutate(
     abx_cat = case_when(
@@ -2682,7 +3127,6 @@ suppl_antibiotics_crf20_long <-
       TRUE ~ "???"
     )
   )
-
 ```
 
 
@@ -2699,25 +3143,24 @@ We add the summary variables for supplementary antibiotics to the `calc_vars_stu
 ```{r}
 
 # for now we only add the information from crf31
-abx_dummies <- 
+abx_dummies <-
   suppl_antibiotics_crf31_long |>
   select(pid, study_day, abx_cat) |>
   mutate(value = 1) |>
   pivot_wider(
-    names_from   = abx_cat,
-    values_from  = value,
-    values_fill  = 0,
-    values_fn    = max,          
+    names_from = abx_cat,
+    values_from = value,
+    values_fill = 0,
+    values_fn = max,
     names_prefix = "daily_exposure_"
   )
 
 tmp <- mae@metadata$calc_vars_study_day
 
-mae@metadata$calc_vars_study_day <- 
+mae@metadata$calc_vars_study_day <-
   mae@metadata$calc_vars_study_day |>
   full_join(abx_dummies, by = c("pid", "study_day")) |>
   mutate(across(starts_with("daily_exposure_"), \(x) replace_na(x, 0)))
-
 ```
 
 ## Checking duplicates
@@ -2726,10 +3169,9 @@ We check if there are some duplicate combination of `pid` and `study_day` in the
 
 ```{r}
 
-mae@metadata$calc_vars_study_day|> 
+mae@metadata$calc_vars_study_day |>
   dplyr::count(pid, study_day) |>
   filter(n > 1)
-
 ```
 
 # Saving the `MultiAssayExperiment` objects
@@ -2740,13 +3182,14 @@ We save the MAE for downstream analyses.
 #| eval: true
 
 saveRDS(
-  mae, 
+  mae,
   str_c(
-    get_03_output_dir(),  
-    "mae_full_03_", today() |> str_remove_all("-"), ".rds"
+    get_03_output_dir(),
+    "mae_full_03_",
+    today() |> str_remove_all("-"),
+    ".rds"
   )
 )
-
 ```
 
 

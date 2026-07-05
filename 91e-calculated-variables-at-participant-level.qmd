@@ -39,25 +39,23 @@ tmp <- fs::dir_map("R scripts/", source)
 tmp <- fs::dir_map("../VIBRANT-99-utils/R/", source)
 rm(tmp)
 theme_set(theme_light())
-
 ```
 
 
 
 ```{r}
 
-mae_files <- 
+mae_files <-
   fs::dir_ls(
     get_03_output_dir(),
     regexp = "mae_full_04_.*\\.rds$"
-  ) |> 
+  ) |>
   sort(decreasing = TRUE) |>
   magrittr::extract(1)
 
 mae <- readRDS(mae_files)
 
 rm(mae_files)
-
 ```
 
 
@@ -89,9 +87,11 @@ The following calculated variables are created at the participant level:
 
 ```{r}
 
-mae@metadata$calc_vars_pid <- 
-  mae@colData |> as_tibble() |> select(pid, site, randomized, ITT, mITT, PP) |> distinct()
-
+mae@metadata$calc_vars_pid <-
+  mae@colData |>
+  as_tibble() |>
+  select(pid, site, randomized, ITT, mITT, PP) |>
+  distinct()
 ```
 
 
@@ -102,11 +102,22 @@ participant_crfs_merged <- mae@metadata$participant_crfs_merged
 visits_crfs_merged <-
   metadata(mae)$visits_crfs_merged |>
   left_join(
-    mae@colData |> as_tibble() |> select(uid, randomized, site, visit_type) |> distinct(),
+    mae@colData |>
+      as_tibble() |>
+      select(uid, randomized, site, visit_type) |>
+      distinct(),
     by = c("uid")
   ) |>
-  select(uid, pid, visit_code, study_day, visit_type, site, randomized, everything()) 
-
+  select(
+    uid,
+    pid,
+    visit_code,
+    study_day,
+    visit_type,
+    site,
+    randomized,
+    everything()
+  )
 ```
 
 
@@ -120,23 +131,20 @@ For instance, we do not harmonized the education variable between sites because 
 
 ```{r}
 
-education <- 
-  participant_crfs_merged |> 
-  select(pid, site, edu) |> 
+education <-
+  participant_crfs_merged |>
+  select(pid, site, edu) |>
   left_join(
-    mae@colData |> as_tibble() |> 
-      select(pid, randomized) |> 
-      distinct(),
+    mae@colData |> as_tibble() |> select(pid, randomized) |> distinct(),
     by = join_by(pid)
   )
-
 ```
 
 ```{r}
 #| fig-width: 8
 #| fig-height: 2.5
 
-education|> 
+education |>
   ggplot() +
   aes(y = edu, fill = randomized) +
   facet_wrap(. ~ site, scales = "free") +
@@ -149,30 +157,28 @@ education|>
     labels = c("TRUE" = "Randomized", "FALSE" = "Not randomized")
   ) +
   theme(legend.position = "top")
-
 ```
 
 ```{r}
 #| fig-width: 8
 #| fig-height: 2
 
-education |> 
-  filter(randomized) |> 
+education |>
+  filter(randomized) |>
   ggplot() +
   aes(y = edu) +
   facet_wrap(. ~ site, scales = "free") +
   geom_bar(fill = "dodgerblue1") +
   xlab("Number of participants") +
   ylab("")
-
 ```
 
 We add the variable to `mae@metadata$calc_vars_pid`
 
 ```{r}
 
-mae@metadata$calc_vars_pid <- 
-  mae@metadata$calc_vars_pid |> 
+mae@metadata$calc_vars_pid <-
+  mae@metadata$calc_vars_pid |>
   left_join(
     education |> select(pid, education = edu) |> distinct(),
     by = "pid"
@@ -207,23 +213,19 @@ For the US, the variable was defined as an annual household gross income, while 
 
 ```{r}
 
-income <- 
+income <-
   participant_crfs_merged |>
-  select(pid, monthly_gross_income, annual_gross_income, site) |> 
+  select(pid, monthly_gross_income, annual_gross_income, site) |>
   left_join(
-    mae@colData |> as_tibble() |> 
-      select(pid, randomized) |> 
-      distinct(),
+    mae@colData |> as_tibble() |> select(pid, randomized) |> distinct(),
     by = join_by(pid)
   )
-
-
 ```
 
 
 ```{r}
 
-income <- 
+income <-
   income |>
   mutate(
     gross_income = case_when(
@@ -232,7 +234,6 @@ income <-
     )
   ) |>
   select(-monthly_gross_income, -annual_gross_income)
-
 ```
 
 For harmonization purposes, we also add a new column called `income_level`, which summarize the information in `gross_income` into three categories, namely "Low", "Mid", and "High", where:
@@ -258,34 +259,43 @@ income <-
       gross_income == "Less than R1000 per month" ~ "Low",
       gross_income == "R1001-R3500 per month" ~ "Mid",
       gross_income == "> R3500" ~ "High",
-      
+
       gross_income == "Less than $30,000" ~ "Low",
       gross_income == "$30.000 - $70,000" ~ "Mid",
-      gross_income %in% c("$70,000 - $140,000", "Greater than $140,000") ~ "High",
-      
-      gross_income == "Prefer not to answer" ~ "Missing"
-    ) |> factor(levels = c("Low", "Mid", "High", "Missing"))
-  )
+      gross_income %in%
+        c("$70,000 - $140,000", "Greater than $140,000") ~ "High",
 
+      gross_income == "Prefer not to answer" ~ "Missing"
+    ) |>
+      factor(levels = c("Low", "Mid", "High", "Missing"))
+  )
 ```
 
 
 ```{r}
 
-income |> 
-  filter(!is.na(income_level)) |> 
+income |>
+  filter(!is.na(income_level)) |>
   ggplot() +
   facet_wrap(. ~ site, scales = "free", space = "free_y") +
   aes(y = gross_income, fill = income_level, alpha = randomized) +
   geom_bar() +
-  scale_alpha_manual("", values = c("TRUE" = 1, "FALSE" = 0.3), labels = c("TRUE" = "Randomized", "FALSE" = "Not randomized")) +
+  scale_alpha_manual(
+    "",
+    values = c("TRUE" = 1, "FALSE" = 0.3),
+    labels = c("TRUE" = "Randomized", "FALSE" = "Not randomized")
+  ) +
   scale_fill_manual(
     "Income level",
-    values = c("Low" = "tomato", "Mid" = "gold", "High" = "springgreen3", "Missing" = "gray70")
+    values = c(
+      "Low" = "tomato",
+      "Mid" = "gold",
+      "High" = "springgreen3",
+      "Missing" = "gray70"
+    )
   ) +
   xlab("Number of participants") +
   ylab("")
-
 ```
 
 
@@ -297,13 +307,14 @@ income |>
   group_by(site, randomized, income_level) |>
   summarise(n = n(), .groups = "drop") |>
   group_by(site) |>
-  mutate(pct = round(n / sum(n) * 100, 1),
-         label = paste0(n, " (", pct, "%)")) |>
+  mutate(
+    pct = round(n / sum(n) * 100, 1),
+    label = paste0(n, " (", pct, "%)")
+  ) |>
   select(-n, -pct) |>
   pivot_wider(names_from = income_level, values_from = label) |>
   ungroup() |>
   gt(caption = "Distribution of participants across income levels by site")
-
 ```
 
 
@@ -311,19 +322,20 @@ income |>
 # table summarizing proportions of participants in each category by site
 
 income |>
-  filter(randomized) |> 
+  filter(randomized) |>
   group_by(site, income_level) |>
   summarise(n = n(), .groups = "drop") |>
   group_by(site) |>
-  mutate(pct = round(n / sum(n) * 100, 1),
-         label = paste0(n, " (", pct, "%)")) |>
+  mutate(
+    pct = round(n / sum(n) * 100, 1),
+    label = paste0(n, " (", pct, "%)")
+  ) |>
   select(-n, -pct) |>
   pivot_wider(names_from = income_level, values_from = label) |>
   ungroup() |>
-  gt(caption = "Distribution of income levels by site (randomized p.)") |> 
+  gt(caption = "Distribution of income levels by site (randomized p.)") |>
   # replace NAs by 0
   fmt_missing(columns = everything(), missing_text = "0")
-
 ```
 
 
@@ -337,9 +349,13 @@ income |>
   geom_tile(aes(fill = n)) +
   geom_text(aes(label = n)) +
   scale_fill_gradient(low = "white", high = "steelblue1") +
-  labs(x = "Income level", y = "Site", title = "Distribution of participants across income levels by site", subtitle = "Randomized participants only") +
+  labs(
+    x = "Income level",
+    y = "Site",
+    title = "Distribution of participants across income levels by site",
+    subtitle = "Randomized participants only"
+  ) +
   guides(fill = "none")
-
 ```
 
 
@@ -347,13 +363,12 @@ We add the variable to `mae@metadata$calc_vars_pid`
 
 ```{r}
 
-mae@metadata$calc_vars_pid <- 
-  mae@metadata$calc_vars_pid |> 
+mae@metadata$calc_vars_pid <-
+  mae@metadata$calc_vars_pid |>
   left_join(
     income |> select(pid, income_level) |> distinct(),
     by = "pid"
   )
-
 ```
 
 
@@ -373,8 +388,16 @@ For this variable, we have available the following information:
 
 contraception <-
   visits_crfs_merged |>
-  select(uid, pid, visit_code, study_day, randomized, site, contraception, contraceptive_missed_doses)
-
+  select(
+    uid,
+    pid,
+    visit_code,
+    study_day,
+    randomized,
+    site,
+    contraception,
+    contraceptive_missed_doses
+  )
 ```
 
 ### Weekly responses
@@ -396,57 +419,60 @@ contraception_colors <- c(
   "IUD (Kyleena)" = "violetred",
   "IUD (Mirena)" = "tomato",
   "No sex" = "tan",
-  "None" = "grey", 
+  "None" = "grey",
   "Not applicable" = "grey",
   "Tubal ligation or removed tubes" = "yellowgreen",
-  "Vasectomy" = "springgreen3", 
-  "NA" = "grey" 
+  "Vasectomy" = "springgreen3",
+  "NA" = "grey"
 )
 
-p <- 
-
-contraception |> 
-  filter(!is.na(contraception)) |> 
+p <-
+  contraception |>
+  filter(!is.na(contraception)) |>
   mutate(randomized = if_else(randomized, "Randomized", "Not randomized")) |>
   ggplot() +
   aes(
-    x = visit_code |> factor(), y = pid, 
+    x = visit_code |> factor(),
+    y = pid,
     fill = contraception
   ) +
   geom_tile(color = "white") +
   ggh4x::facet_nested(
-    site + randomized ~ ., 
-    scales = "free_y", space = "free_y"
+    site + randomized ~ .,
+    scales = "free_y",
+    space = "free_y"
   ) +
   scale_fill_manual(
-    "Contraception method", 
-    values = contraception_colors) +
+    "Contraception method",
+    values = contraception_colors
+  ) +
   scale_y_discrete(drop = FALSE) +
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
   ) +
   labs(
-    x = "Visit code", y = "Participants"
-  ) 
+    x = "Visit code",
+    y = "Participants"
+  )
 
 
 p + theme(axis.text.y = element_blank())
-
 ```
 
 We can visualize the distribution of contraception methods in the table below.
 
 ```{r}
 
-contraception |> 
+contraception |>
   filter(!is.na(contraception)) |>
   group_by(site, contraception) |>
   summarise(n = n()) |>
   ungroup() |>
   mutate(percent = round(n / sum(n) * 100, 1)) |>
   arrange(site, desc(n)) |>
-  gt(caption = "Distribution of contraception methods in the dataset\nAll participants (randomized and not randomized)")
-
+  gt(
+    caption = "Distribution of contraception methods in the dataset\nAll participants (randomized and not randomized)"
+  )
 ```
 
 
@@ -463,8 +489,6 @@ contraception |>
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
   )
-
-
 ```
 
 
@@ -479,7 +503,6 @@ In this section, we will evaluate whether indeed we can assume that participants
 contraception |>
   filter(contraceptive_missed_doses != 0) |>
   gt(caption = "Participants who reported missing contraceptive doses")
-
 ```
 
 For three participants, namely `068100026`, `068100029`, and `068200357`, they reported having missed doses :
@@ -507,7 +530,7 @@ Below, we highlight participants whose contraception methods change across weekl
 #| fig.width: 8
 
 contraception |>
-  filter(!is.na(contraception)) |> 
+  filter(!is.na(contraception)) |>
   group_by(pid) |>
   filter(n_distinct(contraception) != 1) |>
   ungroup() |>
@@ -518,14 +541,15 @@ contraception |>
   scale_fill_manual(
     "Contraception method",
     values = contraception_colors,
-    na.value = "transparent") +
+    na.value = "transparent"
+  ) +
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
   ) +
   labs(
-    x = "Visit code", y = "Participants"
+    x = "Visit code",
+    y = "Participants"
   )
-
 ```
 
 For participants whose reported contraception method is the same across the first three weekly visit codes (i.e., the first three weeks of the trial for which we have daily amplicon data available), we select the contraception method reported for these weeks.
@@ -556,14 +580,12 @@ For simplicity, "Continuous combined oral contraceptives pills (skip placebo)" w
 contraception <-
   contraception |>
   mutate(
-    contraception =
-      case_when(
-        contraception == "Continuous combined oral contraceptives pills (skip placebo)" ~ 
-          "Continuous COC pills",
-        TRUE ~ contraception
-        )
+    contraception = case_when(
+      contraception == "Continuous combined oral contraceptives pills (skip placebo)" ~
+        "Continuous COC pills",
+      TRUE ~ contraception
     )
-
+  )
 ```
 
 
@@ -581,61 +603,67 @@ We add a new variable called `contraception_group`, which summarize the informat
 # group into categories
 
 contraception_enrollment <-
-  contraception |> 
-  filter(visit_code == "1000") |> 
-  select(pid, site, randomized, contraception) |> 
-  distinct(pid, .keep_all = TRUE) |> 
+  contraception |>
+  filter(visit_code == "1000") |>
+  select(pid, site, randomized, contraception) |>
+  distinct(pid, .keep_all = TRUE) |>
   mutate(
     contraception_group = case_when(
-      contraception %in% c(
-        "Completed 3mo of BC pills", 
-        "Continuous COC pills",
-        "Implant (Nexplanon)", 
-        "Nuvaring"
-      ) ~ "pills_or_implant",
-      
-      contraception %in% c(
-        "IUD", "IUD (Kyleena)", "IUD (Mirena)"
-      ) ~ "IUD",
-      
-      contraception %in% c(
-        "Depo provera", 
-        "Injection (Noristerate)"
-      ) ~ "injection",
-      
-      contraception %in% c(
-        "Tubal ligation or removed tubes", 
-        "Vasectomy", "Condoms",
-        "None", "Not applicable", "No sex"
-      ) ~ "non-hormonal_or_none"
+      contraception %in%
+        c(
+          "Completed 3mo of BC pills",
+          "Continuous COC pills",
+          "Implant (Nexplanon)",
+          "Nuvaring"
+        ) ~ "pills_or_implant",
+
+      contraception %in%
+        c(
+          "IUD",
+          "IUD (Kyleena)",
+          "IUD (Mirena)"
+        ) ~ "IUD",
+
+      contraception %in%
+        c(
+          "Depo provera",
+          "Injection (Noristerate)"
+        ) ~ "injection",
+
+      contraception %in%
+        c(
+          "Tubal ligation or removed tubes",
+          "Vasectomy",
+          "Condoms",
+          "None",
+          "Not applicable",
+          "No sex"
+        ) ~ "non-hormonal_or_none"
     )
   )
-
-
 ```
 
 ```{r}
 
-contraception_enrollment |> 
-  filter(randomized) |> 
+contraception_enrollment |>
+  filter(randomized) |>
   group_by(site, contraception_group, contraception) |>
-  summarise(n = n(), .groups = "drop") |> 
+  summarise(n = n(), .groups = "drop") |>
   group_by(site, contraception_group) |>
-  mutate(n_in_group = sum(n)) |> 
+  mutate(n_in_group = sum(n)) |>
   ungroup() |>
-  arrange(-n_in_group, -n) |> 
-  select(-n_in_group) |> 
-  group_by(site) |> 
+  arrange(-n_in_group, -n) |>
+  select(-n_in_group) |>
+  group_by(site) |>
   gt(
     caption = "Randomized participants",
     row_group_as_column = TRUE
-    ) |> 
+  ) |>
   cols_label(
     contraception_group = "Contraception category",
     contraception = "Contraception method",
     n = "Number of participants"
   )
-
 ```
 
 
@@ -652,17 +680,18 @@ contraception_enrollment |>
     percent = round(n / sum(n) * 100, 1),
     n = paste0(n, " (", percent, "%)")
   ) |>
-  ungroup() |> 
+  ungroup() |>
   select(site, contraception_group, n) |>
   pivot_wider(
-    names_from = site, values_from = n, values_fill = "0",
+    names_from = site,
+    values_from = n,
+    values_fill = "0",
     names_glue = "{site}\n(n, %)"
-    ) |>
-  gt() |> 
+  ) |>
+  gt() |>
   cols_label(
     contraception_group = "Contraception category"
-  ) 
-
+  )
 ```
 
 
@@ -673,12 +702,13 @@ We save the cleaned variable in the `calc_vars_pid` variable.
 ```{r}
 
 mae@metadata$calc_vars_pid <-
-  mae@metadata$calc_vars_pid |> 
+  mae@metadata$calc_vars_pid |>
   left_join(
-    contraception_enrollment |> select(pid, contraception, contraception_group) |> distinct(),
+    contraception_enrollment |>
+      select(pid, contraception, contraception_group) |>
+      distinct(),
     by = "pid"
   )
-
 ```
 
 
@@ -696,16 +726,13 @@ Variable not taken into account : food_did_not_last, not_afford_balanced_meals, 
 
 ```{r}
 
-worry <- 
-  mae@metadata$participant_crfs_merged |> 
-  select(pid, site, starts_with("worry_")) |> 
+worry <-
+  mae@metadata$participant_crfs_merged |>
+  select(pid, site, starts_with("worry_")) |>
   left_join(
-    mae@colData |> as_tibble() |> 
-      select(pid, randomized) |> 
-      distinct(),
+    mae@colData |> as_tibble() |> select(pid, randomized) |> distinct(),
     by = join_by(pid)
   )
-
 ```
 
 ### Exploration of the worry variables
@@ -737,12 +764,12 @@ worry_matrix_MGH <-
   rename_with(~ str_remove_all(., "worry_")) |>
   mutate(across(everything(), ~ ifelse(. == "Checked", 1, 0))) |>
   as.data.frame()
-
 ```
 
 ```{r}
 
-upset(worry_matrix_CAP,
+upset(
+  worry_matrix_CAP,
   nsets = ncol(worry_matrix_CAP),
   nintersects = NA,
   keep.order = TRUE,
@@ -753,8 +780,8 @@ upset(worry_matrix_CAP,
 )
 
 
-
-upset(worry_matrix_MGH,
+upset(
+  worry_matrix_MGH,
   nsets = ncol(worry_matrix_MGH),
   nintersects = NA,
   keep.order = TRUE,
@@ -763,8 +790,6 @@ upset(worry_matrix_MGH,
   sets.bar.color = "gray70",
   set_size.show = TRUE
 )
-
-
 ```
 
 
@@ -772,22 +797,23 @@ We explore the correlations between the different types of worries using a multi
 
 ```{r}
 
-worry_mca <- 
+worry_mca <-
   worry |>
   select(-c("pid", "site")) |>
   rename_with(~ str_remove(.x, "^worry_")) |>
-  mutate(across(everything(), ~ case_when(
-    .x == "Checked" ~ 1,
-    .x == "Unchecked" ~ 0,
-    TRUE ~ 0
-  )|> as.factor()
-  )
-  )
-   
+  mutate(across(
+    everything(),
+    ~ case_when(
+      .x == "Checked" ~ 1,
+      .x == "Unchecked" ~ 0,
+      TRUE ~ 0
+    ) |>
+      as.factor()
+  ))
+
 res.mca <- FactoMineR::MCA(worry_mca, graph = FALSE)
 
 factoextra::fviz_screeplot(res.mca, addlabels = TRUE)
-
 ```
 
 ```{r}
@@ -800,12 +826,11 @@ factoextra::fviz_mca_var(
   col.var = case_when(
     str_detect(rownames(res.mca$var$coord), "_0") ~ "steelblue",
     str_detect(rownames(res.mca$var$coord), "_1") ~ "firebrick",
-    TRUE ~ "grey60"  # au cas où il reste autre chose
+    TRUE ~ "grey60" # au cas où il reste autre chose
   ),
-  labelsize = 4    
-) + 
+  labelsize = 4
+) +
   theme(legend.position = "none")
-
 ```
 
 
@@ -817,31 +842,45 @@ We will now create a worry_score variable to summarize the different worries rep
 # weights for worry score food, utilities, rent
 w <- 2
 
-worry <- 
-  worry |> 
+worry <-
+  worry |>
   select(-c("worry_none")) |>
   mutate(
-    across(contains("worry"), ~ case_when(
-      .x == "Checked" ~ 1,
-      .x == "Unchecked" ~ 0,
-      TRUE ~ 0)
-      ), 
-      worry_score = worry_food * w + worry_utilities * w + worry_rent * w + worry_student_loans + worry_education_fees + worry_mortgage + worry_childcare + worry_medical_bills
-    ) 
+    across(
+      contains("worry"),
+      ~ case_when(
+        .x == "Checked" ~ 1,
+        .x == "Unchecked" ~ 0,
+        TRUE ~ 0
+      )
+    ),
+    worry_score = worry_food *
+      w +
+      worry_utilities * w +
+      worry_rent * w +
+      worry_student_loans +
+      worry_education_fees +
+      worry_mortgage +
+      worry_childcare +
+      worry_medical_bills
+  )
 
 worry |>
   mutate(
     fill_var = case_when(
-      randomized == TRUE  & site == "CAP" ~ "CAP randomized",
-      randomized == TRUE  & site == "MGH" ~ "MGH randomized",
+      randomized == TRUE & site == "CAP" ~ "CAP randomized",
+      randomized == TRUE & site == "MGH" ~ "MGH randomized",
       randomized == FALSE ~ "Not randomized"
-    ) |> factor(levels = c("Not randomized", "CAP randomized", "MGH randomized"))
+    ) |>
+      factor(levels = c("Not randomized", "CAP randomized", "MGH randomized"))
   ) |>
   ggplot() +
   aes(x = worry_score, fill = fill_var) +
   geom_histogram(binwidth = 1) +
   facet_wrap(. ~ site, scales = "free") +
-  scale_x_continuous(breaks = seq(0, max(worry$worry_score, na.rm = TRUE), by = 1)) +
+  scale_x_continuous(
+    breaks = seq(0, max(worry$worry_score, na.rm = TRUE), by = 1)
+  ) +
   scale_fill_manual(
     values = c(
       "CAP randomized" = site_colors["CAP"] |> set_names(NULL),
@@ -853,19 +892,18 @@ worry |>
   xlab("Worry score") +
   ylab("Number of participants") +
   theme(legend.position = "top")
-
 ```
 
 ```{r}
 
 worry |>
   filter(randomized) |>
-  select(pid, site, worry_score) |> 
+  select(pid, site, worry_score) |>
   left_join(income |> select(pid, income_level) |> distinct(), by = "pid") |>
-  dplyr::count(site, income_level, worry_score) |> 
-  group_by(site, income_level) |> 
-  mutate(f = n/sum(n)) |> 
-  ungroup() |> 
+  dplyr::count(site, income_level, worry_score) |>
+  group_by(site, income_level) |>
+  mutate(f = n / sum(n)) |>
+  ungroup() |>
   ggplot() +
   facet_grid(. ~ site) +
   aes(x = worry_score, y = income_level, fill = f) +
@@ -873,15 +911,15 @@ worry |>
   geom_text(aes(label = n)) +
   scale_fill_gradient(
     "proportion within income level",
-    low = "white", high = "steelblue") +
+    low = "white",
+    high = "steelblue"
+  ) +
   ylab("Income level") +
   xlab("Worry score") +
   coord_fixed() +
   theme(
     legend.position = "bottom"
   )
-  
-
 ```
 
 
@@ -894,14 +932,17 @@ Some participants report no food insecurity (answer No for cut size meals, eat l
 
 ```{r}
 
-table1_data <- 
-  metadata(mae)$participant_crfs_merged |> 
+table1_data <-
+  metadata(mae)$participant_crfs_merged |>
   dplyr::left_join(
-    colData(mae) |> as_tibble() |> select(pid, site, arm, randomized, ITT, mITT, PP) |> distinct(), 
+    colData(mae) |>
+      as_tibble() |>
+      select(pid, site, arm, randomized, ITT, mITT, PP) |>
+      distinct(),
     by = join_by(pid, site)
-    )  |> 
-  filter(randomized) |> 
-  select(pid, site, arm, cut_size_meals, eat_less, hungry_did_not_eat) |> 
+  ) |>
+  filter(randomized) |>
+  select(pid, site, arm, cut_size_meals, eat_less, hungry_did_not_eat) |>
   mutate(
     food_insecurity = ifelse(
       cut_size_meals == "Yes" | eat_less == "Yes" | hungry_did_not_eat == "Yes",
@@ -909,37 +950,37 @@ table1_data <-
       "No"
     ),
     food_insecurity = factor(food_insecurity, levels = c("No", "Yes"))
-  ) |> 
+  ) |>
   select(-c(eat_less, cut_size_meals, hungry_did_not_eat))
-
 ```
 
 ```{r}
 #| fig-height: 4
 #| fig-width: 8
 
-table1_data |> 
+table1_data |>
   left_join(
     worry |> select(pid, worry_food) |> distinct(),
     by = join_by(pid)
-  ) |> 
-  mutate(worry_food = worry_food |> recode("Checked" = "Yes", "Unchecked" = "No")) |>
-  dplyr::count(site, food_insecurity, worry_food) |> 
+  ) |>
+  mutate(
+    worry_food = worry_food |> recode("Checked" = "Yes", "Unchecked" = "No")
+  ) |>
+  dplyr::count(site, food_insecurity, worry_food) |>
   ggplot() +
   aes(x = food_insecurity, y = worry_food, fill = n) +
   geom_tile() +
   geom_text(aes(label = n)) +
   facet_wrap(. ~ site, scales = "free") +
-  scale_fill_gradient(low = "white", high = "dodgerblue1") 
-
+  scale_fill_gradient(low = "white", high = "dodgerblue1")
 ```
 
 
 We add the variable to `mae@metadata$calc_vars_pid`
 
 ```{r}
-mae@metadata$calc_vars_pid <- 
-  mae@metadata$calc_vars_pid |> 
+mae@metadata$calc_vars_pid <-
+  mae@metadata$calc_vars_pid |>
   left_join(
     worry |> select(pid, worry_score) |> distinct(),
     by = "pid"
@@ -961,97 +1002,135 @@ Affirmative responses are defined as follows:
 
 ```{r}
 
-food_security <- 
-  mae@metadata$participant_crfs_merged |> 
-  select(pid, site, food_did_not_last, not_afford_balanced_meals, cut_size_meals, often_cut_size_meals, eat_less, hungry_did_not_eat) |> 
+food_security <-
+  mae@metadata$participant_crfs_merged |>
+  select(
+    pid,
+    site,
+    food_did_not_last,
+    not_afford_balanced_meals,
+    cut_size_meals,
+    often_cut_size_meals,
+    eat_less,
+    hungry_did_not_eat
+  ) |>
   left_join(
-    mae@colData |> as_tibble() |> 
-      select(pid, randomized) |> 
-      distinct(),
+    mae@colData |> as_tibble() |> select(pid, randomized) |> distinct(),
     by = join_by(pid)
-  ) 
-  #filter(randomized)
-
+  )
+#filter(randomized)
 ```
 
 ```{r}
 
 food_security |>
   filter(randomized) |>
-  select(pid, site, 
-         food_did_not_last, not_afford_balanced_meals, 
-         cut_size_meals, often_cut_size_meals, 
-         eat_less, hungry_did_not_eat) |>
+  select(
+    pid,
+    site,
+    food_did_not_last,
+    not_afford_balanced_meals,
+    cut_size_meals,
+    often_cut_size_meals,
+    eat_less,
+    hungry_did_not_eat
+  ) |>
   pivot_longer(-c(pid, site), names_to = "question", values_to = "response") |>
   mutate(
-    question = factor(question, levels = c(
-      "food_did_not_last", "not_afford_balanced_meals",
-      "cut_size_meals", "often_cut_size_meals",
-      "eat_less", "hungry_did_not_eat"
-    ))
+    question = factor(
+      question,
+      levels = c(
+        "food_did_not_last",
+        "not_afford_balanced_meals",
+        "cut_size_meals",
+        "often_cut_size_meals",
+        "eat_less",
+        "hungry_did_not_eat"
+      )
+    )
   ) |>
   ggplot(aes(x = response, fill = site)) +
   geom_bar(position = "dodge") +
-  facet_wrap(~ question, scales = "free_x", ncol = 2) +
+  facet_wrap(~question, scales = "free_x", ncol = 2) +
   scale_fill_manual(values = c("CAP" = "dodgerblue1", "MGH" = "coral1")) +
   scale_x_discrete(labels = scales::label_wrap(12)) +
-  labs(x = "", y = "Number of participants", title = "Food security items by site", subtitle = "Randomized participants only") +
+  labs(
+    x = "",
+    y = "Number of participants",
+    title = "Food security items by site",
+    subtitle = "Randomized participants only"
+  ) +
   theme(
     legend.position = "top"
   )
-
 ```
 
 ```{r}
 
-food_security <- 
+food_security <-
   food_security |>
   mutate(
     # HH3: "Often true" or "Sometimes true" = affirmative
-    aff_food_did_not_last = food_did_not_last %in% c("Often true", "Sometimes true"),
+    aff_food_did_not_last = food_did_not_last %in%
+      c("Often true", "Sometimes true"),
     # HH4: idem
-    aff_not_afford_balanced_meals = not_afford_balanced_meals %in% c("Often true", "Sometimes true"),
+    aff_not_afford_balanced_meals = not_afford_balanced_meals %in%
+      c("Often true", "Sometimes true"),
     # AD1: "Yes" = affirmative
     aff_cut_size_meals = cut_size_meals == "Yes",
     # AD1a: "Almost every month" or "Some months but not every month" = affirmative
     # "Only 1 or 2 months" is NOT affirmative for AD1a (AD1 already counted above)
-    aff_often_cut_size_meals = often_cut_size_meals %in% c("Almost every month", "Some months but not every month"),
+    aff_often_cut_size_meals = often_cut_size_meals %in%
+      c("Almost every month", "Some months but not every month"),
     # AD2
     aff_eat_less = eat_less == "Yes",
     # AD3
     aff_hungry_did_not_eat = hungry_did_not_eat == "Yes",
     # Raw score = sum of 6 affirmatives (max = 6)
-    food_security_score = aff_food_did_not_last + aff_not_afford_balanced_meals +
-                        aff_cut_size_meals + aff_often_cut_size_meals +
-                        aff_eat_less + aff_hungry_did_not_eat,
+    food_security_score = aff_food_did_not_last +
+      aff_not_afford_balanced_meals +
+      aff_cut_size_meals +
+      aff_often_cut_size_meals +
+      aff_eat_less +
+      aff_hungry_did_not_eat,
     # Categories per USDA guide
     food_security_cat = case_when(
       food_security_score <= 1 ~ "High/Marginal",
       food_security_score <= 4 ~ "Low",
-      TRUE                   ~ "Very low"
-    ) |> factor(levels = c("High/Marginal", "Low", "Very low"))
+      TRUE ~ "Very low"
+    ) |>
+      factor(levels = c("High/Marginal", "Low", "Very low"))
   )
 ```
 
 ```{r}
 
 food_security |>
-   mutate(
+  mutate(
     fill_var = case_when(
-      randomized == TRUE  & site == "CAP" ~ "CAP randomized",
-      randomized == TRUE  & site == "MGH" ~ "MGH randomized",
+      randomized == TRUE & site == "CAP" ~ "CAP randomized",
+      randomized == TRUE & site == "MGH" ~ "MGH randomized",
       randomized == FALSE ~ "Not randomized"
-    ) |> factor(levels = c("Not randomized", "CAP randomized", "MGH randomized"))
-  ) |> 
+    ) |>
+      factor(levels = c("Not randomized", "CAP randomized", "MGH randomized"))
+  ) |>
   ggplot(aes(x = food_security_score, fill = fill_var)) +
   geom_bar(position = "stack") +
   facet_grid(site ~ food_security_cat, scales = "free") +
-  scale_fill_manual(values = c("Not randomized" = "grey", "CAP randomized" = "dodgerblue1", "MGH randomized" = "coral1")) +
+  scale_fill_manual(
+    values = c(
+      "Not randomized" = "grey",
+      "CAP randomized" = "dodgerblue1",
+      "MGH randomized" = "coral1"
+    )
+  ) +
   scale_x_continuous(breaks = 0:6) +
-  labs(x = "Raw score (0–6)", y = "Number of participants",
-       title = "Food security score by site") +
+  labs(
+    x = "Raw score (0–6)",
+    y = "Number of participants",
+    title = "Food security score by site"
+  ) +
   theme(legend.position = "none")
-
 ```
 
 We compare the food security score and the worry score
@@ -1071,18 +1150,24 @@ food_security |>
   geom_text(aes(label = n)) +
   facet_wrap(. ~ site, scales = "free") +
   scale_fill_gradient(low = "white", high = "dodgerblue1") +
-  labs(x = "Food security category", y = "Worry score", title = "Food security category vs worry score by site", subtitle = "All participants (randomized and not randomized)") +
+  labs(
+    x = "Food security category",
+    y = "Worry score",
+    title = "Food security category vs worry score by site",
+    subtitle = "All participants (randomized and not randomized)"
+  ) +
   theme(legend.position = "none")
-
 ```
 
 We add the variable to `mae@metadata$calc_vars_pid`
 
 ```{r}
-mae@metadata$calc_vars_pid <- 
-  mae@metadata$calc_vars_pid |> 
+mae@metadata$calc_vars_pid <-
+  mae@metadata$calc_vars_pid |>
   left_join(
-    food_security |> select(pid, food_security_score, food_security_cat) |> distinct(),
+    food_security |>
+      select(pid, food_security_score, food_security_cat) |>
+      distinct(),
     by = "pid"
   )
 ```
@@ -1094,23 +1179,20 @@ In CRF5 participants were asked about pre-existing conditions. We explore the di
 
 ```{r}
 
-pre_existing_conditions <- 
-  mae@metadata$participant_crfs_merged |> 
-  select(pid, site, no_pre_existing_condition, diagnosis_agg) |> 
+pre_existing_conditions <-
+  mae@metadata$participant_crfs_merged |>
+  select(pid, site, no_pre_existing_condition, diagnosis_agg) |>
   left_join(
-    mae@colData |> as_tibble() |> 
-      select(pid, randomized) |> 
-      distinct(),
+    mae@colData |> as_tibble() |> select(pid, randomized) |> distinct(),
     by = join_by(pid)
-  ) #|> 
-  #filter(randomized)
-
+  ) #|>
+#filter(randomized)
 ```
 
 ```{r}
 #| fig-height: 7
 
-pre_existing_conditions |> 
+pre_existing_conditions |>
   filter(randomized) |>
   mutate(
     diagnosis_agg = case_when(
@@ -1118,34 +1200,44 @@ pre_existing_conditions |>
       TRUE ~ diagnosis_agg
     ),
     diagnosis_agg = fct_reorder(
-      diagnosis_agg, 
+      diagnosis_agg,
       str_count(diagnosis_agg, "&"),
       .fun = dplyr::first,
-      .desc = TRUE 
+      .desc = TRUE
     ),
-    diagnosis_agg = fct_relevel(diagnosis_agg, "No pre-existing condition", after = Inf)
+    diagnosis_agg = fct_relevel(
+      diagnosis_agg,
+      "No pre-existing condition",
+      after = Inf
+    )
   ) |>
   ggplot() +
   aes(y = diagnosis_agg, fill = site) +
   geom_bar() +
-  labs(x = "Number of participants", y = "", title = "Distribution of pre-existing conditions by site", subtitle = "Randomized participants only") +
+  labs(
+    x = "Number of participants",
+    y = "",
+    title = "Distribution of pre-existing conditions by site",
+    subtitle = "Randomized participants only"
+  ) +
   scale_fill_manual(
     name = "Site",
     values = c("CAP" = "dodgerblue1", "MGH" = "coral1")
   ) +
   scale_y_discrete(labels = scales::label_wrap(50)) +
   theme(legend.position = "right")
-
 ```
 
 
 We add the variable to `mae@metadata$calc_vars_pid`
 
 ```{r}
-mae@metadata$calc_vars_pid <- 
-  mae@metadata$calc_vars_pid |> 
+mae@metadata$calc_vars_pid <-
+  mae@metadata$calc_vars_pid |>
   left_join(
-    pre_existing_conditions |> select(pid, no_pre_existing_condition, diagnosis_agg) |> distinct(),
+    pre_existing_conditions |>
+      select(pid, no_pre_existing_condition, diagnosis_agg) |>
+      distinct(),
     by = "pid"
   )
 ```
@@ -1162,50 +1254,49 @@ The PSS-10 scale includes 6 negative items (upset, unable_to_control, nervous_st
 
 ```{r}
 
-negative_items <- c("upset", 
-                  "unable_to_control", 
-                  "nervous_stressed",
-                  "could_not_cope",
-                  "outside_your_control",
-                  "difficulties_piling_up")
+negative_items <- c(
+  "upset",
+  "unable_to_control",
+  "nervous_stressed",
+  "could_not_cope",
+  "outside_your_control",
+  "difficulties_piling_up"
+)
 
-positive_items <- c("confident",
-                    "going_your_way",
-                   "control_irritations",
-                   "on_top_of_things") 
+positive_items <- c(
+  "confident",
+  "going_your_way",
+  "control_irritations",
+  "on_top_of_things"
+)
 
-stress <- 
+stress <-
   mae@metadata$participant_crfs_merged |>
-  select(pid, site, all_of(negative_items), all_of(positive_items)) |> 
+  select(pid, site, all_of(negative_items), all_of(positive_items)) |>
   left_join(
-    mae@colData |> as_tibble() |> 
-      select(pid, randomized) |> 
-      distinct(),
+    mae@colData |> as_tibble() |> select(pid, randomized) |> distinct(),
     by = join_by(pid)
-  ) #|> 
-  #filter(randomized) |> 
-  #select(-randomized)
-
-
-
+  ) #|>
+#filter(randomized) |>
+#select(-randomized)
 ```
 
 ```{r}
 #| fig-height: 10
 #| fig-width: 8
 
-stress |> 
+stress |>
   filter(randomized) |>
   filter(!is.na(upset)) |>
   pivot_longer(
     cols = c(all_of(negative_items), all_of(positive_items)),
     names_to = "question",
     values_to = "answer"
-  ) |> 
-  group_by(site, pid) |> 
+  ) |>
+  group_by(site, pid) |>
   mutate(total_score = sum(answer |> as.integer())) |>
-  ungroup() |> 
-  arrange(total_score) |> 
+  ungroup() |>
+  arrange(total_score) |>
   mutate(
     pid = pid |> fct_inorder()
   ) |>
@@ -1214,18 +1305,22 @@ stress |>
   facet_grid(site ~ ., scales = "free_y", space = "free") +
   geom_tile() +
   scale_fill_brewer(type = "div", palette = "PRGn") +
-  labs(x = "PSS-10 items", y = "Participants", title = "PSS-10 item responses by site", subtitle = "Randomized participants only") +
+  labs(
+    x = "PSS-10 items",
+    y = "Participants",
+    title = "PSS-10 item responses by site",
+    subtitle = "Randomized participants only"
+  ) +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1),
     strip.text.y = element_text(angle = 0)
   )
-
 ```
 
 ```{r}
 #| eval: false
 
-stress |> 
+stress |>
   filter(randomized) |>
   pivot_longer(
     cols = -c(pid, site, randomized),
@@ -1233,27 +1328,44 @@ stress |>
     values_to = "response"
   ) |>
   mutate(
-    response = factor(response, levels = c("0 = Never", "1 = Almost never", "2 = Sometimes", "3 = Fairly often", "4 = Very")), 
+    response = factor(
+      response,
+      levels = c(
+        "0 = Never",
+        "1 = Almost never",
+        "2 = Sometimes",
+        "3 = Fairly often",
+        "4 = Very"
+      )
+    ),
     group = case_when(
       item %in% negative_items ~ "Negative items",
       item %in% positive_items ~ "Positive items"
-    ) |> factor(), 
+    ) |>
+      factor(),
     item = factor(item, levels = c(negative_items, positive_items))
-  ) |>  
+  ) |>
   ggplot() +
   aes(x = response, fill = group) +
   geom_bar() +
-  facet_wrap( ~ item, ncol=2) + 
-  labs(x = "Response", y = "Number of participants", title = "PSS-10 item responses", subtitle = "Randomized participants only", fill = "") +
-  scale_fill_manual(values = c("Negative items" = "tomato", "Positive items" = "steelblue")) +
+  facet_wrap(~item, ncol = 2) +
+  labs(
+    x = "Response",
+    y = "Number of participants",
+    title = "PSS-10 item responses",
+    subtitle = "Randomized participants only",
+    fill = ""
+  ) +
+  scale_fill_manual(
+    values = c("Negative items" = "tomato", "Positive items" = "steelblue")
+  ) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
 ```
 
 
 ```{r}
 
-stress |> 
+stress |>
   filter(randomized) |>
   pivot_longer(
     cols = -c(pid, site, randomized),
@@ -1261,32 +1373,49 @@ stress |>
     values_to = "response"
   ) |>
   mutate(
-    response = factor(response, levels = c("0 = Never", "1 = Almost never", "2 = Sometimes", "3 = Fairly often", "4 = Very")), 
+    response = factor(
+      response,
+      levels = c(
+        "0 = Never",
+        "1 = Almost never",
+        "2 = Sometimes",
+        "3 = Fairly often",
+        "4 = Very"
+      )
+    ),
     group = case_when(
       item %in% negative_items ~ "Negative items",
       item %in% positive_items ~ "Positive items"
-    ) |> factor(), 
+    ) |>
+      factor(),
     item = factor(item, levels = c(negative_items, positive_items))
-  ) |>  
+  ) |>
   ggplot() +
   aes(x = response, fill = group) +
   geom_bar() +
-  facet_grid(item ~ site, scales = "free_y") + 
-  labs(x = "Response", y = "Number of participants", title = "PSS-10 item responses by site", subtitle = "Randomized participants only", fill = "") +
-  scale_fill_manual(values = c("Negative items" = "tomato", "Positive items" = "steelblue")) +
+  facet_grid(item ~ site, scales = "free_y") +
+  labs(
+    x = "Response",
+    y = "Number of participants",
+    title = "PSS-10 item responses by site",
+    subtitle = "Randomized participants only",
+    fill = ""
+  ) +
+  scale_fill_manual(
+    values = c("Negative items" = "tomato", "Positive items" = "steelblue")
+  ) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
 ```
 
 We explore the relationship between the stress items using a PCA and a correlation matrix (on all participants - randomized and not randomized). For that we first need to convert the responses to numeric values (0, 1, 2, 3, 4) and reverse the scores for the positive items. The reverse-scoring of the four positively worded items (items 4, 5, 7 and 8: `confident`, `going_your_way`, `control_irritations`, `on_top_of_things`) is done by transforming 0 → 4, 1 → 3, 2 → 2, 3 → 1 and 4 → 0. The six negatively worded items (`upset`, `unable_to_control`, `nervous_stressed`, `could_not_cope`, `outside_your_control`, `difficulties_piling_up`) are scored directly. 
 
 ```{r}
 
-stress <- 
+stress <-
   stress |>
   filter(!is.na(upset)) |>
   mutate(across(
-    all_of(c(negative_items, positive_items)), 
+    all_of(c(negative_items, positive_items)),
     ~ as.integer(str_extract(as.character(.x), "^[0-4]"))
   )) |>
   # Inverser les 4 items positifs
@@ -1294,17 +1423,17 @@ stress <-
     all_of(positive_items),
     ~ 4 - .x
   ))
-
 ```
 
 ```{r}
 
-stress_pca_data <- 
+stress_pca_data <-
   stress |>
   drop_na()
 
-pca_stress <- 
-  stress_pca_data |> select(all_of(c(negative_items, positive_items))) |>
+pca_stress <-
+  stress_pca_data |>
+  select(all_of(c(negative_items, positive_items))) |>
   prcomp(scale. = TRUE)
 
 fviz_eig(pca_stress, addlabels = TRUE) +
@@ -1312,18 +1441,20 @@ fviz_eig(pca_stress, addlabels = TRUE) +
 
 
 item_groups <- factor(
-  ifelse(c(negative_items, positive_items) %in% positive_items, 
-         "Positive items", 
-         "Negative items")
+  ifelse(
+    c(negative_items, positive_items) %in% positive_items,
+    "Positive items",
+    "Negative items"
+  )
 )
 
 fviz_pca_var(
   pca_stress,
-  col.var   = item_groups,
-  palette   = c("Negative items" = "tomato", "Positive items" = "steelblue"),
+  col.var = item_groups,
+  palette = c("Negative items" = "tomato", "Positive items" = "steelblue"),
   legend.title = "Item type",
-  repel     = TRUE,
-  title     = "PSS-10 — Variable contributions"
+  repel = TRUE,
+  title = "PSS-10 — Variable contributions"
 )
 
 
@@ -1335,7 +1466,6 @@ fviz_pca_ind(
   addEllipses = TRUE,
   title = "PSS-10 — Participants by site"
 )
-
 ```
 
 
@@ -1346,18 +1476,19 @@ Now we calculate the PSS-10 score by summing all 10 items, yielding a range of 0
 
 ```{r}
 
-stress <- 
-  stress |> 
+stress <-
+  stress |>
   rowwise() |>
   mutate(
-    score_helplessness  = sum(c_across(all_of(negative_items))),
+    score_helplessness = sum(c_across(all_of(negative_items))),
     score_self_efficacy = sum(c_across(all_of(positive_items))),
-    pss_total           = score_helplessness + score_self_efficacy,
-    stress_category     = case_when(
+    pss_total = score_helplessness + score_self_efficacy,
+    stress_category = case_when(
       pss_total <= 13 ~ "Low",
       pss_total <= 26 ~ "Moderate",
-      TRUE            ~ "High"
-    ) |> factor(levels = c("Low", "Moderate", "High"))
+      TRUE ~ "High"
+    ) |>
+      factor(levels = c("Low", "Moderate", "High"))
   ) |>
   ungroup()
 
@@ -1365,36 +1496,49 @@ stress <-
 stress |>
   mutate(
     fill_var = case_when(
-      randomized == TRUE  & site == "CAP" ~ "CAP randomized",
-      randomized == TRUE  & site == "MGH" ~ "MGH randomized",
+      randomized == TRUE & site == "CAP" ~ "CAP randomized",
+      randomized == TRUE & site == "MGH" ~ "MGH randomized",
       randomized == FALSE ~ "Not randomized"
-    ) |> factor(levels = c("Not randomized", "CAP randomized", "MGH randomized"))
+    ) |>
+      factor(levels = c("Not randomized", "CAP randomized", "MGH randomized"))
   ) |>
   ggplot(aes(x = pss_total, fill = fill_var)) +
   geom_histogram(binwidth = 2) +
   geom_vline(xintercept = c(13, 26), linetype = "dashed", color = "red") +
   facet_wrap(. ~ site, scales = "free") +
-  scale_fill_manual(values = c("Not randomized" = "gray70", "CAP randomized" = "dodgerblue1", "MGH randomized" = "coral1")) +
+  scale_fill_manual(
+    values = c(
+      "Not randomized" = "gray70",
+      "CAP randomized" = "dodgerblue1",
+      "MGH randomized" = "coral1"
+    )
+  ) +
   xlab("PSS total score") +
   ylab("Number of participants") +
   theme(legend.position = "top")
 
-stress |> 
+stress |>
   mutate(
     fill_var = case_when(
-      randomized == TRUE  & site == "CAP" ~ "CAP randomized",
-      randomized == TRUE  & site == "MGH" ~ "MGH randomized",
+      randomized == TRUE & site == "CAP" ~ "CAP randomized",
+      randomized == TRUE & site == "MGH" ~ "MGH randomized",
       randomized == FALSE ~ "Not randomized"
-    ) |> factor(levels = c("Not randomized", "CAP randomized", "MGH randomized"))
+    ) |>
+      factor(levels = c("Not randomized", "CAP randomized", "MGH randomized"))
   ) |>
   ggplot(aes(x = stress_category, fill = fill_var)) +
   geom_bar(position = "stack") +
   facet_wrap(. ~ site, scales = "free") +
-  scale_fill_manual(values = c("Not randomized" = "gray70", "CAP randomized" = "dodgerblue1", "MGH randomized" = "coral1")) +
+  scale_fill_manual(
+    values = c(
+      "Not randomized" = "gray70",
+      "CAP randomized" = "dodgerblue1",
+      "MGH randomized" = "coral1"
+    )
+  ) +
   xlab("Stress category") +
   ylab("Number of participants") +
   theme(legend.position = "top")
-
 ```
 
 
@@ -1402,13 +1546,14 @@ We add the variable to `mae@metadata$calc_vars_pid`
 
 ```{r}
 
-mae@metadata$calc_vars_pid <- 
-  mae@metadata$calc_vars_pid |> 
+mae@metadata$calc_vars_pid <-
+  mae@metadata$calc_vars_pid |>
   left_join(
-    stress |> select(pid, stress_score = pss_total, stress_category) |> distinct(),
+    stress |>
+      select(pid, stress_score = pss_total, stress_category) |>
+      distinct(),
     by = "pid"
   )
-
 ```
 
 
@@ -1418,17 +1563,15 @@ We explore the different types of menstrual protection used by participants. We 
 
 ```{r}
 
-menstrual_protection <- 
-  mae@metadata$participant_crfs_merged |> 
-  select(pid, site, protection_type) |> 
+menstrual_protection <-
+  mae@metadata$participant_crfs_merged |>
+  select(pid, site, protection_type) |>
   left_join(
-    mae@colData |> as_tibble() |> 
-      select(pid, randomized) |> 
-      distinct(),
+    mae@colData |> as_tibble() |> select(pid, randomized) |> distinct(),
     by = join_by(pid)
   )
 
-menstrual_protection_CAP <- 
+menstrual_protection_CAP <-
   menstrual_protection |>
   #filter(protection_type != "") |>
   filter(site == "CAP") |>
@@ -1436,11 +1579,16 @@ menstrual_protection_CAP <-
   mutate(protection_type = strsplit(as.character(protection_type), ", ")) |>
   unnest(protection_type) |>
   mutate(value = 1) |>
-  pivot_wider(names_from = protection_type, values_from = value, values_fill = 0) |> 
-  select(-pid, -site) |> 
+  pivot_wider(
+    names_from = protection_type,
+    values_from = value,
+    values_fill = 0
+  ) |>
+  select(-pid, -site) |>
   as.data.frame()
 
-upset(menstrual_protection_CAP,
+upset(
+  menstrual_protection_CAP,
   nsets = ncol(menstrual_protection_CAP),
   nintersects = NA,
   keep.order = TRUE,
@@ -1450,7 +1598,7 @@ upset(menstrual_protection_CAP,
   set_size.show = TRUE
 )
 
-menstrual_protection_MGH <- 
+menstrual_protection_MGH <-
   menstrual_protection |>
   #filter(protection_type != "") |>
   filter(site == "MGH") |>
@@ -1458,11 +1606,16 @@ menstrual_protection_MGH <-
   mutate(protection_type = strsplit(as.character(protection_type), ", ")) |>
   unnest(protection_type) |>
   mutate(value = 1) |>
-  pivot_wider(names_from = protection_type, values_from = value, values_fill = 0) |> 
-  select(-pid, -site) |> 
+  pivot_wider(
+    names_from = protection_type,
+    values_from = value,
+    values_fill = 0
+  ) |>
+  select(-pid, -site) |>
   as.data.frame()
 
-upset(menstrual_protection_MGH,
+upset(
+  menstrual_protection_MGH,
   nsets = ncol(menstrual_protection_MGH),
   nintersects = NA,
   keep.order = TRUE,
@@ -1471,7 +1624,6 @@ upset(menstrual_protection_MGH,
   sets.bar.color = "gray70",
   set_size.show = TRUE
 )
-
 ```
 
 ## Blood type
@@ -1480,14 +1632,13 @@ This variable was collected in CRF15. We explore the distribution of blood type 
 
 ```{r}
 
-blood_type <- 
-  mae@metadata$participant_crfs_merged |> 
-  select(pid, site, blood_type) |> 
+blood_type <-
+  mae@metadata$participant_crfs_merged |>
+  select(pid, site, blood_type) |>
   left_join(
     mae@colData |> as_tibble() |> select(pid, randomized) |> distinct(),
     by = join_by(pid)
   )
-
 ```
 
 
@@ -1500,8 +1651,11 @@ blood_type |>
   scale_fill_manual(values = site_colors) +
   labs(x = "Blood type", y = "Number of participants") +
   theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
-  labs(subtitle = "Distribution of blood type by site", x = "Blood type", y = "Number of participants")
-  
+  labs(
+    subtitle = "Distribution of blood type by site",
+    x = "Blood type",
+    y = "Number of participants"
+  )
 ```
 
 We also document the distribution of blood type in the table below.
@@ -1513,23 +1667,24 @@ blood_type |>
   group_by(blood_type) |>
   summarise(n = n()) |>
   ungroup() |>
-  mutate(percent = round(n / sum(n) * 100, 1), n = paste0(n, " (", percent, "%)")) |>
-  select(blood_type, n) |> 
+  mutate(
+    percent = round(n / sum(n) * 100, 1),
+    n = paste0(n, " (", percent, "%)")
+  ) |>
+  select(blood_type, n) |>
   gt()
-
 ```
 
 We add the variable to `mae@metadata$calc_vars_pid`
 
 ```{r}
 
-mae@metadata$calc_vars_pid <- 
-  mae@metadata$calc_vars_pid |> 
+mae@metadata$calc_vars_pid <-
+  mae@metadata$calc_vars_pid |>
   left_join(
     blood_type |> select(pid, blood_type) |> distinct(),
     by = join_by(pid)
   )
-
 ```
 
 
@@ -1541,12 +1696,13 @@ We save the MAE for downstream analyses.
 #| eval: true
 
 saveRDS(
-  mae, 
+  mae,
   str_c(
-    get_03_output_dir(),  
-    "mae_full_05_", today() |> str_remove_all("-"), ".rds"
+    get_03_output_dir(),
+    "mae_full_05_",
+    today() |> str_remove_all("-"),
+    ".rds"
   )
 )
-
 ```
 

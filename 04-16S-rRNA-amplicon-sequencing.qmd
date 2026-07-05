@@ -42,8 +42,6 @@ library(phyloseq) # devtools::install_github("joey711/phyloseq")
 #BiocManager::install("mia")
 # library(mia)
 
-
-
 # tmp <- fs::dir_map("R scripts mg/", source)
 tmp <- fs::dir_map("R scripts/", source)
 tmp <- fs::dir_map("../VIBRANT-99-utils/R", source)
@@ -60,24 +58,23 @@ The data is provided as a `phyloseq` object in an `.rds` file.
 ```{r}
 #| cache-lazy: false
 
-
- 
-ps <- 
-  readRDS(str_c(get_data_dir(),"04 16S rRNA sequencing/raw_merged_all_pools_ps_20250523.rds"))
+ps <-
+  readRDS(str_c(
+    get_data_dir(),
+    "04 16S rRNA sequencing/raw_merged_all_pools_ps_20250523.rds"
+  ))
 
 ps
-
 ```
 
 Sample data:
 
 ```{r}
 
-ps@sam_data |> 
-  as.data.frame() |> 
-  as_tibble() |> 
+ps@sam_data |>
+  as.data.frame() |>
+  as_tibble() |>
   glimpse()
-
 ```
 
 Taxonomic table:
@@ -85,7 +82,6 @@ Taxonomic table:
 ```{r}
 
 ps@tax_table |> as.data.frame() |> as_tibble() |> glimpse()
-
 ```
 
 
@@ -104,8 +100,7 @@ prop_0 <- mean(counts == 0)
 ```{r}
 #| cache-lazy: false
 
-props <- counts/rowSums(counts)
-
+props <- counts / rowSums(counts)
 ```
 
 
@@ -122,7 +117,7 @@ This is a very large number of ASVs (probably because `dada2` denoises for seque
 
 ```{r}
 
-ASV_stats <- 
+ASV_stats <-
   tibble(
     ASV_nb = 1:ncol(counts),
     total_counts = colSums(counts),
@@ -133,7 +128,6 @@ ASV_stats <-
     mean_rel_ab = colMeans(props),
     max_rel_ab = colMaxs(props)
   )
-
 ```
 
 
@@ -141,28 +135,40 @@ ASV_stats <-
 #| fig-width: 10
 #| fig-height: 5
 
-ASV_stats |> ggplot() + aes(x = mean_counts) + geom_histogram(bins = 30) +
+ASV_stats |>
+  ggplot() +
+  aes(x = mean_counts) +
+  geom_histogram(bins = 30) +
   scale_x_log10(n.breaks = 10) +
   labs(x = "Mean counts across samples (log scale)", y = "Number of ASVs") +
-  
-  
-ASV_stats |> ggplot() + aes(x = max_counts) + geom_histogram(bins = 30) +
-    scale_x_log10(n.breaks = 8) +
-  labs(x = "Max number of counts (log scale)", y = "Number of ASVs") +
-  
-ASV_stats |> ggplot() + aes(x = n_non_zero) + geom_histogram(bins = 30) +
-    scale_x_log10(n.breaks = 6) +
-  labs(x = "Number of samples with non-zero counts(log scale)", y = "Number of ASVs") +
-  
-  
-ASV_stats |> ggplot() + aes(x = max_rel_ab, fill = n_non_zero == 1) + 
-  facet_grid(n_non_zero == 1 ~ ., scales = "free") + 
+
+  ASV_stats |> ggplot() +
+  aes(x = max_counts) +
   geom_histogram(bins = 30) +
   scale_x_log10(n.breaks = 8) +
-  labs(x = "Max rel. ab. (log scale)", y = "Number of ASVs", fill = "Singleton") +
-  
+  labs(x = "Max number of counts (log scale)", y = "Number of ASVs") +
+
+  ASV_stats |> ggplot() +
+  aes(x = n_non_zero) +
+  geom_histogram(bins = 30) +
+  scale_x_log10(n.breaks = 6) +
+  labs(
+    x = "Number of samples with non-zero counts(log scale)",
+    y = "Number of ASVs"
+  ) +
+
+  ASV_stats |> ggplot() +
+  aes(x = max_rel_ab, fill = n_non_zero == 1) +
+  facet_grid(n_non_zero == 1 ~ ., scales = "free") +
+  geom_histogram(bins = 30) +
+  scale_x_log10(n.breaks = 8) +
+  labs(
+    x = "Max rel. ab. (log scale)",
+    y = "Number of ASVs",
+    fill = "Singleton"
+  ) +
+
   plot_layout(nrow = 2)
-  
 ```
 
 `r (ASV_stats$n_non_zero == 1) |> mean() |> magrittr::multiply_by(100) |> round(2)`% of ASVs (n = `r (ASV_stats$n_non_zero == 1) |> sum()`) are present (non-zero counts) in only 1 sample. 
@@ -170,22 +176,30 @@ ASV_stats |> ggplot() + aes(x = max_rel_ab, fill = n_non_zero == 1) +
 ```{r}
 
 ASV_stats |>
-  mutate(`ASV category` = ifelse(n_non_zero == 1, "ASVs with counts in only 1 sample (singletons)", "ASVs with counts in >1 sample")) |>
-  group_by(`ASV category`) |> 
+  mutate(
+    `ASV category` = ifelse(
+      n_non_zero == 1,
+      "ASVs with counts in only 1 sample (singletons)",
+      "ASVs with counts in >1 sample"
+    )
+  ) |>
+  group_by(`ASV category`) |>
   summarize(
-    `n ASVs` = n(), 
-    `cummulative reads` = sum(total_counts), 
+    `n ASVs` = n(),
+    `cummulative reads` = sum(total_counts),
     `highest rel. ab.` = max(max_rel_ab),
     `average highest rel. ab.` = mean(max_rel_ab) |> round(5)
-    ) |> 
+  ) |>
   mutate(
     `% ASV` = round(`n ASVs` / sum(`n ASVs`) * 100, 2),
-    `proportion of total reads` = round(`cummulative reads` / sum(`cummulative reads`) * 100, 2)
-    ) |>
+    `proportion of total reads` = round(
+      `cummulative reads` / sum(`cummulative reads`) * 100,
+      2
+    )
+  ) |>
   relocate(`% ASV`, .after = `n ASVs`) |>
   relocate(`proportion of total reads`, .after = `cummulative reads`) |>
-  gt() 
-
+  gt()
 ```
 
 
@@ -195,74 +209,85 @@ While, collectively, these ASVs (singletons) account for less than 3% of all cou
 #| fig-width: 12
 #| fig-height: 4
 
-ASV_stats <- 
-  ASV_stats |> 
-  arrange(-max_rel_ab) |> 
+ASV_stats <-
+  ASV_stats |>
+  arrange(-max_rel_ab) |>
   mutate(i = row_number(), singleton = (n_non_zero == 1))
 
-ASV_stats |> 
-  filter(i <= 10000) |> 
+ASV_stats |>
+  filter(i <= 10000) |>
   ggplot() +
   aes(x = i, y = max_rel_ab, fill = singleton) +
   geom_col() +
   scale_x_continuous("ASV index (top 10 000 ASVs)") +
-  scale_y_continuous("Max relative abundance\nacross samples", labels = scales::label_percent(accuracy = 1)) +
-  
-ASV_stats |> 
-  filter(i <= 100) |> 
-  ggplot() +
+  scale_y_continuous(
+    "Max relative abundance\nacross samples",
+    labels = scales::label_percent(accuracy = 1)
+  ) +
+
+  ASV_stats |>
+    filter(i <= 100) |>
+    ggplot() +
   aes(x = i, y = max_rel_ab, fill = singleton) +
   geom_col() +
   scale_x_continuous("ASV index (top 100 ASVs)") +
-  scale_y_continuous("Max relative abundance\nacross samples", labels = scales::label_percent(accuracy = 1)) +
-  
-  plot_layout(nrow = 2, guides = "collect")
-  
+  scale_y_continuous(
+    "Max relative abundance\nacross samples",
+    labels = scales::label_percent(accuracy = 1)
+  ) +
 
+  plot_layout(nrow = 2, guides = "collect")
 ```
 
 
 ```{r}
 
 singletons_to_check <- ASV_stats |> filter(singleton, max_rel_ab > 0.5)
-
 ```
 
 ```{r}
 
 samples_to_check <- props[, singletons_to_check$ASV_nb] |> rowSums()
 samples_to_check <- samples_to_check[samples_to_check > 0]
-
 ```
 
 ```{r}
 
-props_to_check <- props[names(samples_to_check),]
-props_to_check_long <- 
-  props_to_check |> 
-  as.data.frame() |> 
-  rownames_to_column("sample_id") |> 
+props_to_check <- props[names(samples_to_check), ]
+props_to_check_long <-
+  props_to_check |>
+  as.data.frame() |>
+  rownames_to_column("sample_id") |>
   pivot_longer(-sample_id, names_to = "ASV_seq", values_to = "rel_ab") |>
-  filter(rel_ab > 0) |> 
+  filter(rel_ab > 0) |>
   dplyr::left_join(
-    ps@tax_table |> 
-      as.data.frame() |> 
-      as_tibble(rownames = "ASV_seq") |> 
+    ps@tax_table |>
+      as.data.frame() |>
+      as_tibble(rownames = "ASV_seq") |>
       mutate(ASV_nb = row_number()),
     by = join_by(ASV_seq)
-  ) 
- 
+  )
 ```
 
 ```{r}
 
-props_to_check_long |> 
-  mutate(singleton =  ifelse(ASV_nb %in% singletons_to_check$ASV_nb, "Singleton", "Non-singleton")) |>
+props_to_check_long |>
+  mutate(
+    singleton = ifelse(
+      ASV_nb %in% singletons_to_check$ASV_nb,
+      "Singleton",
+      "Non-singleton"
+    )
+  ) |>
   ggplot() +
-  aes(x = sample_id, y = str_c(Species, "(ASV #", ASV_nb, ")") , fill = rel_ab) +
+  aes(x = sample_id, y = str_c(Species, "(ASV #", ASV_nb, ")"), fill = rel_ab) +
   facet_grid(singleton ~ ., scales = "free", space = "free") +
   geom_tile() +
-  scale_fill_gradient(low = "white", high = "blue", labels = scales::label_percent(accuracy = 1)) +
+  scale_fill_gradient(
+    low = "white",
+    high = "blue",
+    labels = scales::label_percent(accuracy = 1)
+  ) +
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
   ) +
@@ -271,7 +296,6 @@ props_to_check_long |>
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)
   )
-
 ```
 
 
@@ -281,33 +305,40 @@ Many of these "high relative abundances singletons" are in negative controls.
 
 ```{r}
 
-# tmp <- 
-#   ps@tax_table |> 
-#   as.data.frame() 
-# 
+# tmp <-
+#   ps@tax_table |>
+#   as.data.frame()
+#
 # j <-  which(tmp$Species == "Lactobacillus_crispatus")
-# 
+#
 # tmp <- counts[,j]
-# tmp <- tmp |> as.data.frame() 
-# 
-# tmp_long <- 
-#   tmp |> 
-#   set_colnames(1:ncol(tmp)) |> 
-#   rownames_to_column("sample_id") |> 
+# tmp <- tmp |> as.data.frame()
+#
+# tmp_long <-
+#   tmp |>
+#   set_colnames(1:ncol(tmp)) |>
+#   rownames_to_column("sample_id") |>
 #   pivot_longer(-sample_id, names_to = "L_crisp_ASV_nb", values_to = "counts")
-# 
-# tmp_long |> 
+#
+# tmp_long |>
 #   ggplot() +
 #   aes(x = sample_id, y = L_crisp_ASV_nb, fill = counts |> asinh()) +
 #   geom_tile() +
-#   scale_fill_gradient(low = "white", high = "blue") 
+#   scale_fill_gradient(low = "white", high = "blue")
 
 ```
 
 
 
 ```{r}
-rm(counts, ASV_stats, singletons_to_check, samples_to_check, props_to_check, props_to_check_long)
+rm(
+  counts,
+  ASV_stats,
+  singletons_to_check,
+  samples_to_check,
+  props_to_check,
+  props_to_check_long
+)
 ```
 
 
@@ -324,69 +355,92 @@ We first create a `SummarizedExperiment` object at the ASV resolution which we w
 ```{r}
 
 make_se_from_ps <- function(ps) {
-  
   # ROWDATA (Tax table)
-  se_rowdata <- 
-    ps@tax_table |> 
+  se_rowdata <-
+    ps@tax_table |>
     as.data.frame() |>
-    rownames_to_column("ASV_sequence") |> 
+    rownames_to_column("ASV_sequence") |>
     mutate(ASV_order = row_number()) |>
-    group_by(Species) |> 
-    mutate(ASV_id = str_c(Species, " (ASV", ASV_order |> str_pad(width = 6, pad = "0"),")")) |> 
-    ungroup() |> 
-    mutate(rownames = ASV_id) |> 
-    column_to_rownames("rownames") |> 
-    relocate(ASV_sequence, .after = ASV_id)  |> 
+    group_by(Species) |>
+    mutate(
+      ASV_id = str_c(
+        Species,
+        " (ASV",
+        ASV_order |> str_pad(width = 6, pad = "0"),
+        ")"
+      )
+    ) |>
+    ungroup() |>
+    mutate(rownames = ASV_id) |>
+    column_to_rownames("rownames") |>
+    relocate(ASV_sequence, .after = ASV_id) |>
     janitor::clean_names()
 
   # we do some cleaning of the names and variables
-  se_rowdata <- 
-    se_rowdata |> 
+  se_rowdata <-
+    se_rowdata |>
     mutate(
       domain = domain |> str_remove("^d_"),
-      phylum = phylum |> str_remove("^[dp]_") |> 
+      phylum = phylum |>
+        str_remove("^[dp]_") |>
         str_replace(" Domain", " (Domain)"),
-      class = class |> str_remove("^[dpc]_") |> 
+      class = class |>
+        str_remove("^[dpc]_") |>
         str_replace(" Domain", " (Domain)"),
-      order = order |> str_remove("^[dpco]_") |> 
-        str_replace(" Domain", " (Domain)") |> 
+      order = order |>
+        str_remove("^[dpco]_") |>
+        str_replace(" Domain", " (Domain)") |>
         str_replace(" Class", " (Class)"),
-      family = family |> str_remove("^[dpcof]_") |> 
-        str_replace(" Domain", " (Domain)") |> 
-        str_replace(" Class", " (Class)") |> 
+      family = family |>
+        str_remove("^[dpcof]_") |>
+        str_replace(" Domain", " (Domain)") |>
+        str_replace(" Class", " (Class)") |>
         str_replace(" Order", " (Order)"),
-      genus = genus |> str_remove("^[dpcofg]_") |> 
-        str_replace(" Domain", " (Domain)") |> 
-        str_replace(" Class", " (Class)") |> 
+      genus = genus |>
+        str_remove("^[dpcofg]_") |>
+        str_replace(" Domain", " (Domain)") |>
+        str_replace(" Class", " (Class)") |>
         str_replace(" Order", " (Order)") |>
         str_replace(" Family", " (Family)"),
-      species = species |> str_remove("^[dpcofg]_") |>
-        str_replace(" Domain", " (Domain)") |> 
-        str_replace(" Class", " (Class)") |> 
+      species = species |>
+        str_remove("^[dpcofg]_") |>
+        str_replace(" Domain", " (Domain)") |>
+        str_replace(" Class", " (Class)") |>
         str_replace(" Order", " (Order)") |>
         str_replace(" Family", " (Family)") |>
-        str_replace(" Genus", " (Genus)") |> 
+        str_replace(" Genus", " (Genus)") |>
         str_replace_all("_", " "),
-      last_available_taxonomic_level = 
-        species |> 
-        str_extract("\\(Domain\\)|\\(Class\\)|\\(Order\\)|\\(Family\\)|\\(Genus\\)") |> 
-        str_remove("\\(") |> str_remove("\\)") |> 
-        str_replace_na("Species"),
+      last_available_taxonomic_level = species |>
+        str_extract(
+          "\\(Domain\\)|\\(Class\\)|\\(Order\\)|\\(Family\\)|\\(Genus\\)"
+        ) |>
+        str_remove("\\(") |>
+        str_remove("\\)") |>
+        str_replace_na("Species") |>
+        factor(
+          levels = c(
+            "Domain",
+            "Phylum",
+            "Class",
+            "Order",
+            "Family",
+            "Genus",
+            "Species"
+          )
+        ),
       asv_label = asv_id |> str_replace_all("_", " ")
-    ) |> 
+    ) |>
     select(asv_id, everything(), asv_label)
-  
-  
-  rowData_dictionary <- 
-    tibble(name = colnames(se_rowdata)) |> 
+
+  rowData_dictionary <-
+    tibble(name = colnames(se_rowdata)) |>
     dplyr::full_join(
-      tibble(original_name = ps@tax_table |> colnames()) |> 
+      tibble(original_name = ps@tax_table |> colnames()) |>
         mutate(name = original_name |> str_to_lower()),
       by = join_by(name)
-    ) |> 
+    ) |>
     mutate(
-      description = 
-      case_when(
+      description = case_when(
         name == "asv_id" ~ "Unique ASV identifier",
         name == "asv_label" ~ "ASV label (for pretty printing)",
         name == "domain" ~ "Domain",
@@ -396,34 +450,35 @@ make_se_from_ps <- function(ps) {
         name == "family" ~ "Family",
         name == "genus" ~ "Genus",
         name == "species" ~ "Species",
-        name == "asv_order" ~ "ASV order as provided in the original `phyloseq` object",
+        name ==
+          "asv_order" ~ "ASV order as provided in the original `phyloseq` object",
         name == "asv_sequence" ~ "ASV sequence",
-        name == "last_available_taxonomic_level" ~ "Last available taxonomic level for the ASV",
+        name ==
+          "last_available_taxonomic_level" ~ "Last available taxonomic level for the ASV",
         TRUE ~ "???"
       )
     )
-  
-  
+
   # COLDATA (Sample data)
   se_coldata <-
-    ps@sam_data |> 
-    as.data.frame() |> 
-    as_tibble() |>  # weird trick because of the sticky `phyloseq` attribute
-    as.data.frame() |> 
+    ps@sam_data |>
+    as.data.frame() |>
+    as_tibble() |> # weird trick because of the sticky `phyloseq` attribute
+    as.data.frame() |>
     set_rownames(rownames(ps@sam_data))
-  
-  colData_dictionary <- 
+
+  colData_dictionary <-
     tibble(
       original_name = se_coldata |> colnames()
     )
-  
+
   se_coldata <- se_coldata |> janitor::clean_names()
   se_coldata <- se_coldata |> dplyr::rename(visit_code_ps = visit_code)
-  
-  colData_dictionary <- colData_dictionary |> bind_cols(name = colnames(se_coldata))
-  
-  se_coldata <- se_coldata |> mutate(sample_id_ps = rownames(se_coldata)) 
-   
+
+  colData_dictionary <- colData_dictionary |>
+    bind_cols(name = colnames(se_coldata))
+
+  se_coldata <- se_coldata |> mutate(sample_id_ps = rownames(se_coldata))
 
   # ASSSAY
   raw_counts <- ps@otu_table |> as.matrix()
@@ -431,10 +486,10 @@ make_se_from_ps <- function(ps) {
   raw_counts <- Matrix::Matrix(raw_counts, sparse = TRUE)
   raw_counts <- raw_counts |> t()
   rownames(raw_counts) <- se_rowdata$asv_id
-  
+
   # SummarizedExperiment
-  
-  se <- 
+
+  se <-
     SummarizedExperiment(
       assays = list(
         counts = raw_counts,
@@ -445,18 +500,15 @@ make_se_from_ps <- function(ps) {
       metadata = list(
         name = "VIBRANT 16S rRNA amplicon sequencing (ASV-level)",
         date = today(),
-        dictionary = 
-          bind_rows(
-            colData_dictionary |> mutate(table = "colData"),
-            rowData_dictionary |> mutate(table = "rowData")
-          )
+        dictionary = bind_rows(
+          colData_dictionary |> mutate(table = "colData"),
+          rowData_dictionary |> mutate(table = "rowData")
+        )
       )
     )
 
-  
   se
 }
-
 ```
 
 ```{r}
@@ -488,8 +540,8 @@ We have data for the following samples:
 #| fig-height: 10
 #| fig-width: 15
 
-se_16S_ASV@colData |> 
-  as.data.frame() |> 
+se_16S_ASV@colData |>
+  as.data.frame() |>
   ggplot() +
   aes(x = patient_id, y = visit_code_ps) +
   geom_point() +
@@ -497,7 +549,6 @@ se_16S_ASV@colData |>
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
   )
-
 ```
 
 We see that we'll have to harmonize the `patient_id` and `visit_code` columns. From harmonized participant ID, we'll be able to impute the site location.
@@ -505,32 +556,29 @@ We see that we'll have to harmonize the `patient_id` and `visit_code` columns. F
 
 ```{r}
 
-se_16S_ASV@colData <- 
-  se_16S_ASV@colData |> 
-  as.data.frame() |> 
+se_16S_ASV@colData <-
+  se_16S_ASV@colData |>
+  as.data.frame() |>
   mutate(
-    pid = 
-      patient_id |> 
-      str_remove_all("_") |> 
-      str_remove_all("-") |> 
-      str_replace_all("^68","068") 
-  ) |> 
+    pid = patient_id |>
+      str_remove_all("_") |>
+      str_remove_all("-") |>
+      str_replace_all("^68", "068")
+  ) |>
   DataFrame()
-
 ```
 
 
 ```{r}
 
-se_16S_ASV@colData |> 
-  as.data.frame() |> 
-  mutate(pid_length = str_length(pid)) |> 
-  dplyr::filter(pid_length != 9) |> 
-  dplyr::count(patient_id, pid) |> 
+se_16S_ASV@colData |>
+  as.data.frame() |>
+  mutate(pid_length = str_length(pid)) |>
+  dplyr::filter(pid_length != 9) |>
+  dplyr::count(patient_id, pid) |>
   gt(
     caption = "Samples with non-standard participant IDs"
   )
-
 ```
 
 
@@ -545,29 +593,26 @@ We next clean the `visit_code_ps` and define the `visit_code` column
 ```{r}
 #| eval: false
 
-se_16S_ASV@colData |> 
-  as.data.frame() |> 
+se_16S_ASV@colData |>
+  as.data.frame() |>
   dplyr::count(visit_code_ps)
-
 ```
 
 
 
 ```{r}
 
-se_16S_ASV@colData <- 
-  se_16S_ASV@colData |> 
-  as.data.frame() |> 
+se_16S_ASV@colData <-
+  se_16S_ASV@colData |>
+  as.data.frame() |>
   mutate(
-    visit_code = 
-      visit_code_ps |> 
-      str_replace("V7", "1700") |> 
+    visit_code = visit_code_ps |>
+      str_replace("V7", "1700") |>
       str_replace("V8", "1900") |>
-      str_replace("V9", "2120") |> 
-      str_pad(width = 4, pad = "0") 
-  ) |> 
+      str_replace("V9", "2120") |>
+      str_pad(width = 4, pad = "0")
+  ) |>
   DataFrame()
-
 ```
 
 
@@ -576,52 +621,62 @@ We also create new columns for the `sample_type` and `control_type`
 
 ```{r}
 
-se_16S_ASV@colData <- 
-  se_16S_ASV@colData |> 
-  as.data.frame() |> 
+se_16S_ASV@colData <-
+  se_16S_ASV@colData |>
+  as.data.frame() |>
   mutate(
-    sample_type = 
-      case_when(
-        str_detect(pid, "^068") ~ "Clinical sample",
-        str_detect(pid, "98") ~ "Clinical sample (other study)",
-        str_detect(pid, "Amplification NEG control") | str_detect(sample_id, "Amplification_NEG_control") ~ "Amplification negative control",
-        str_detect(pid, "Amplification POS control") | str_detect(sample_id, "Amplification_POS_control") ~ "Amplification positive control",
-        str_detect(pid, "Mock") | str_detect(sample_id, "Mock") ~ "Positive control",
-        str_detect(pid, "water") | str_detect(pid, "Unused") | str_detect(sample_id, "water") | str_detect(sample_id, "Unused")  ~ "Negative control",
-      ),
-    control_type = 
-      case_when(
-        str_detect(sample_type, "Clinical") ~ "",
-        str_detect(sample_id, "Mock1") ~ "Mock 1",
-        str_detect(pid, "Mock") ~ pid,
-        str_detect(pid, "water") | str_detect(sample_id, "water") ~ "Nuclease-free water",
-        str_detect(pid, "Unused") | str_detect(sample_id, "Unused")  ~ "Unused swab + C2",
-        TRUE ~ sample_type
-      )
-  ) |> 
-  DataFrame()
-
-```
-
-```{r}
-
-se_16S_ASV@colData |> 
-  as.data.frame() |> 
-  dplyr::count(sample_type, control_type) |> 
-  gt()
-
-```
-
-
-```{r}
-
-se_16S_ASV$pid <- 
-  ifelse(
-    !(se_16S_ASV$sample_type %in% c("Clinical sample", "Clinical sample (other study)")), 
-    NA_character_, 
-    se_16S_ASV$pid
+    sample_type = case_when(
+      str_detect(pid, "^068") ~ "Clinical sample",
+      str_detect(pid, "98") ~ "Clinical sample (other study)",
+      str_detect(pid, "Amplification NEG control") |
+        str_detect(
+          sample_id,
+          "Amplification_NEG_control"
+        ) ~ "Amplification negative control",
+      str_detect(pid, "Amplification POS control") |
+        str_detect(
+          sample_id,
+          "Amplification_POS_control"
+        ) ~ "Amplification positive control",
+      str_detect(pid, "Mock") |
+        str_detect(sample_id, "Mock") ~ "Positive control",
+      str_detect(pid, "water") |
+        str_detect(pid, "Unused") |
+        str_detect(sample_id, "water") |
+        str_detect(sample_id, "Unused") ~ "Negative control",
+    ),
+    control_type = case_when(
+      str_detect(sample_type, "Clinical") ~ "",
+      str_detect(sample_id, "Mock1") ~ "Mock 1",
+      str_detect(pid, "Mock") ~ pid,
+      str_detect(pid, "water") |
+        str_detect(sample_id, "water") ~ "Nuclease-free water",
+      str_detect(pid, "Unused") |
+        str_detect(sample_id, "Unused") ~ "Unused swab + C2",
+      TRUE ~ sample_type
     )
+  ) |>
+  DataFrame()
+```
 
+```{r}
+
+se_16S_ASV@colData |>
+  as.data.frame() |>
+  dplyr::count(sample_type, control_type) |>
+  gt()
+```
+
+
+```{r}
+
+se_16S_ASV$pid <-
+  ifelse(
+    !(se_16S_ASV$sample_type %in%
+      c("Clinical sample", "Clinical sample (other study)")),
+    NA_character_,
+    se_16S_ASV$pid
+  )
 ```
 
 
@@ -633,53 +688,56 @@ Does that "EQ"-starting barcodes sound familiar or not at all?
 
 ```{r}
 
-tmp <- 
-  se_16S_ASV@colData |> 
-  as_tibble() |> 
-  dplyr::filter(sample_type %in% c("Positive control", "Negative control")) |> 
-  select(sample_id, sample_type, control_type) |> 
+tmp <-
+  se_16S_ASV@colData |>
+  as_tibble() |>
+  dplyr::filter(sample_type %in% c("Positive control", "Negative control")) |>
+  select(sample_id, sample_type, control_type) |>
   mutate(
-    ext_lib_plate_type = 
-      case_when(
-        str_detect(sample_id, "^dailyplate") ~ "CAP daily swabs",
-        str_detect(sample_id, "^mghdailyplate") ~ "MGH daily swabs",
-        str_detect(sample_id, "^plate") ~ "Weekly swabs",
-        str_detect(sample_id, "_plate1") ~ "Weekly swabs",
-        TRUE ~ "???"
-      ),
+    ext_lib_plate_type = case_when(
+      str_detect(sample_id, "^dailyplate") ~ "CAP daily swabs",
+      str_detect(sample_id, "^mghdailyplate") ~ "MGH daily swabs",
+      str_detect(sample_id, "^plate") ~ "Weekly swabs",
+      str_detect(sample_id, "_plate1") ~ "Weekly swabs",
+      TRUE ~ "???"
+    ),
     ext_lib_plate_nb = sample_id |> str_remove("Mock1_") |> parse_number()
-  ) 
-
+  )
 ```
 
 ```{r}
 #| fig-width: 10
 #| fig-height: 1.5
 
-tmp |> 
+tmp |>
   ggplot() +
   aes(x = ext_lib_plate_nb |> factor(), y = control_type, col = control_type) +
-  facet_grid(sample_type ~ ext_lib_plate_type, scales = "free", space = "free") +
+  facet_grid(
+    sample_type ~ ext_lib_plate_type,
+    scales = "free",
+    space = "free"
+  ) +
   geom_point() +
   xlab("Extraction library plate number") +
   ylab("") +
   guides(col = "none") +
   theme(strip.text.y = element_text(angle = 0))
-
 ```
 
 
 ```{r}
 
-tmp <- 
-  se_16S_ASV@colData |> 
-  as.data.frame() |> 
+tmp <-
+  se_16S_ASV@colData |>
+  as.data.frame() |>
   select(sample_id) |>
-  dplyr::left_join(tmp |> select(sample_id, starts_with("ext_lib_plate")), by = "sample_id") 
+  dplyr::left_join(
+    tmp |> select(sample_id, starts_with("ext_lib_plate")),
+    by = "sample_id"
+  )
 
 se_16S_ASV@colData$ext_lib_plate_type <- tmp$ext_lib_plate_type
 se_16S_ASV@colData$ext_lib_plate_nb <- tmp$ext_lib_plate_nb
-
 ```
 
 
@@ -693,40 +751,37 @@ All of these "replicates" are from "pool10" which was composed of samples that h
 
 ```{r}
 
-
-replicates <- 
-  se_16S_ASV@colData |> 
-  as.data.frame() |> 
-  as_tibble() |> 
+replicates <-
+  se_16S_ASV@colData |>
+  as.data.frame() |>
+  as_tibble() |>
   dplyr::filter(sample_type == "Clinical sample")
 
-replicates |> 
-  dplyr::count(pid, visit_code, name = "n samples per participant x visit") |> 
-  dplyr::count(`n samples per participant x visit`, name = "occurence") |> 
+replicates |>
+  dplyr::count(pid, visit_code, name = "n samples per participant x visit") |>
+  dplyr::count(`n samples per participant x visit`, name = "occurence") |>
   gt()
 
-# se_16S_ASV@colData |> 
-#   as.data.frame() |> 
-#   as_tibble() |> 
-#   dplyr::filter(sample_type == "Clinical sample") |> 
-#   dplyr::count(patient_id, visit_code_ps) |> 
+# se_16S_ASV@colData |>
+#   as.data.frame() |>
+#   as_tibble() |>
+#   dplyr::filter(sample_type == "Clinical sample") |>
+#   dplyr::count(patient_id, visit_code_ps) |>
 #   dplyr::count(n)
 
-
-replicates <- 
+replicates <-
   replicates |>
-  group_by(pid, visit_code) |> 
-  arrange(visit_code) |>  
-  mutate(n = n(), rep_nb = row_number()) |> 
-  ungroup() |> 
-  dplyr::filter(n > 1) |> 
-  select(sample_id, patient_id, pid, visit_code_ps, visit_code, rep_nb, pool) |> 
-  arrange(pid, visit_code_ps) 
+  group_by(pid, visit_code) |>
+  arrange(visit_code) |>
+  mutate(n = n(), rep_nb = row_number()) |>
+  ungroup() |>
+  dplyr::filter(n > 1) |>
+  select(sample_id, patient_id, pid, visit_code_ps, visit_code, rep_nb, pool) |>
+  arrange(pid, visit_code_ps)
 
-replicates |> 
-  dplyr::count(rep_nb, pool) |> 
+replicates |>
+  dplyr::count(rep_nb, pool) |>
   gt()
-
 ```
 
 
@@ -735,13 +790,18 @@ We'll do a comparison of the composition of these samples below.
 ```{r}
 
 se_16S_ASV@colData$resequenced <- "No"
-se_16S_ASV@colData$resequenced[se_16S_ASV@colData$sample_id %in% replicates$sample_id[replicates$pool != "pool10"]] <- "Yes"
-se_16S_ASV@colData$resequenced[se_16S_ASV@colData$sample_id %in% replicates$sample_id[replicates$pool == "pool10"]] <- "2nd sequencing"
+se_16S_ASV@colData$resequenced[
+  se_16S_ASV@colData$sample_id %in%
+    replicates$sample_id[replicates$pool != "pool10"]
+] <- "Yes"
+se_16S_ASV@colData$resequenced[
+  se_16S_ASV@colData$sample_id %in%
+    replicates$sample_id[replicates$pool == "pool10"]
+] <- "2nd sequencing"
 
-se_16S_ASV@colData$resequenced <- 
-  se_16S_ASV@colData$resequenced |> 
+se_16S_ASV@colData$resequenced <-
+  se_16S_ASV@colData$resequenced |>
   factor(levels = c("No", "Yes", "2nd sequencing"))
-
 ```
 
 
@@ -756,16 +816,24 @@ Below, I load a list of all visits for all participants as found in the CRF data
 
 ```{r}
 
-load("/Users/laurasymul/OneDrive - UCL/Academia/Research/VIBRANT clinical data UCLouvain/Data processed/2025-05-14/visits_summary.RData", verbose = TRUE)
-v <- v |> dplyr::rename(visit_code_crf = visit_code) |> mutate(pid = str_c("068", pid))
-
+load(
+  "/Users/laurasymul/OneDrive - UCL/Academia/Research/VIBRANT clinical data UCLouvain/Data processed/2025-05-14/visits_summary.RData",
+  verbose = TRUE
+)
+v <- v |>
+  dplyr::rename(visit_code_crf = visit_code) |>
+  mutate(pid = str_c("068", pid))
 ```
 
 
 ```{r}
-v <- 
-  v |> 
-  mutate(visit_code = visit_code_crf |> as.character() |> str_pad(width = 4, pad = "0")) 
+v <-
+  v |>
+  mutate(
+    visit_code = visit_code_crf |>
+      as.character() |>
+      str_pad(width = 4, pad = "0")
+  )
 ```
 
 ```{r}
@@ -773,53 +841,59 @@ v <-
 #| fig-width: 15
 #| eval: false
 
-v |> 
+v |>
   ggplot() +
   aes(x = pid, y = visit_code, col = randomized) +
   geom_point() +
   facet_grid(. ~ location + randomized, scales = "free", space = "free") +
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
-  ) + 
+  ) +
   ggtitle("CRF data")
-
 ```
 
 
 ```{r}
 
-matched <- 
+matched <-
   dplyr::full_join(
-    se_16S_ASV@colData |> 
-      as.data.frame() |> 
-      dplyr::filter(sample_type == "Clinical sample") |> 
-      as_tibble() |> 
-      select(pid, visit_code, patient_id, visit_code_ps, sample_id, site) |> 
+    se_16S_ASV@colData |>
+      as.data.frame() |>
+      dplyr::filter(sample_type == "Clinical sample") |>
+      as_tibble() |>
+      select(pid, visit_code, patient_id, visit_code_ps, sample_id, site) |>
       mutate(has_16S_data = TRUE),
-    v |> select(pid, visit_code) |>  mutate(has_CRF_data = TRUE),
+    v |> select(pid, visit_code) |> mutate(has_CRF_data = TRUE),
     by = join_by(pid, visit_code)
-  ) |> 
+  ) |>
   mutate(
     has_16S_data = has_16S_data |> replace_na(FALSE),
     has_CRF_data = has_CRF_data |> replace_na(FALSE)
-  ) |> 
+  ) |>
   dplyr::left_join(
-    v |> select(pid, location, met_eligibility, randomized) |> distinct() |> mutate(pid_in_CRFs = TRUE),
+    v |>
+      select(pid, location, met_eligibility, randomized) |>
+      distinct() |>
+      mutate(pid_in_CRFs = TRUE),
     by = join_by(pid)
-  ) |> 
+  ) |>
   mutate(
     pid_in_CRFs = pid_in_CRFs |> replace_na(FALSE)
   )
-
 ```
 
 
 ```{r}
 
-matched |> 
-  dplyr::count(has_16S_data, has_CRF_data, pid_in_CRFs, randomized, name = "n entries") |> 
+matched |>
+  dplyr::count(
+    has_16S_data,
+    has_CRF_data,
+    pid_in_CRFs,
+    randomized,
+    name = "n entries"
+  ) |>
   gt()
-
 ```
 
 
@@ -827,17 +901,20 @@ matched |>
 #| fig-width: 21
 #| fig-height: 10
 
-matched |> 
+matched |>
   ggplot() +
   aes(x = pid, y = visit_code, col = has_16S_data, shape = has_CRF_data) +
   geom_point() +
-  facet_grid(. ~ location + ifelse(randomized,"Randomized", "Not randomized"), scales = "free", space = "free") +
+  facet_grid(
+    . ~ location + ifelse(randomized, "Randomized", "Not randomized"),
+    scales = "free",
+    space = "free"
+  ) +
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
-  ) + 
+  ) +
   scale_shape_manual(values = c(1, 16)) +
   ggtitle("matched data")
-
 ```
 
 Let's focus on 
@@ -849,11 +926,10 @@ Let's focus on
 
 ```{r}
 
-matched |> 
-  dplyr::filter(is.na(location)) |> 
-  dplyr::count(pid, patient_id) |> 
+matched |>
+  dplyr::filter(is.na(location)) |>
+  dplyr::count(pid, patient_id) |>
   gt()
-
 ```
 
 These are likely "test" participants.
@@ -862,13 +938,12 @@ We change their `sample_type` to "Test sample".
 
 ```{r}
 
-se_16S_ASV$sample_type <- 
+se_16S_ASV$sample_type <-
   ifelse(
-    se_16S_ASV$pid %in% c("0681000xx", "068200000"), 
-    "Test sample", 
+    se_16S_ASV$pid %in% c("0681000xx", "068200000"),
+    "Test sample",
     se_16S_ASV$sample_type
-    ) 
-
+  )
 ```
 
 
@@ -881,18 +956,21 @@ se_16S_ASV$sample_type <-
 #| fig-width: 15
 #| fig-height: 9
 
-matched |> 
-  dplyr::filter(randomized) |> 
-   ggplot() +
+matched |>
+  dplyr::filter(randomized) |>
+  ggplot() +
   aes(x = pid, y = visit_code, col = has_16S_data, shape = has_CRF_data) +
   geom_point(size = 1.5) +
-  facet_grid(. ~ location + ifelse(randomized,"Randomized", "Not randomized"), scales = "free", space = "free") +
+  facet_grid(
+    . ~ location + ifelse(randomized, "Randomized", "Not randomized"),
+    scales = "free",
+    space = "free"
+  ) +
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
-  ) + 
+  ) +
   scale_shape_manual(values = c(1, 16)) +
   ggtitle("matched data")
-
 ```
 
 We have a quite ok match. Some observations around the mismatches:
@@ -915,51 +993,49 @@ We fix a few `visit_code` based on the CRF data, trial information, or based on 
 ```{r}
 #| eval: false
 
-se_16S_ASV@colData |> 
-  as_tibble() |> 
-  dplyr::filter(visit_code == "8999") |> 
+se_16S_ASV@colData |>
+  as_tibble() |>
+  dplyr::filter(visit_code == "8999") |>
   select(sample_id, patient_id, pid, visit_code_ps, visit_code)
 
 
-se_16S_ASV@colData |> 
-  as_tibble() |> 
-  dplyr::filter(visit_code == "0011") |> 
+se_16S_ASV@colData |>
+  as_tibble() |>
+  dplyr::filter(visit_code == "0011") |>
   select(sample_id, patient_id, pid, visit_code_ps, visit_code)
 
-se_16S_ASV@colData |> 
-  as_tibble() |> 
-  dplyr::filter(pid == "068200023") |> 
+se_16S_ASV@colData |>
+  as_tibble() |>
+  dplyr::filter(pid == "068200023") |>
   select(sample_id, patient_id, pid, visit_code_ps, visit_code)
 
 
-matched |> 
-  dplyr::filter(randomized) |> 
-  dplyr::filter(has_16S_data, !has_CRF_data) |> 
-  arrange(pid, visit_code) |> View()
-
+matched |>
+  dplyr::filter(randomized) |>
+  dplyr::filter(has_16S_data, !has_CRF_data) |>
+  arrange(pid, visit_code) |>
+  View()
 ```
 
 
 ```{r}
 
-se_16S_ASV@colData <- 
-  se_16S_ASV@colData |> 
-  as.data.frame() |> 
+se_16S_ASV@colData <-
+  se_16S_ASV@colData |>
+  as.data.frame() |>
   mutate(
-    visit_code = 
-      case_when(
-        # one MGH participant had their visit code set to the termination visit code. 
-        # However, for the other assays, it was the actual visit code that was used instead.
-        # for that participant (068100050), their last visit was 1700
-        (pid == "068100050") & (visit_code == "8999") ~ "1700", 
-        # two CAP participants had "0011" as their visit code. 
-        # these should be replaced by "0010"
-        (visit_code == "0011") ~ "0010",
-        TRUE ~ visit_code
-      )
-  ) |> 
+    visit_code = case_when(
+      # one MGH participant had their visit code set to the termination visit code.
+      # However, for the other assays, it was the actual visit code that was used instead.
+      # for that participant (068100050), their last visit was 1700
+      (pid == "068100050") & (visit_code == "8999") ~ "1700",
+      # two CAP participants had "0011" as their visit code.
+      # these should be replaced by "0010"
+      (visit_code == "0011") ~ "0010",
+      TRUE ~ visit_code
+    )
+  ) |>
   DataFrame()
-
 ```
 
 
@@ -968,16 +1044,16 @@ se_16S_ASV@colData <-
 
 ```{r}
 
-se_16S_ASV$uid <- 
+se_16S_ASV$uid <-
   ifelse(
-    !is.na(se_16S_ASV$pid), 
+    !is.na(se_16S_ASV$pid),
     str_c(
-      se_16S_ASV$pid, "_",
+      se_16S_ASV$pid,
+      "_",
       se_16S_ASV$visit_code
-    ), 
+    ),
     se_16S_ASV$sample_id
   )
-
 ```
 
 Note that these `uid` are not unique because of the replicates from "pool10" (see above). There are `r se_16S_ASV$uid |> duplicated() |> sum()` duplicated `uid` in the data.
@@ -988,7 +1064,6 @@ Note that these `uid` are not unique because of the replicates from "pool10" (se
 ```{r}
 
 se_16S_ASV@colData$total_counts <- colSums(assay(se_16S_ASV, "counts"))
-
 ```
 
 
@@ -1006,74 +1081,108 @@ se_16S_ASV@colData$total_counts <- colSums(assay(se_16S_ASV, "counts"))
 
 se_16S_ASV$patient_id_ps <- se_16S_ASV$patient_id
 
-empty_cols <- colData(se_16S_ASV) |> apply(2, function(x) {is.na(x) |> all()}) |> which() |> names() 
+empty_cols <- colData(se_16S_ASV) |>
+  apply(2, function(x) {
+    is.na(x) |> all()
+  }) |>
+  which() |>
+  names()
 if (length(empty_cols) > 0) {
-  warning(str_c("The following columns in the colData are empty and will be removed: ", str_c(empty_cols, collapse = ", ")))
+  warning(str_c(
+    "The following columns in the colData are empty and will be removed: ",
+    str_c(empty_cols, collapse = ", ")
+  ))
 }
-unique_values_cols <- (apply(colData(se_16S_ASV), 2, function(x) {unique(x) |> length()}) == 1) |> which() |> names()
+unique_values_cols <- (apply(colData(se_16S_ASV), 2, function(x) {
+  unique(x) |> length()
+}) ==
+  1) |>
+  which() |>
+  names()
 if (length(unique_values_cols) > 0) {
-  warning(str_c("The following columns in the colData have only one unique value and will be removed:\n\t", str_c(unique_values_cols, collapse = ",\n\t"))) 
+  warning(str_c(
+    "The following columns in the colData have only one unique value and will be removed:\n\t",
+    str_c(unique_values_cols, collapse = ",\n\t")
+  ))
 }
 
-cols_to_remove <- 
+cols_to_remove <-
   c("sample_id", "sample_id_2", "patient_id", empty_cols, unique_values_cols)
 
-ordered_cols <- 
+ordered_cols <-
   unique(
     c(
-      "uid", "pid", "visit_code", "sample_type", "control_type", "site",
-      "ext_lib_plate_type", "ext_lib_plate_nb", 
-      "total_counts", "resequenced",
-      "sample_id_ps", "sample_id_barcode", "patient_id_ps", "visit_code_ps",
-      "specimen_type", "description", "original_mgh_aliquot_unique_identifier", 
-      "pool", "pool10", "researcher", "well_id", "volume_pooled_u_l",
+      "uid",
+      "pid",
+      "visit_code",
+      "sample_type",
+      "control_type",
+      "site",
+      "ext_lib_plate_type",
+      "ext_lib_plate_nb",
+      "total_counts",
+      "resequenced",
+      "sample_id_ps",
+      "sample_id_barcode",
+      "patient_id_ps",
+      "visit_code_ps",
+      "specimen_type",
+      "description",
+      "original_mgh_aliquot_unique_identifier",
+      "pool",
+      "pool10",
+      "researcher",
+      "well_id",
+      "volume_pooled_u_l",
       colnames(colData(se_16S_ASV))
     )
-  ) |> 
+  ) |>
   setdiff(cols_to_remove)
 
-colData(se_16S_ASV) <- colData(se_16S_ASV)[,ordered_cols]
-
+colData(se_16S_ASV) <- colData(se_16S_ASV)[, ordered_cols]
 ```
 
 
 
 ```{r}
 
-se_16S_ASV@metadata$dictionary <- 
-  se_16S_ASV@metadata$dictionary |> 
+se_16S_ASV@metadata$dictionary <-
+  se_16S_ASV@metadata$dictionary |>
   mutate(
-    name = 
-      case_when(
-        name == "sample_id" ~ "sample_id_ps",
-        name == "patient_id" ~ "patient_id_ps",
-        TRUE ~ name
-      ),
-    description = 
-      case_when(
-        original_name == "sampleID" ~ "Original sample ID from the 16S data phyloseq object",
-        original_name == "Sample.ID.Barcode" ~ "Concatenation of the swab barcode and the sample ID from the 16S data phyloseq object",
-        original_name == "Patient.ID" ~ "Patient ID as provided in the 16S data phyloseq object",
-        original_name == "Visit.code" ~ "Visit code as provided in the 16S data phyloseq object",
-        
-        name == "uid" ~ "VIBRANT unique sample identifier",
-        name == "pid" ~ "VIBRANT participant ID (NA for non-clinical samples)",
-        name == "visit_code" ~ "VIBRANT visit code (NA for non-clinical samples)",
-        name == "sample_type" ~ "Type of sample (clinical sample, positive control, negative control, etc.)",
-        name == "control_type" ~ "Type of control (if applicable)",
-        name == "site" ~ "Study site (CAP or MGH)",
-        name == "ext_lib_plate_type" ~ "Type of extraction library plate",
-        name == "ext_lib_plate_nb" ~ "Extraction library plate number",
-        name == "total_counts" ~ "Total counts in the sample (library size)",
-        name == "resequenced" ~ "Whether the sample was resequenced due to low read count or other issues",
-        name == "cst" ~ "Community State Type as assigned by VALENCIA",
-        name == "sub_cst" ~ "Community State Sub-Type as assigned by VALENCIA",
-        name == "score" ~ "Sub-CST assignment score as estimated by VALENCIA",
-        TRUE ~ description
-      ),
-    removed = ifelse(name %in% cols_to_remove, TRUE, FALSE)
-  ) 
+    name = case_when(
+      name == "sample_id" ~ "sample_id_ps",
+      name == "patient_id" ~ "patient_id_ps",
+      TRUE ~ name
+    ),
+    description = case_when(
+      original_name ==
+        "sampleID" ~ "Original sample ID from the 16S data phyloseq object",
+      original_name ==
+        "Sample.ID.Barcode" ~ "Concatenation of the swab barcode and the sample ID from the 16S data phyloseq object",
+      original_name ==
+        "Patient.ID" ~ "Patient ID as provided in the 16S data phyloseq object",
+      original_name ==
+        "Visit.code" ~ "Visit code as provided in the 16S data phyloseq object",
 
+      name == "uid" ~ "VIBRANT unique sample identifier",
+      name == "pid" ~ "VIBRANT participant ID (NA for non-clinical samples)",
+      name == "visit_code" ~ "VIBRANT visit code (NA for non-clinical samples)",
+      name ==
+        "sample_type" ~ "Type of sample (clinical sample, positive control, negative control, etc.)",
+      name == "control_type" ~ "Type of control (if applicable)",
+      name == "site" ~ "Study site (CAP or MGH)",
+      name == "ext_lib_plate_type" ~ "Type of extraction library plate",
+      name == "ext_lib_plate_nb" ~ "Extraction library plate number",
+      name == "total_counts" ~ "Total counts in the sample (library size)",
+      name ==
+        "resequenced" ~ "Whether the sample was resequenced due to low read count or other issues",
+      name == "cst" ~ "Community State Type as assigned by VALENCIA",
+      name == "sub_cst" ~ "Community State Sub-Type as assigned by VALENCIA",
+      name == "score" ~ "Sub-CST assignment score as estimated by VALENCIA",
+      TRUE ~ description
+    ),
+    removed = ifelse(name %in% cols_to_remove, TRUE, FALSE)
+  )
 ```
 
 ```{r}
@@ -1086,25 +1195,27 @@ se_16S_ASV@metadata$dictionary |> gt()
 
 ```{r}
 
-tmp <- 
+tmp <-
   tibble(
     uid = se_16S_ASV$uid,
     total_counts = se_16S_ASV$total_counts
-  ) |> 
-  mutate(i = row_number()) |> 
-  group_by(uid) |> 
-  arrange(uid, -total_counts) |> 
+  ) |>
+  mutate(i = row_number()) |>
+  group_by(uid) |>
+  arrange(uid, -total_counts) |>
   mutate(
     n = n(),
-    new_colnames = str_c(uid, ifelse((n > 1) & (row_number() > 1), str_c("_r", row_number()), ""))
-  ) |> 
-  ungroup() |> 
+    new_colnames = str_c(
+      uid,
+      ifelse((n > 1) & (row_number() > 1), str_c("_r", row_number()), "")
+    )
+  ) |>
+  ungroup() |>
   arrange(i)
 
 colnames(se_16S_ASV) <- tmp$new_colnames
 
 rm(tmp)
-
 ```
 
 
@@ -1120,19 +1231,17 @@ Here, for simplicity, we aggregate the data at the species level.
 ```{r}
 #| eval: false
 
-# Note, for the aggregation, one natural choice would be to use the `phyloseq::tax_glom()` function. 
-# However, here, that function throws an error 
+# Note, for the aggregation, one natural choice would be to use the `phyloseq::tax_glom()` function.
+# However, here, that function throws an error
 # (LS thinks it doesn't work because of the large number of ASVs... but didn't dig very deep)
-ps_agg <- ps |> tax_glom("Species") 
+ps_agg <- ps |> tax_glom("Species")
 
 # Further, since we've already performed some cleaning when moving from a phyloseq to a SummarizedExperiment object, it is easier to aggregate ourselves from the SummarizedExperiment object instead of going back to the phyloseq object.
-
 ```
 
 ```{r}
 
-aggregate_se <- function(se, agg_var = "aggregating_variable", assays){
-
+aggregate_se <- function(se, agg_var = "aggregating_variable", assays) {
   # this is helpful for the aggregation of the rowData variables (see below) in case of disagreement between the different variables (e.g., taxonomic variables) when there are several values per agg_var
   no_dominant_feature <- TRUE
   if (!any("dominant_feature" %in% colnames(rowData(se)))) {
@@ -1140,14 +1249,18 @@ aggregate_se <- function(se, agg_var = "aggregating_variable", assays){
   } else {
     no_dominant_feature <- FALSE
   }
-  
-  # 
+
+  #
   if (!any("taxon_id" %in% colnames(rowData(se)))) {
-    warning("No `taxon_id` variable in the rowData. A `taxon_id` variable will be created with the same values as the `agg_var` variable.")
+    warning(
+      "No `taxon_id` variable in the rowData. A `taxon_id` variable will be created with the same values as the `agg_var` variable."
+    )
     rowData(se)$taxon_id <- NA_character_
   }
   if (!any("taxon_label" %in% colnames(rowData(se)))) {
-    warning("No `taxon_label` variable in the rowData. A `taxon_label` variable will be created with the same values as the `agg_var` variable.")
+    warning(
+      "No `taxon_label` variable in the rowData. A `taxon_label` variable will be created with the same values as the `agg_var` variable."
+    )
     rowData(se)$taxon_label <- NA_character_
   }
 
@@ -1160,9 +1273,9 @@ aggregate_se <- function(se, agg_var = "aggregating_variable", assays){
     summarize(
       across(
         -any_of(c("i", "n_asv")),
-        ~ if(length(unique(.x)) == 1) {
+        ~ if (length(unique(.x)) == 1) {
           unique(.x)
-        } else if(any(dominant_feature)) {
+        } else if (any(dominant_feature)) {
           .x[dominant_feature] |> unique() |> extract(1)
         } else {
           NA
@@ -1174,16 +1287,17 @@ aggregate_se <- function(se, agg_var = "aggregating_variable", assays){
       .groups = "drop"
     ) |>
     mutate(
-      taxon_id =
-        case_when(
-          is.na(taxon_id) ~ new_feature,
-          TRUE ~ taxon_id
-        ),
-      taxon_label =
-        case_when(
-          is.na(taxon_label) ~ new_feature |> str_replace_all("_", " ") |> str_to_sentence() |> str_c(" (aggregated)"),
-          TRUE ~ taxon_label
-        )
+      taxon_id = case_when(
+        is.na(taxon_id) ~ new_feature,
+        TRUE ~ taxon_id
+      ),
+      taxon_label = case_when(
+        is.na(taxon_label) ~ new_feature |>
+          str_replace_all("_", " ") |>
+          str_to_sentence() |>
+          str_c(" (aggregated)"),
+        TRUE ~ taxon_label
+      )
     ) |>
     arrange(i) |>
     select(-i) |>
@@ -1193,17 +1307,27 @@ aggregate_se <- function(se, agg_var = "aggregating_variable", assays){
   if (no_dominant_feature) {
     aggregated_row_data <- aggregated_row_data |> select(-dominant_feature)
   }
-  
+
   j <- apply(aggregated_row_data, 2, function(x) all(is.na(x))) |> which()
   if (length(j) > 0) {
-    warning(str_c("The following variables in the rowData are all NA after aggregation and will be removed: ", str_c(colnames(aggregated_row_data)[j], collapse = ", ")))
-    aggregated_row_data <- aggregated_row_data |> select(-all_of(colnames(aggregated_row_data)[j]))
+    warning(str_c(
+      "The following variables in the rowData are all NA after aggregation and will be removed: ",
+      str_c(colnames(aggregated_row_data)[j], collapse = ", ")
+    ))
+    aggregated_row_data <- aggregated_row_data |>
+      select(-all_of(colnames(aggregated_row_data)[j]))
   }
-  
-  aggregated_row_data <- 
-    aggregated_row_data |> 
-    select(taxon_id, taxon_label, domain:species, last_available_taxonomic_level, n_aggregated_features, everything())
-  
+
+  aggregated_row_data <-
+    aggregated_row_data |>
+    select(
+      taxon_id,
+      taxon_label,
+      domain:species,
+      last_available_taxonomic_level,
+      n_aggregated_features,
+      everything()
+    )
 
   aggregated_assay_list <-
     map(
@@ -1215,42 +1339,38 @@ aggregate_se <- function(se, agg_var = "aggregating_variable", assays){
     ) |>
     set_names(assays)
 
-
   original_rowData <- rowData(se)
   original_rowData[, "agg_var"] <- original_rowData[, agg_var]
-  
+
   SummarizedExperiment::SummarizedExperiment(
     assays = aggregated_assay_list,
     rowData = aggregated_row_data,
     colData = colData(se),
-    metadata = 
-      list(
-        "note" = str_c("original SummarizedExperiment aggregated by ", agg_var),
-        original_rowData = original_rowData
-        ) |> 
+    metadata = list(
+      "note" = str_c("original SummarizedExperiment aggregated by ", agg_var),
+      original_rowData = original_rowData
+    ) |>
       c(metadata(se))
   )
-
 }
 
-aggregate_assay <- function(assay_name, se, agg_var, new_features){
-  assay(se, assay_name) |> 
-    base::rowsum(group = rowData(se)[,agg_var]) |> 
+aggregate_assay <- function(assay_name, se, agg_var, new_features) {
+  assay(se, assay_name) |>
+    base::rowsum(group = rowData(se)[, agg_var]) |>
     magrittr::extract(new_features, rownames(colData(se)))
 }
-
-
 ```
 
 
 
 ```{r}
 
-se_16S_species <- 
+se_16S_species <-
   aggregate_se(
-    se_16S_ASV, agg_var = "species", assays = c("counts", "rel_ab")
-    )
-
+    se_16S_ASV,
+    agg_var = "species",
+    assays = c("counts", "rel_ab")
+  )
 ```
 
 
@@ -1266,10 +1386,21 @@ se_16S <- se_16S_species
 
 ```{r}
 
-taxon_summary <- 
-  se_16S |> 
-  as_tibble() |> 
-  group_by(.feature) |> 
+taxon_summary <-
+  se_16S |>
+  as_tibble() |>
+  filter(sample_type == "Clinical sample") |>
+  group_by(
+    .feature,
+    domain,
+    phylum,
+    class,
+    order,
+    family,
+    genus,
+    species,
+    last_available_taxonomic_level
+  ) |>
   summarize(
     n_samples = n(),
     n_non_zero_samples = sum(counts > 0, na.rm = TRUE),
@@ -1278,18 +1409,27 @@ taxon_summary <-
     sd_rel_ab = (sd(rel_ab, na.rm = TRUE) * 100) |> round(2),
     pc_10 = (quantile(rel_ab, 0.1, na.rm = TRUE) * 100) |> round(2),
     pc_50 = (quantile(rel_ab, 0.5, na.rm = TRUE) * 100) |> round(2),
-    pc_90 = (quantile(rel_ab, 0.9, na.rm = TRUE) * 100) |> round(2)
-  ) 
-
+    pc_90 = (quantile(rel_ab, 0.9, na.rm = TRUE) * 100) |> round(2),
+    .groups = "drop"
+  )
 ```
 
 ```{r}
 
-taxon_summary |> 
-  arrange(-n_non_zero_samples) |> 
-  slice_head(n = 20) |> 
-  select(.feature, n_samples, n_non_zero_samples, mean_rel_ab, max_rel_ab, pc_10, pc_50, pc_90) |> 
-  gt() |> 
+taxon_summary |>
+  arrange(-n_non_zero_samples) |>
+  slice_head(n = 20) |>
+  select(
+    .feature,
+    n_samples,
+    n_non_zero_samples,
+    mean_rel_ab,
+    max_rel_ab,
+    pc_10,
+    pc_50,
+    pc_90
+  ) |>
+  gt() |>
   cols_label(
     .feature = "taxon",
     n_samples = "N samples",
@@ -1300,8 +1440,78 @@ taxon_summary |>
     pc_50 = "Median relative abundance across samples (%)",
     pc_90 = "90th percentile relative abundance across samples (%)"
   )
-
 ```
+
+
+```{r}
+
+g_taxon_summary <-
+  taxon_summary |>
+  ggplot() +
+  aes(
+    x = n_non_zero_samples,
+    y = mean_rel_ab,
+    label = .feature,
+    col = last_available_taxonomic_level
+  ) +
+  geom_linerange(aes(ymin = 0, ymax = max_rel_ab), alpha = 0.3) +
+  geom_linerange(aes(ymin = pc_10, ymax = pc_90), alpha = 0.6) +
+  geom_point() +
+  scale_x_log10() +
+  scale_y_log10() +
+  scale_colour_viridis_d(end = 0.8, option = "A") +
+  labs(
+    x = "Number of samples with non-zero counts (log scale)",
+    y = "Mean relative abundance across samples (%) (log scale)",
+    color = "Taxonomic level of assignment"
+  ) +
+  theme(
+    legend.position = "bottom",
+    legend.direction = "horizontal"
+  ) +
+  ggtitle("Taxon summary")
+
+
+g_taxon_summary
+```
+
+Unexpectedly, the majority of taxa are very rare and, in log-scale, we observe a correlation between prevalence (x-axis) and abundance (y-axis).
+
+However, we also observe a few features that are very prevalent, but not very abundant except in a few samples, and these features don't have "precise" taxonomic assignment (*i.e.*, family or higher taxonomic level). 
+
+These may either correspond to "PCR contaminants" and should, in this case, be excluded from downstream analyses, or they may correspond to "true" vaginal taxa whose sequences accumulated PCR (or sequencing) errors.
+
+In the first category, we find "Bacteria (Domain)" and "Dethiosulfovibrionaceae (Family)".
+
+
+```{r}
+
+taxon_summary |>
+  filter(
+    !(last_available_taxonomic_level %in% c("Genus", "Species")),
+    max_rel_ab > 30
+  ) |>
+  arrange(-n_non_zero_samples) |>
+  select(.feature, n_non_zero_samples, mean_rel_ab, max_rel_ab, pc_10, pc_90) |>
+  gt() |>
+  cols_label(
+    .feature = "taxon",
+    n_non_zero_samples = "n samples with non-zero counts",
+    mean_rel_ab = "Average relative abundance across samples (%)",
+    max_rel_ab = "Maximum relative abundance across samples (%)",
+    pc_10 = "10th percentile relative abundance across samples (%)",
+    pc_90 = "90th percentile relative abundance across samples (%)"
+  )
+```
+
+In the second category, we find, for example, "Lactobacillus (Genus)" or "Bifidobacteriaceae (Family)". Features of these second category usually represent a small fraction of any samples.
+
+```{r}
+# g_taxon_summary |> plotly::ggplotly()
+```
+
+
+
 
 
 
@@ -1314,8 +1524,8 @@ taxon_summary |>
 #| fig-width: 8
 #| fig-height: 5
 
-se_16S@colData |> 
-  as.data.frame() |> 
+se_16S@colData |>
+  as.data.frame() |>
   ggplot() +
   aes(x = total_counts, fill = control_type) +
   geom_histogram(bins = 30) +
@@ -1323,20 +1533,19 @@ se_16S@colData |>
   labs(x = "Total counts (log scale)", y = "Nb of samples") +
   facet_grid(sample_type ~ ., scales = "free") +
   theme(strip.text.y = element_text(angle = 0))
-
 ```
 
 ```{r}
 #| fig-width: 8
 #| fig-height: 5
 
-se_16S@colData |> 
-  as.data.frame() |> 
-  dplyr::filter(sample_type == "Clinical sample") |> 
+se_16S@colData |>
+  as.data.frame() |>
+  dplyr::filter(sample_type == "Clinical sample") |>
   ggplot() +
   aes(x = resequenced, y = total_counts, fill = resequenced) +
   # geom_histogram(bins = 30) +
-  geom_hline( yintercept = 5000, col = "red", linetype = "dashed") +
+  geom_hline(yintercept = 5000, col = "red", linetype = "dashed") +
   geom_violin(alpha = 0.3, col = "transparent", scale = "width") +
   ggbeeswarm::geom_quasirandom(alpha = 0.5, size = 0.1) +
   geom_path(aes(group = interaction(pid, visit_code)), alpha = 0.1) +
@@ -1344,7 +1553,6 @@ se_16S@colData |>
   guides(fill = "none") +
   labs(x = "Re-sequenced", y = "Total counts (log scale)") +
   ggtitle("Clinical samples only")
-
 ```
 We recommend excluding samples with less than 5000 counts for downstream analyses.
 
@@ -1352,25 +1560,26 @@ We recommend excluding samples with less than 5000 counts for downstream analyse
 #| fig-width: 8
 #| fig-height: 5
 
-tmp <- 
-  se_16S@colData |> 
-  as.data.frame() |> 
-  dplyr::filter(!is.na(visit_code)) |> 
-  group_by(visit_code) |> mutate(n = n()) |> ungroup() |> 
-  dplyr::filter(n > 20) |> 
-  mutate(visit_code = visit_code |> factor()) |> 
+tmp <-
+  se_16S@colData |>
+  as.data.frame() |>
+  dplyr::filter(!is.na(visit_code)) |>
+  group_by(visit_code) |>
+  mutate(n = n()) |>
+  ungroup() |>
+  dplyr::filter(n > 20) |>
+  mutate(visit_code = visit_code |> factor()) |>
   arrange(pid, visit_code)
 
-tmp |> 
+tmp |>
   ggplot() +
   aes(y = total_counts, x = visit_code, fill = visit_code, col = visit_code) +
   # geom_path(aes(group = pid), alpha = 0.15) +
-  geom_violin(draw_quantiles = 0.5, alpha = 0.5) + # fill = "gray", 
+  geom_violin(draw_quantiles = 0.5, alpha = 0.5) + # fill = "gray",
   scale_y_log10(n.breaks = 10) +
   guides(fill = "none", col = "none") +
   labs(y = "Total counts (log scale)", x = "Visit") +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
-
 ```
 
 ### Controls
@@ -1383,30 +1592,33 @@ tmp |>
 #| fig-width: 12
 #| fig-height: 6
 
-tmp <- 
-  se_16S |> 
-  dplyr::filter(sample_type == "Amplification negative control") |> 
-  as_tibble() |> 
+tmp <-
+  se_16S |>
+  dplyr::filter(sample_type == "Amplification negative control") |>
+  as_tibble() |>
   group_by(.feature) |>
-  mutate(max_rel_ab = max(rel_ab)) |> 
-  ungroup() |> 
+  mutate(max_rel_ab = max(rel_ab)) |>
+  ungroup() |>
   dplyr::filter(max_rel_ab > 0.2)
 
-tmp |> 
+tmp |>
   ggplot() +
   aes(x = sample_id_ps, y = rel_ab, fill = .feature) +
   geom_col(col = "white", linewidth = 0.1) +
   scale_fill_manual(
-    str_c("Top ", tmp$.feature |> unique() |> length(), " taxa (based on max rel. ab.)"), 
-    breaks = tmp$.feature |> unique(), 
+    str_c(
+      "Top ",
+      tmp$.feature |> unique() |> length(),
+      " taxa (based on max rel. ab.)"
+    ),
+    breaks = tmp$.feature |> unique(),
     values = tmp$.feature |> unique() |> get_taxa_colors()
   ) +
   facet_grid(. ~ control_type, scales = "free_x", space = "free_x") +
   theme(
     strip.text.y = element_text(angle = 0),
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
-    )
-  
+  )
 ```
 
 
@@ -1416,30 +1628,33 @@ tmp |>
 #| fig-width: 12
 #| fig-height: 6
 
-tmp <- 
-  se_16S |> 
-  dplyr::filter(sample_type == "Amplification positive control") |> 
-  as_tibble() |> 
+tmp <-
+  se_16S |>
+  dplyr::filter(sample_type == "Amplification positive control") |>
+  as_tibble() |>
   group_by(.feature) |>
-  mutate(max_rel_ab = max(rel_ab)) |> 
-  ungroup() |> 
+  mutate(max_rel_ab = max(rel_ab)) |>
+  ungroup() |>
   dplyr::filter(max_rel_ab > 0.1)
 
-tmp |> 
+tmp |>
   ggplot() +
   aes(x = sample_id_ps, y = rel_ab, fill = .feature) +
   geom_col() +
   scale_fill_manual(
-    str_c("Top ", tmp$.feature |> unique() |> length(), " taxa (based on max rel. ab.)"), 
-    breaks = tmp$.feature |> unique(), 
+    str_c(
+      "Top ",
+      tmp$.feature |> unique() |> length(),
+      " taxa (based on max rel. ab.)"
+    ),
+    breaks = tmp$.feature |> unique(),
     values = tmp$.feature |> unique() |> get_taxa_colors()
   ) +
   facet_grid(. ~ control_type, scales = "free_x", space = "free_x") +
   theme(
     strip.text.y = element_text(angle = 0),
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
-    )
-  
+  )
 ```
 
 There is one outlying amplification positive control -> we should maybe check with the labs if there is an explanation for this.
@@ -1457,30 +1672,37 @@ Anyone from the labs that can explain this outlier? And/or if it's important?
 #| fig-width: 14
 #| fig-height: 5
 
-tmp <- 
-  se_16S |> 
-  dplyr::filter(sample_type == "Negative control") |> 
-  as_tibble() |> 
+tmp <-
+  se_16S |>
+  dplyr::filter(sample_type == "Negative control") |>
+  as_tibble() |>
   group_by(.feature) |>
-  mutate(max_rel_ab = max(rel_ab)) |> 
-  ungroup() |> 
+  mutate(max_rel_ab = max(rel_ab)) |>
+  ungroup() |>
   dplyr::filter(max_rel_ab > 0.1)
 
-tmp |> 
+tmp |>
   ggplot() +
   aes(x = sample_id_ps, y = rel_ab, fill = .feature) +
   geom_col() +
   scale_fill_manual(
-    str_c("Top ", tmp$.feature |> unique() |> length(), " taxa (based on max rel. ab.)"), 
-    breaks = tmp$.feature |> unique(), 
+    str_c(
+      "Top ",
+      tmp$.feature |> unique() |> length(),
+      " taxa (based on max rel. ab.)"
+    ),
+    breaks = tmp$.feature |> unique(),
     values = tmp$.feature |> unique() |> get_taxa_colors()
   ) +
-  facet_grid(. ~ ext_lib_plate_type + control_type, scales = "free_x", space = "free_x") +
+  facet_grid(
+    . ~ ext_lib_plate_type + control_type,
+    scales = "free_x",
+    space = "free_x"
+  ) +
   theme(
     strip.text.y = element_text(angle = 0),
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
-    )
-  
+  )
 ```
 
 #### Positive controls
@@ -1490,30 +1712,37 @@ tmp |>
 #| fig-width: 15
 #| fig-height: 5.5
 
-tmp <- 
-  se_16S |> 
-  dplyr::filter(sample_type == "Positive control") |> 
-  as_tibble() |> 
+tmp <-
+  se_16S |>
+  dplyr::filter(sample_type == "Positive control") |>
+  as_tibble() |>
   group_by(.feature) |>
-  mutate(max_rel_ab = max(rel_ab)) |> 
-  ungroup() |> 
+  mutate(max_rel_ab = max(rel_ab)) |>
+  ungroup() |>
   dplyr::filter(max_rel_ab > 0.01)
 
-tmp |> 
+tmp |>
   ggplot() +
   aes(x = sample_id_ps, y = rel_ab, fill = .feature) +
   geom_col() +
   scale_fill_manual(
-    str_c("Top ", tmp$.feature |> unique() |> length(), " taxa (based on max rel. ab.)"), 
-    breaks = tmp$.feature |> unique(), 
+    str_c(
+      "Top ",
+      tmp$.feature |> unique() |> length(),
+      " taxa (based on max rel. ab.)"
+    ),
+    breaks = tmp$.feature |> unique(),
     values = tmp$.feature |> unique() |> get_taxa_colors()
   ) +
-  facet_grid(. ~ control_type + ext_lib_plate_type, scales = "free_x", space = "free_x") +
+  facet_grid(
+    . ~ control_type + ext_lib_plate_type,
+    scales = "free_x",
+    space = "free_x"
+  ) +
   theme(
     strip.text.y = element_text(angle = 0),
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
-    )
-  
+  )
 ```
 
 
@@ -1525,37 +1754,44 @@ That gives us an idea of the replicability and expected variability in the 16S d
 #| fig-width: 21
 #| fig-height: 7
 
-tmp <- 
-  se_16S |> 
-  as_tibble() |> 
-  dplyr::filter(sample_type == "Clinical sample") |> 
-  group_by(pid, visit_code) |> 
-  mutate(n = sample_id_ps |> unique() |> length()) |> 
+tmp <-
+  se_16S |>
+  as_tibble() |>
+  dplyr::filter(sample_type == "Clinical sample") |>
+  group_by(pid, visit_code) |>
+  mutate(n = sample_id_ps |> unique() |> length()) |>
   ungroup() |>
-  dplyr::filter(n > 1) |> 
+  dplyr::filter(n > 1) |>
   dplyr::filter(.feature %in% .feature[1:20])
-  # group_by(.feature) |>
-  # mutate(max_rel_ab = max(rel_ab)) |> 
-  # ungroup() |> 
-  # dplyr::filter(max_rel_ab > 0.1)
+# group_by(.feature) |>
+# mutate(max_rel_ab = max(rel_ab)) |>
+# ungroup() |>
+# dplyr::filter(max_rel_ab > 0.1)
 
-tmp |> 
+tmp |>
   ggplot() +
-  aes(x = pool |> parse_number() |> factor(), y = rel_ab, 
-      fill = .feature, alpha = total_counts |> log10()) +
+  aes(
+    x = pool |> parse_number() |> factor(),
+    y = rel_ab,
+    fill = .feature,
+    alpha = total_counts |> log10()
+  ) +
   geom_col() +
   scale_fill_manual(
-    str_c("Top ", tmp$.feature |> unique() |> length(), " taxa (based on max rel. ab.)"), 
-    breaks = tmp$.feature |> unique(), 
+    str_c(
+      "Top ",
+      tmp$.feature |> unique() |> length(),
+      " taxa (based on max rel. ab.)"
+    ),
+    breaks = tmp$.feature |> unique(),
     values = tmp$.feature |> unique() |> get_taxa_colors()
   ) +
   facet_wrap(. ~ pid + visit_code, scales = "free_x", nrow = 3) +
   theme(
     strip.text.y = element_text(angle = 0),
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
-    ) +
+  ) +
   xlab("pool")
-  
 ```
 
 Relatively good agreement between the replicates; for the longitudinal profiles below, when we have replicates, we'll use the replicate that had the most total reads.
@@ -1564,16 +1800,94 @@ Relatively good agreement between the replicates; for the longitudinal profiles 
 
 
 
+## Filtering out likely contaminants
+
+As described above, we have a few features (taxa) that are likely contaminants and should be excluded from downstream analyses.
+
+We therefore rename the current assays (`"counts"` and `"rel_ab"`) to `"counts_raw"` and `"rel_ab_raw"` (as well as `"total_counts"` in `"total_counts_raw"`), flag these contaminants, and create new assays that exclude the likely contaminants.
+
+```{r}
+
+# duplicate and rename the assays
+assay(se_16S, "counts_raw") <- assay(se_16S, "counts")
+assay(se_16S, "rel_ab_raw") <- assay(se_16S, "rel_ab")
+# rename the total counts variable in the colData
+colData(se_16S)$total_counts_raw <- se_16S$total_counts
+
+# flag contaminants
+rowData(se_16S)$likely_contaminant <- FALSE
+j <-
+  str_detect(
+    rowData(se_16S)$taxon_id,
+    "^Bacteria \\(Domain\\)|^Dethiosulfovibrionaceae"
+  ) |>
+  which()
+rowData(se_16S)$likely_contaminant[j] <- TRUE
+
+# create new assays that exclude the likely contaminants
+assay(se_16S, "counts")[rowData(se_16S)$likely_contaminant, ] <- 0
+assay(se_16S, "rel_ab")[rowData(se_16S)$likely_contaminant, ] <- 0
+assay(se_16S, "rel_ab") <- t(
+  t(assay(se_16S, "rel_ab")) / colSums(assay(se_16S, "rel_ab"))
+)
+
+# adjust the total counts variable in the colData
+colData(se_16S)$total_counts <- colSums(assay(se_16S, "counts"))
+
+se_16S@metadata$dictionary <-
+  se_16S@metadata$dictionary |>
+  bind_rows(
+    tibble(
+      original_name = c("otu_table", rep("", 6)),
+      name = c(
+        "counts_raw",
+        "rel_ab_raw",
+        "total_counts_raw",
+        "likely_contaminant",
+        "counts",
+        "rel_ab",
+        "total_counts"
+      ),
+      table = c(
+        "assay",
+        "assay",
+        "colData",
+        "rowData",
+        "assay",
+        "assay",
+        "colData"
+      ),
+      description = c(
+        "Original OTU table (ASV reads after DADA2 denoising, aggregated by SpeciateIT taxonomic assignment)",
+        "Relative abundances based on the original OTU table (proportion of total counts per sample)",
+        "Total reads per sample based on the original OTU table",
+        "Whether the taxon is likely a PCR contaminant (TRUE) or not (FALSE)",
+        "Counts after removing likely contaminants",
+        "Relative abundances after removing likely contaminants",
+        "Total reads per sample after removing likely contaminants"
+      )
+    )
+  )
+
+se_16S@metadata$dictionary <-
+  se_16S@metadata$dictionary |>
+  mutate(
+    original_name = original_name |> fct_inorder(),
+    name = name |> fct_inorder()
+  ) |>
+  arrange(table, original_name, name)
+```
+
 ## Longitudinal profiles for randomized participants
 
 
 ```{r}
 #| cache-lazy: false
 
-tmp <- 
-  se_16S@colData |> 
-  as.data.frame() |> 
-  select(-any_of(c("randomized", "location"))) |> 
+tmp <-
+  se_16S@colData |>
+  as.data.frame() |>
+  select(-any_of(c("randomized", "location"))) |>
   dplyr::left_join(
     v |> select(pid, randomized, location) |> distinct(),
     by = join_by(pid)
@@ -1581,7 +1895,6 @@ tmp <-
 
 se_16S@colData$randomized <- tmp$randomized
 se_16S@colData$location <- tmp$location
-
 ```
 
 
@@ -1590,24 +1903,24 @@ se_16S@colData$location <- tmp$location
 
 n_taxa <- 20
 
-tmp <- 
-  se_16S |> 
-  dplyr::filter(randomized) |> 
-  as_tibble() |> 
-  dplyr::filter(.feature %in% .feature[1:n_taxa]) 
+tmp <-
+  se_16S |>
+  dplyr::filter(randomized) |>
+  as_tibble() |>
+  dplyr::filter(.feature %in% .feature[1:n_taxa])
 
-selected_replicates <- 
-  tmp |> 
-  select(sample_id_ps, pid, visit_code, pool, total_counts) |> 
-  distinct() |> 
-  arrange(pid, visit_code, -total_counts) |> 
+selected_replicates <-
+  tmp |>
+  select(sample_id_ps, pid, visit_code, pool, total_counts) |>
+  distinct() |>
+  arrange(pid, visit_code, -total_counts) |>
   group_by(pid, visit_code) |>
-  slice_head(n = 1) |> 
-  ungroup() |> 
-  group_by(visit_code) |> mutate(n = n()) |> ungroup() |> 
+  slice_head(n = 1) |>
+  ungroup() |>
+  group_by(visit_code) |>
+  mutate(n = n()) |>
+  ungroup() |>
   dplyr::filter(n > 20)
-  
-
 ```
 
 
@@ -1615,22 +1928,21 @@ selected_replicates <-
 #| fig-width: 15
 #| fig-height: 20
 
-tmp |> 
+tmp |>
   dplyr::filter(sample_id_ps %in% selected_replicates$sample_id_ps) |>
   ggplot() +
   aes(x = pid, y = rel_ab, fill = .feature) +
   geom_col() +
   scale_fill_manual(
-    str_c("Top ", n_taxa, " taxa"), 
-    breaks = tmp$.feature |> unique(), 
+    str_c("Top ", n_taxa, " taxa"),
+    breaks = tmp$.feature |> unique(),
     values = tmp$.feature |> unique() |> get_taxa_colors()
   ) +
   facet_grid(visit_code ~ location, scales = "free_x", space = "free_x") +
   theme(
     strip.text.y = element_text(angle = 0),
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
-    )
-  
+  )
 ```
 
 
@@ -1638,22 +1950,21 @@ tmp |>
 #| fig-width: 12
 #| fig-height: 25
 
-tmp |> 
+tmp |>
   dplyr::filter(sample_id_ps %in% selected_replicates$sample_id_ps) |>
   ggplot() +
   aes(x = visit_code, y = rel_ab, fill = .feature) +
   geom_col() +
   scale_fill_manual(
-    str_c("Top ", n_taxa, " taxa"), 
-    breaks = tmp$.feature |> unique(), 
+    str_c("Top ", n_taxa, " taxa"),
+    breaks = tmp$.feature |> unique(),
     values = tmp$.feature |> unique() |> get_taxa_colors()
   ) +
   ggh4x::facet_nested(location + pid ~ ., scales = "free_x", space = "free_x") +
   theme(
     strip.text.y = element_text(angle = 0),
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
-    )
-  
+  )
 ```
 
 
@@ -1673,49 +1984,48 @@ Before we do that, we flag the samples that may need to be excluded because of l
 
 ```{r}
 
-se_16S_ASV$exclude_sample <- 
+se_16S_ASV$exclude_sample <-
   ifelse(se_16S_ASV$total_counts < 5000, "Yes, low counts", "No")
-se_16S$exclude_sample <- 
+se_16S$exclude_sample <-
   ifelse(se_16S$total_counts < 5000, "Yes, low counts", "No")
 
 # we re-order the colData columns
-ordered_cols <- 
+ordered_cols <-
   unique(c("uid", "exclude_sample", colnames(colData(se_16S_ASV))))
-colData(se_16S_ASV) <- colData(se_16S_ASV)[,ordered_cols]
+colData(se_16S_ASV) <- colData(se_16S_ASV)[, ordered_cols]
 
-ordered_cols <- 
+ordered_cols <-
   unique(c("uid", "exclude_sample", colnames(colData(se_16S))))
-colData(se_16S) <- colData(se_16S)[,ordered_cols]
-
+colData(se_16S) <- colData(se_16S)[, ordered_cols]
 ```
 
 Below, we identify the samples we want to keep for downstream analyses of the VIBRANT trial
 
 ```{r}
 
-selected_sample_types <- 
+selected_sample_types <-
   c("Clinical sample", "Positive control", "Negative control")
 
-selected_samples <- 
+selected_samples <-
   se_16S_ASV@colData |>
-  as.data.frame() |> 
+  as.data.frame() |>
   as_tibble() |>
-  group_by(uid) |> 
+  group_by(uid) |>
   arrange(uid, -total_counts) |>
-  mutate(top_reads_replicate = (row_number() == 1)) |> 
-  ungroup() |> 
+  mutate(top_reads_replicate = (row_number() == 1)) |>
+  ungroup() |>
   dplyr::filter(
-    top_reads_replicate, 
+    top_reads_replicate,
     sample_type %in% selected_sample_types
-    ) |>
-  select(uid) |> 
+  ) |>
+  select(uid) |>
   distinct()
 
 if (selected_samples$uid |> str_detect("_r") |> any()) {
-  warning("There are still some duplicated samples in the selected samples. Please check the `selected_samples` object.")
+  warning(
+    "There are still some duplicated samples in the selected samples. Please check the `selected_samples` object."
+  )
 }
-
-
 ```
 
 And define the `se_16S_ASV` and `se_16S_agg` objects that we will save to disk and integrate into the `MAE`
@@ -1723,11 +2033,10 @@ And define the `se_16S_ASV` and `se_16S_agg` objects that we will save to disk a
 ```{r}
 
 se_16S_ASV_all <- se_16S_ASV
-se_16S_ASV <- se_16S_ASV_all[ , selected_samples$uid]
+se_16S_ASV <- se_16S_ASV_all[, selected_samples$uid]
 
 se_16S_agg_all <- se_16S
-se_16S_agg <- se_16S_agg_all[ , selected_samples$uid]
-
+se_16S_agg <- se_16S_agg_all[, selected_samples$uid]
 ```
 
 
@@ -1740,24 +2049,22 @@ Finally, before saving the `se_16S_ASV` and `se_16S_agg` objects, we check that 
 
 ```{r}
 
-colData_columns <- 
-  colnames(colData(se_16S_ASV)) |> 
+colData_columns <-
+  colnames(colData(se_16S_ASV)) |>
   setdiff(c("pid", "visit_code", "site", "location"))
 colData(se_16S_ASV) <- colData(se_16S_ASV)[, colData_columns]
 
 
-colData_columns <- 
-  colnames(colData(se_16S_agg)) |> 
+colData_columns <-
+  colnames(colData(se_16S_agg)) |>
   setdiff(c("pid", "visit_code", "site", "location"))
 colData(se_16S_agg) <- colData(se_16S_agg)[, colData_columns]
-
 ```
 
 ```{r}
 
 se_16S_ASV <- check_se(se_16S_ASV)
 se_16S_agg <- check_se(se_16S_agg)
-
 ```
 
 
@@ -1766,39 +2073,46 @@ se_16S_agg <- check_se(se_16S_agg)
 ```{r}
 
 saveRDS(
-  se_16S_ASV_all, 
+  se_16S_ASV_all,
   str_c(
-    get_01_output_dir(),  
-    "04_se_16S_ASV_all_", today() |> str_remove_all("-"), ".rds"
-    )
+    get_01_output_dir(),
+    "04_se_16S_ASV_all_",
+    today() |> str_remove_all("-"),
+    ".rds"
   )
+)
 
 
 saveRDS(
-  se_16S_ASV, 
+  se_16S_ASV,
   str_c(
-    get_01_output_dir(),  
-    "04_se_16S_ASV_", today() |> str_remove_all("-"), ".rds"
-    )
+    get_01_output_dir(),
+    "04_se_16S_ASV_",
+    today() |> str_remove_all("-"),
+    ".rds"
   )
+)
 
 saveRDS(
-  se_16S_agg_all, 
+  se_16S_agg_all,
   str_c(
-    get_01_output_dir(),  
-    "04_se_16S_agg_all_", today() |> str_remove_all("-"), ".rds"
-    )
+    get_01_output_dir(),
+    "04_se_16S_agg_all_",
+    today() |> str_remove_all("-"),
+    ".rds"
   )
+)
 
 
 saveRDS(
-  se_16S_agg, 
+  se_16S_agg,
   str_c(
-    get_01_output_dir(),  
-    "04_se_16S_agg_", today() |> str_remove_all("-"), ".rds"
-    )
+    get_01_output_dir(),
+    "04_se_16S_agg_",
+    today() |> str_remove_all("-"),
+    ".rds"
   )
-
+)
 ```
 
 

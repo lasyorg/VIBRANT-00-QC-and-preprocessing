@@ -39,24 +39,22 @@ tmp <- fs::dir_map("R scripts/", source)
 tmp <- fs::dir_map("../VIBRANT-99-utils/R/", source)
 rm(tmp)
 theme_set(theme_light())
-
 ```
 
 
 ```{r}
 
-mae_files <- 
+mae_files <-
   fs::dir_ls(
     get_03_output_dir(),
     regexp = "mae_full_03_.*\\.rds$"
-  ) |> 
+  ) |>
   sort(decreasing = TRUE) |>
   magrittr::extract(1)
 
 mae <- readRDS(mae_files)
 
 rm(mae_files)
-
 ```
 
 
@@ -71,13 +69,12 @@ The goal of this document is to create calculated variables at the participant a
 
 ```{r}
 
-mae@metadata$calc_vars_weekly_visit_code <- 
-  mae@colData |> 
-  as_tibble() |> 
-  select(uid, pid, visit_code, visit_type) |> 
+mae@metadata$calc_vars_weekly_visit_code <-
+  mae@colData |>
+  as_tibble() |>
+  select(uid, pid, visit_code, visit_type) |>
   filter(!is.na(pid), !is.na(visit_code), visit_type == "Clinic") |>
   distinct()
-
 ```
 
 ## Days since last dose 
@@ -91,17 +88,22 @@ Since the rationale behind this variable is to assess the number of days since l
 
 ```{r}
 
-tmp <- mae@metadata$calc_vars_study_day |> select(pid, study_day) |> distinct() |> arrange(pid, study_day)
+tmp <- mae@metadata$calc_vars_study_day |>
+  select(pid, study_day) |>
+  distinct() |>
+  arrange(pid, study_day)
 
-exposure <- 
+exposure <-
   tibble(tmp) |>
   left_join(
-    mae@metadata$exposures |> 
+    mae@metadata$exposures |>
       select(pid, study_day, daily_self_reported_exposure_sp),
     by = join_by(pid, study_day)
   ) |>
   left_join(
-    mae@colData |> as_tibble() |> select(uid, pid, study_day, visit_code, visit_type, site),
+    mae@colData |>
+      as_tibble() |>
+      select(uid, pid, study_day, visit_code, visit_type, site),
     by = join_by(pid, study_day)
   )
 
@@ -119,22 +121,19 @@ exposure <-
   ) |>
   ungroup() |>
   select(-last_sp_dose_day)
-
-
 ```
 
 We add the variable `days_since_last_sp_dose` to the `calc_vars_weekly_visit_code` table.
 
 ```{r}
 
-mae@metadata$calc_vars_weekly_visit_code <- 
-  mae@metadata$calc_vars_weekly_visit_code |> 
+mae@metadata$calc_vars_weekly_visit_code <-
+  mae@metadata$calc_vars_weekly_visit_code |>
   left_join(
-    exposure |> 
+    exposure |>
       select(uid, days_since_last_sp_dose),
     by = join_by(uid)
   )
-
 ```
 
 
@@ -146,37 +145,46 @@ We calculate the number of days since last sexual intercourse with and without c
 
 tmp <- mae@metadata$calc_vars_weekly_visit_code$uid |> unique() |> sort()
 
-sex <- 
-    mae@metadata$calc_vars_study_day |> 
-    select(
-       pid, study_day, pv_sex_w_semen_exposure, pv_sex_wo_semen_exposure, other_sex_wo_semen_exp
-    )
-
+sex <-
+  mae@metadata$calc_vars_study_day |>
+  select(
+    pid,
+    study_day,
+    pv_sex_w_semen_exposure,
+    pv_sex_wo_semen_exposure,
+    other_sex_wo_semen_exp
+  )
 ```
 
 
 ```{r}
 
-sex <- 
+sex <-
   sex |>
   arrange(pid, study_day) |>
-  group_by(pid) |> 
+  group_by(pid) |>
   mutate(
     # with condom only
     last_sex_day_w_semen_exp = case_when(
       pv_sex_w_semen_exposure > 0 ~ study_day,
       TRUE ~ NA_integer_
     ),
-    last_sex_day_w_semen_exp = zoo::na.locf(last_sex_day_w_semen_exp, na.rm = FALSE), 
+    last_sex_day_w_semen_exp = zoo::na.locf(
+      last_sex_day_w_semen_exp,
+      na.rm = FALSE
+    ),
     days_since_last_sex_w_semen_exp = study_day - last_sex_day_w_semen_exp,
-    
+
     # without condom only
     last_sex_day_wo_semen_exp = case_when(
       pv_sex_wo_semen_exposure > 0 ~ study_day,
       TRUE ~ NA_integer_
     ),
-    last_sex_day_wo_semen_exp = zoo::na.locf(last_sex_day_wo_semen_exp, na.rm = FALSE),
-    days_since_last_sex_wo_semen_exp = study_day - last_sex_day_wo_semen_exp, 
+    last_sex_day_wo_semen_exp = zoo::na.locf(
+      last_sex_day_wo_semen_exp,
+      na.rm = FALSE
+    ),
+    days_since_last_sex_wo_semen_exp = study_day - last_sex_day_wo_semen_exp,
     # unknown condom use
     last_other_sex_day = case_when(
       other_sex_wo_semen_exp > 0 ~ study_day,
@@ -184,117 +192,132 @@ sex <-
     ),
     last_other_sex_day = zoo::na.locf(last_other_sex_day, na.rm = FALSE),
     days_since_last_other_sex = study_day - last_other_sex_day
-  ) |> 
-  ungroup() |> 
-  select(-c(last_sex_day_wo_semen_exp, last_sex_day_w_semen_exp, last_other_sex_day)) |>
+  ) |>
+  ungroup() |>
+  select(
+    -c(last_sex_day_wo_semen_exp, last_sex_day_w_semen_exp, last_other_sex_day)
+  ) |>
   left_join(
-    mae@colData |> as_tibble() |> select(uid, pid, study_day, visit_code, visit_type, site),
+    mae@colData |>
+      as_tibble() |>
+      select(uid, pid, study_day, visit_code, visit_type, site),
     by = join_by(pid, study_day)
   )
-
 ```
 
 Add the variable `days_since_last_sex_wo_semen_exp`, `days_since_last_sex_w_semen_exp` and `days_since_last_other_sex` to the `calc_vars_weekly_visit_code` table.
 
 ```{r}
 
-mae@metadata$calc_vars_weekly_visit_code <- 
-  mae@metadata$calc_vars_weekly_visit_code |> 
+mae@metadata$calc_vars_weekly_visit_code <-
+  mae@metadata$calc_vars_weekly_visit_code |>
   left_join(
-    sex |> 
-      select(uid, days_since_last_sex_wo_semen_exp, days_since_last_sex_w_semen_exp, days_since_last_other_sex),
+    sex |>
+      select(
+        uid,
+        days_since_last_sex_wo_semen_exp,
+        days_since_last_sex_w_semen_exp,
+        days_since_last_other_sex
+      ),
     by = join_by(uid)
   )
-
 ```
 
 ## Any antibiotics since last visit
 
 ```{r}
 
-antibiotics <- 
-  mae@metadata$calc_vars_study_day |> 
-  select(pid, study_day, starts_with("daily_exposure_cm_")) |> 
+antibiotics <-
+  mae@metadata$calc_vars_study_day |>
+  select(pid, study_day, starts_with("daily_exposure_cm_")) |>
   pivot_longer(
     cols = starts_with("daily_exposure_cm_"),
-    names_to = "antibiotics", names_prefix = "daily_exposure_cm_",
+    names_to = "antibiotics",
+    names_prefix = "daily_exposure_cm_",
     values_to = "exposure"
   ) |>
   left_join(
-    mae@colData |> 
-      as_tibble() |> 
-      filter(visit_type == "Clinic") |> 
+    mae@colData |>
+      as_tibble() |>
+      filter(visit_type == "Clinic") |>
       select(uid, pid, study_day, visit_code, site),
     by = join_by(pid, study_day)
-  ) |> 
-  arrange(pid, antibiotics, study_day) |> 
-  group_by(pid, antibiotics) |> 
+  ) |>
+  arrange(pid, antibiotics, study_day) |>
+  group_by(pid, antibiotics) |>
   mutate(
     # we expand the weekly visit code backward to be able to report whether any antibiotics were taken since last dose
     exp_visit_code = visit_code |> zoo::na.locf(na.rm = FALSE, fromLast = TRUE),
-    exp_visit_code = 
-      case_when(
-        (exp_visit_code == visit_code) ~ lead(exp_visit_code),
-        TRUE ~ exp_visit_code
-        ),
-    
+    exp_visit_code = case_when(
+      (exp_visit_code == visit_code) ~ lead(exp_visit_code),
+      TRUE ~ exp_visit_code
+    ),
+
     # we also count the number of days since last antibiotics dose for each antibiotic class
-    last_antibiotics_day = case_when(exposure > 0 ~ study_day, TRUE ~ NA_integer_),
+    last_antibiotics_day = case_when(
+      exposure > 0 ~ study_day,
+      TRUE ~ NA_integer_
+    ),
     last_antibiotics_day = zoo::na.locf(last_antibiotics_day, na.rm = FALSE),
     days_since_last_antibiotics = study_day - last_antibiotics_day
   )
-  
-  
 ```
 ```{r}
 
-antibiotics_at_clinic_visits <- 
+antibiotics_at_clinic_visits <-
   left_join(
-    antibiotics |> 
+    antibiotics |>
       group_by(pid, antibiotics, exp_visit_code) |>
-      summarize(since_last_visit = sum(exposure, na.rm = TRUE), .groups = "drop") |>
+      summarize(
+        since_last_visit = sum(exposure, na.rm = TRUE),
+        .groups = "drop"
+      ) |>
       dplyr::rename(visit_code = exp_visit_code),
-    
-    antibiotics |> 
-      filter(!is.na(visit_code)) |> 
-      select(pid, antibiotics, visit_code, study_day, days_since_last_abx = days_since_last_antibiotics),
-    
-    by = join_by(pid, antibiotics, visit_code)  
-  ) |> 
-  mutate(
-    days_since_last_abx =
-      case_when(
-        (days_since_last_abx == 0) & (since_last_visit == 0) ~ NA_integer_,
-        TRUE ~ days_since_last_abx
-      )
-  ) |> 
-  filter(!is.na(visit_code)) |> 
-  select(pid, antibiotics, study_day, visit_code, everything()) 
 
+    antibiotics |>
+      filter(!is.na(visit_code)) |>
+      select(
+        pid,
+        antibiotics,
+        visit_code,
+        study_day,
+        days_since_last_abx = days_since_last_antibiotics
+      ),
+
+    by = join_by(pid, antibiotics, visit_code)
+  ) |>
+  mutate(
+    days_since_last_abx = case_when(
+      (days_since_last_abx == 0) & (since_last_visit == 0) ~ NA_integer_,
+      TRUE ~ days_since_last_abx
+    )
+  ) |>
+  filter(!is.na(visit_code)) |>
+  select(pid, antibiotics, study_day, visit_code, everything())
 ```
 
 ```{r}
 #| fig-width: 12
 #| fig-height: 8
 
-antibiotics |> 
-  filter(exposure > 0) |>  
+antibiotics |>
+  filter(exposure > 0) |>
   ggplot() +
   facet_grid(. ~ antibiotics) +
   aes(x = study_day, y = pid) +
   geom_point(
     data = antibiotics_at_clinic_visits |> filter(study_day < 125),
-    aes(col = visit_code), shape = 1
+    aes(col = visit_code),
+    shape = 1
   ) +
   geom_label(
     data = antibiotics_at_clinic_visits |> filter(since_last_visit > 0),
-    aes(col = visit_code, label = since_last_visit), size = 3
+    aes(col = visit_code, label = since_last_visit),
+    size = 3
   ) +
   geom_point(alpha = 0.5) +
   guides(col = "none") +
   theme(axis.text.y = element_blank())
-
-
 ```
 
 We add this data to the `calc_vars_weekly_visit_code` table. We will have one variable for each antibiotic class indicating whether the participant took any antibiotics of that class since last clinic visit, and another variable indicating the number of days since last dose of antibiotics of that class.
@@ -302,27 +325,26 @@ We add this data to the `calc_vars_weekly_visit_code` table. We will have one va
 
 ```{r}
 
-tmp <- 
-  mae@metadata$calc_vars_weekly_visit_code |> 
+tmp <-
+  mae@metadata$calc_vars_weekly_visit_code |>
   left_join(
-    antibiotics_at_clinic_visits |> 
+    antibiotics_at_clinic_visits |>
       dplyr::rename(
-        n_since_last_visit = since_last_visit, 
+        n_since_last_visit = since_last_visit,
         days_since_last = days_since_last_abx
-        ) |> 
+      ) |>
       pivot_wider(
-        names_from = antibiotics, 
+        names_from = antibiotics,
         values_from = c(n_since_last_visit, days_since_last),
         names_vary = "slowest"
-      ) |> 
-      mutate(uid = str_c(pid, "_", visit_code)) |> 
-      relocate(uid, .before = everything()) |> 
+      ) |>
+      mutate(uid = str_c(pid, "_", visit_code)) |>
+      relocate(uid, .before = everything()) |>
       select(-pid, -study_day, -visit_code),
     by = join_by(uid)
   )
 
 mae@metadata$calc_vars_weekly_visit_code <- tmp
-
 ```
 
 
@@ -335,12 +357,13 @@ We save the MAE for downstream analyses.
 #| eval: true
 
 saveRDS(
-  mae, 
+  mae,
   str_c(
-    get_03_output_dir(),  
-    "mae_full_04_", today() |> str_remove_all("-"), ".rds"
+    get_03_output_dir(),
+    "mae_full_04_",
+    today() |> str_remove_all("-"),
+    ".rds"
   )
 )
-
 ```
 

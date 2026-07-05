@@ -1,11 +1,9 @@
-
-check_transformation <- function(t, transf = "asinh"){
-
+check_transformation <- function(t, transf = "asinh") {
   if (transf == "none") {
     transformed_data <- assay(t, "conc")
-    xlab <- "mean(X)"; ylab <- "variance(X)"
-  }
-  else{
+    xlab <- "mean(X)"
+    ylab <- "variance(X)"
+  } else {
     transf_fun <- get(transf)
     data <- assay(t, "conc")
     transformed_data <- data |> transf_fun()
@@ -13,12 +11,11 @@ check_transformation <- function(t, transf = "asinh"){
     ylab <- str_c("variance(", transf, "(X))")
   }
 
-
   g <-
     tibble(
       mean = apply(transformed_data, 1, mean, na.rm = TRUE),
       var = apply(transformed_data, 1, var, na.rm = TRUE)
-      ) |>
+    ) |>
     ggplot(aes(x = mean, y = var)) +
     geom_point() +
     geom_smooth(method = "lm", formula = 'y ~ x') +
@@ -30,8 +27,9 @@ check_transformation <- function(t, transf = "asinh"){
     xlab(xlab) +
     ylab(ylab)
 
-  if (transf %in% c("none", "sqrt"))
+  if (transf %in% c("none", "sqrt")) {
     g <- g + scale_x_log10() + scale_y_log10()
-  
+  }
+
   g
 }
