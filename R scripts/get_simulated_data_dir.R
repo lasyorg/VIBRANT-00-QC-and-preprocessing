@@ -1,8 +1,8 @@
 get_simulated_data_dir <- function() {
   if (str_detect(getwd(), "laurasymul")) {
     data_dir <- "/Users/laurasymul/OneDrive - UCL/Academia/Research/VIBRANT data UCLouvain/"
-  } else if (str_detect(getwd(), "vermeren")) {
-    data_dir <- "/Users/lvermeren/OneDrive - UCL/VIBRANT data UCLouvain/"
+  } else if (str_detect(getwd(), "/laura/")) {
+    data_dir <- "/Users/laura/OneDrive - UCL/11-VIBRANT/VIBRANT data UCLouvain/"
   } else {
     stop("You need to specify the path to the data directory in `R/data_dir.R`")
   }

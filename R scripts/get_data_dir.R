@@ -6,7 +6,7 @@ get_clinical_data_dir <- function() {
   if (str_detect(getwd(), "laurasymul")) {
     data_dir <- "/Users/laurasymul/OneDrive - UCL/Academia/Research/VIBRANT clinical data UCLouvain/"
   } else if (str_detect(getwd(), "/laura/")) {
-    data_dir <- "/Users/laura/OneDrive - UCL/Fichiers de Laura Symul - VIBRANT clinical data UCLouvain/"
+    data_dir <- "/Users/laura/OneDrive - UCL/11-VIBRANT/VIBRANT clinical data UCLouvain/"
   } else {
     stop(
       str_c(
