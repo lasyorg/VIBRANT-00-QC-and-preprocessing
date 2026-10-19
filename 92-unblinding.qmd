@@ -210,6 +210,18 @@ saveRDS(
     ".rds"
   )
 )
+
+# save a tabble with vibrant arm in Rdata 
+
+vibrant_arm <- 
+  mae@colData |> 
+  as_tibble() |>
+  select(pid, site, arm, ITT, mITT, PP) |>
+  distinct() |>
+  filter(!is.na(ITT), !is.na(arm)) 
+
+save(vibrant_arm, file = str_c(get_04_output_dir(), "vibrant_arm.Rdata"))
+
 ```
 
 
