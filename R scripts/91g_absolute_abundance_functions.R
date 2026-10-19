@@ -47,7 +47,27 @@ plot_timeline_for_pid <- function(se, mae, pid, features) {
     distinct() |>
     filter(exclude)
 
+  # extraction plate data
+  plates <-
+    mae@metadata$sample_manifest |>
+    filter(uid %in% uids_of_pid) |>
+    left_join(
+      colData(mae) |> as_tibble() |> select(uid, study_day, pid, visit_type),
+      by = join_by(uid)
+    )
+
   # cat(nrow(excl), "\n")
+
+  # extraction plates
+  g_plates <-
+    plates |>
+    arrange(ext_lib_plate_nb |> desc()) |>
+    ggplot() +
+    aes(x = study_day, y = visit_type |> fct_rev(), color = ext_lib_plate_id) +
+    geom_label(aes(label = ext_lib_plate_nb), size = 2) +
+    scale_y_discrete("", limits = c("Clinic", "Home")) +
+    guides(color = "none") +
+    x_axis
 
   # qPCR data
   g_qpcr <-
@@ -55,7 +75,7 @@ plot_timeline_for_pid <- function(se, mae, pid, features) {
     select(.sample, study_day, qpcr_16S, visit_type) |>
     distinct() |>
     ggplot() +
-    aes(x = study_day, y = visit_type, color = qpcr_16S |> log10()) +
+    aes(x = study_day, y = visit_type |> fct_rev(), color = qpcr_16S |> log10()) +
     geom_point() +
     geom_point(data = excl, color = "red", shape = 4, size = 2) +
     scale_color_gradient2(
@@ -76,7 +96,7 @@ plot_timeline_for_pid <- function(se, mae, pid, features) {
     select(.sample, study_day, ampl_total_reads, visit_type) |>
     distinct() |>
     ggplot() +
-    aes(x = study_day, y = visit_type, color = ampl_total_reads |> log10()) +
+    aes(x = study_day, y = visit_type |> fct_rev(), color = ampl_total_reads |> log10()) +
     geom_point() +
     geom_point(data = excl, color = "red", shape = 4, size = 2) +
     scale_color_gradient(low = "red4", high = "steelblue1", limits = c(0, 6)) +
@@ -154,7 +174,7 @@ plot_timeline_for_pid <- function(se, mae, pid, features) {
   g_excl <-
     excl |>
     ggplot() +
-    aes(x = study_day, y = visit_type, col = exclude_reason) +
+    aes(x = study_day, y = visit_type |> fct_rev(), col = exclude_reason) +
     geom_point() +
     scale_y_discrete("", limits = c("Clinic", "Home")) +
     scale_color_discrete("Reason for exclusion") +
@@ -162,6 +182,7 @@ plot_timeline_for_pid <- function(se, mae, pid, features) {
 
   # combine the plots
   g_combined <-
+    g_plates +
     g_qpcr +
     g_ampl_tot_reads +
     g_rel_ab +
@@ -176,7 +197,39 @@ plot_timeline_for_pid <- function(se, mae, pid, features) {
       title = str_c("Participant ", pid),
       theme = theme(plot.title = element_text(size = 16))
     ) +
-    plot_layout(heights = c(0.25, 0.25, 1, 1, 1, 0.25))
+    plot_layout(heights = c(0.25, 0.25, 0.25, 1, 1, 1, 0.25))
 
   g_combined
+}
+
+
+plot_extraction_plates <- function(mae, selected_pid) {
+  # extraction plate data
+  plates <-
+    mae@metadata$sample_manifest |>
+    left_join(
+      colData(mae) |> as_tibble() |> select(uid, study_day, pid, visit_type),
+      by = join_by(uid)
+    ) |>
+    filter(pid == !!selected_pid)
+
+  plates |>
+    arrange(ext_lib_plate_nb |> desc()) |>
+    ggplot() +
+    ggh4x::facet_nested(visit_type + ext_lib_plate_batch ~ ., scales = "free", space = "free") +
+    aes(x = study_day, y = ext_lib_plate_nb |> fct_rev(), color = source_assay) +
+    geom_label(aes(label = ext_lib_plate_nb), size = 2) +
+    ylab("Extraction plate(s)") +
+    # guides(color = "none") +
+    scale_x_continuous(
+      "Study day",
+      limits = c(
+        (plates$study_day - 1) |> min() |> floor(),
+        (plates$study_day + 1) |> max() |> ceiling()
+      ),
+      breaks = seq(-70, 700, by = 7),
+      minor_breaks = seq(-70, 700, by = 1)
+    ) +
+    theme(legend.position = "bottom") +
+    ggtitle(str_c("Extraction plates for participant ", selected_pid))
 }

@@ -747,14 +747,36 @@ colData(se)$total_conc <- colSums(assay(se, "abs_ab"))
 
 ```{r}
 #| eval: true
-#| fig-width: 12
-#| fig-height: 6
+#| fig-width: 15
+#| fig-height: 10
 plot_timeline_for_pid(
   se = se,
   mae = mae,
   pid = "068100004",
   features = c("ampl_total_reads", "rel_ab", "rel_ab_adj", "abs_ab_0_imp")
 )
+
+plot_timeline_for_pid(
+  se = se,
+  mae = mae,
+  pid = "068200370",
+  features = c("ampl_total_reads", "rel_ab", "rel_ab_adj", "abs_ab_0_imp")
+)
+
+
+plot_timeline_for_pid(
+  se = se,
+  mae = mae,
+  pid = "068200415",
+  features = c("ampl_total_reads", "rel_ab", "rel_ab_adj", "abs_ab_0_imp")
+)
+```
+
+```{r}
+#| eval: true
+#| fig-width: 8
+#| fig-height: 3
+plot_extraction_plates(mae, selected_pid = "068200370")
 ```
 
 > TODO: add a few more examples
